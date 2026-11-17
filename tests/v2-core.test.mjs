@@ -84,5 +84,16 @@ ok(maxL === Math.round(203800 / 1.12 - 4200), 'reverse: highest landed cost for 
 ok(Math.abs(margin({ landedMyr: maxL, sellMyr: 203800, reconMyr: 4200 }).marginPct - 12) < 0.1, 'reverse then forward gives the same 12%')
 ok(conservativeSell(s) <= Math.round(s.median) && conservativeSell(s) > 0, 'conservative sell price is never above the median')
 
+// ── dutyCostRow: the same duty as calcDuty ──
+const { dutyCostRow, calcDuty } = await import('../packages/core/src/index.ts')
+const dk = { id: 'x', brand: 'TOYOTA', model: 'ALPHARD (3BA-AGH40W)', cc: 2493, currency_code: 'JPY', year: 2026, amt_12m_24m: 5e6, amt_24m_36m: 4.5e6, amt_36m_48m: 4e6, amt_48m_60m: 3.5e6, amt_60m_plus: 3e6 }
+const cref = { rates: [{ vehicle_type: 'car', cc_min: 2001, cc_max: 2500, multiplier: 1.717 }], currencies: [{ code: 'JPY', standard_fare_myr: 1200 }], fx: { JPY: { rate: 0.0295 } } }
+const today = new Date('2026-11-17')
+const cr = dutyCostRow({ docket: dk, regYear: 2021, regMonth: 5, ref: cref, today })
+const direct = calcDuty({ docket: dk, mfgYear: 2021, mfgMonth: 5, rate: 0.0295, rates: cref.rates, standardFare: 1200, vehicleType: 'car', today })
+ok(cr.cost && cr.cost.duty_myr === direct.dutyMyr && cr.cost.docket_id === 'x', 'dutyCostRow gives the same duty as calcDuty')
+ok(dutyCostRow({ docket: dk, regYear: 2021, regMonth: 5, ref: { ...cref, fx: {} }, today }).cost === null, 'no exchange rate: no cost row, with a reason')
+ok(dutyCostRow({ docket: dk, regYear: null, regMonth: null, ref: cref, today }).cost === null, 'no register year: no cost row')
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)
