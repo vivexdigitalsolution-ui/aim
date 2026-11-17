@@ -32,6 +32,24 @@
             <tr class="sum"><td>Profit</td><td :class="m.profitMyr >= 0 ? 'up' : 'down'">RM {{ myr(m.profitMyr) }}</td></tr>
             <tr class="sum"><td>Margin on cost</td><td :class="m.marginPct >= targetPct ? 'up' : 'down'">{{ m.marginPct }}%</td></tr>
           </table>
+          <div v-if="!isStaff" id="bid" class="bidbox">
+            <h2>Place a bid order</h2>
+            <div v-if="open" class="okmsg" style="margin: 8px 0">
+              Your order: <b>¥{{ Number(open.max_bid_jpy).toLocaleString('en-US') }}</b> —
+              {{ open.status === 'placed' ? 'placed by our team at the auction; it can no longer be changed.' : 'waiting for our team. You can change or cancel it until it is placed.' }}
+            </div>
+            <template v-if="!open || open.status === 'pending'">
+              <p class="muted small" style="margin: 6px 0">The bid above (<b>¥{{ Number(bid || 0).toLocaleString('en-US') }}</b>) is the most we will bid for you; the car is bought for the lowest price that wins.
+                <span v-if="m.marginPct < targetPct" class="down"> At this bid your margin is {{ m.marginPct }}%, below your {{ targetPct }}% target.</span></p>
+              <textarea v-model="bidNote" rows="2" placeholder="Note for our team (optional)" style="width: 100%" />
+              <div v-if="bidMsg" :class="bidOk ? 'okmsg' : 'err'" style="margin-top: 8px">{{ bidMsg }}</div>
+              <div class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start">
+                <button class="btn" :disabled="bidBusy || !bid || isClosed" @click="placeBid">{{ open ? 'Update order' : 'Place bid order' }}</button>
+                <button v-if="open" class="btn ghost down" :disabled="bidBusy" @click="cancelBid">Cancel order</button>
+              </div>
+            </template>
+            <div v-if="isClosed" class="err" style="margin-top: 8px">The bid deadline for this car has passed.</div>
+          </div>
           <div class="row wrap" style="gap: 14px; margin-top: 12px">
             <label class="fld">Target margin %<input v-model.number="targetPct" type="number" min="0" max="60" /></label>
             <label class="fld">Recon (RM)<input v-model.number="reconMyr" type="number" min="0" step="500" /></label>
@@ -85,6 +103,8 @@
 import { offerPricing, marginAtBid, sellFromRow } from '@aim/core'
 
 const route = useRoute()
+const db = useDb()
+const now = useNow()
 const { isStaff } = useAuth()
 const { load, lots, rate, fees, evaluate, marketRows, marketAsOf } = useMarginBoard()
 const targetPct = ref(12), reconMyr = ref(3000), apFeeMyr = ref(10500), loading = ref(true), err = ref(''), bid = ref(0)
@@ -101,17 +121,42 @@ const sliderMax = computed(() => Math.max(2_000_000, Math.ceil(((ev.value.maxBid
 const span = computed(() => { const r = ev.value.market?.row; if (!r) return { lo: 0, hi: 1 }; const pad = (r.max_myr - r.min_myr) * 0.08 || r.median_myr * 0.05; return { lo: Math.min(r.min_myr, ev.value.sellMyr || r.min_myr) - pad, hi: r.max_myr + pad } })
 const pos = (v: number) => Math.max(0, Math.min(100, ((v - span.value.lo) / (span.value.hi - span.value.lo)) * 100))
 
+// the dealer's bid order on this car (staff do not bid)
+const open = ref<any>(null), bidNote = ref(''), bidMsg = ref(''), bidOk = ref(false), bidBusy = ref(false)
+const isClosed = computed(() => !car.value || new Date(car.value.bid_deadline).getTime() <= now.value)
+async function loadOpen() {
+  if (isStaff.value || !car.value) return
+  const { data } = await db.from('bids').select('id,max_bid_jpy,status').eq('lot_id', car.value.id).in('status', ['pending', 'placed']).maybeSingle()
+  open.value = data || null
+}
+async function placeBid() {
+  bidBusy.value = true; bidMsg.value = ''
+  try {
+    const { error } = await db.rpc('place_bid', { p_lot: car.value!.id, p_max: bid.value, p_note: bidNote.value.trim() || null })
+    if (error) throw error
+    await loadOpen(); bidOk.value = true; bidMsg.value = 'Your bid order is saved. Our team will place it at the auction.'
+  } catch (e: any) { bidOk.value = false; bidMsg.value = e.message } finally { bidBusy.value = false }
+}
+async function cancelBid() {
+  if (!open.value || !confirm('Cancel this bid order?')) return
+  bidBusy.value = true; bidMsg.value = ''
+  try { const { error } = await db.rpc('cancel_bid', { p_bid: open.value.id }); if (error) throw error; open.value = null; bidOk.value = true; bidMsg.value = 'Order cancelled.' }
+  catch (e: any) { bidOk.value = false; bidMsg.value = e.message } finally { bidBusy.value = false }
+}
+
 const conf = (r: any) => sellFromRow(r, r.level === 'model').confidence
 const table = computed(() => [...marketRows.value].sort((a, b) => (a.brand + a.model_key + (a.variant_name || '')).localeCompare(b.brand + b.model_key + (b.variant_name || '')) || b.year_from - a.year_from).slice(0, 300))
 
 watch(() => [car.value?.id, rate.value], () => { if (car.value) bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0 })
 onMounted(async () => {
   try { await load(); apFeeMyr.value = fees.value.apFeeMyr } catch (e: any) { err.value = e.message } finally { loading.value = false }
-  if (car.value) bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0
+  if (car.value) { bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0; await loadOpen(); if (open.value) bid.value = Number(open.value.max_bid_jpy) }
 })
 </script>
 
 <style scoped>
+.bidbox { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
+textarea { background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; color: var(--tx); font: inherit; outline: none; resize: vertical; }
 .two { grid-template-columns: 1fr 1fr; align-items: start; }
 .big { font-size: 22px; color: var(--ac2); }
 .fld { display: flex; flex-direction: column; gap: 4px; color: var(--mu); font-size: 12px; } .fld input { width: 120px; }
