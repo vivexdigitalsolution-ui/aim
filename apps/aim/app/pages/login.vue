@@ -10,13 +10,14 @@
 </template>
 
 <script setup lang="ts">
-const { signIn, isStaff } = useAuth()
+const { signIn, hasTier } = useAuth()
+const route = useRoute()
 const email = ref(''), password = ref(''), busy = ref(false), error = ref('')
 async function submit() {
   error.value = ''
   if (!email.value || !password.value) { error.value = 'Enter your email and password'; return }
   busy.value = true
-  try { await signIn(email.value.trim(), password.value); await navigateTo(isStaff.value ? '/review' : '/search') }
+  try { await signIn(email.value.trim(), password.value); const next = String(route.query.next || ''); await navigateTo(next.startsWith('/') && !next.startsWith('//') ? next : hasTier('member') ? '/today' : '/search') }
   catch (e: any) { error.value = e.message || 'Something went wrong' } finally { busy.value = false }
 }
 </script>
