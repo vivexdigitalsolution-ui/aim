@@ -113,5 +113,16 @@ ok(lookupMarket(rows, { brand: 'HONDA', model: 'VELLFIRE', year: 2020 }) === nul
 const two = [...rows, { ...r2020, model_key: 'VELLFIREHYBRID', median_myr: 1 }]
 ok(lookupMarket(two, { brand: 'TOYOTA', model: 'VELLFIRE HYBRID ZR', year: 2020 })?.model_key === 'VELLFIREHYBRID', 'lookup: the longest matching model key wins')
 
+// ── model family: dealer lists write the whole variant in the model name ──
+const { familyKey } = await import('../packages/core/src/index.ts')
+ok(familyKey('ALPHARD 25 SC 7 SEATER', ['ALPHARD', 'VELLFIRE']) === 'ALPHARD', 'family: the Japan model family at the start of the name wins')
+ok(familyKey('LAND CRUISER PRADO TX', ['LAND CRUISER', 'LAND CRUISER PRADO']) === 'LANDCRUISERPRADO', 'family: the longest family wins')
+ok(familyKey('Civic Type R FL5') === 'CIVIC', 'family: without a known family the first word is used')
+const fam = buildMarketRows([{ brand: 'Toyota', model: 'ALPHARD 25 SC 7 SEATER', year: 2022, price: 190000, seller: 'A' }, { brand: 'Toyota', model: 'Alphard', year: 2022, price: 200000, seller: 'B' }, { brand: 'Toyota', model: 'ALPHARD 25 Z', year: 2022, price: 210000, seller: 'A' }], '2026-11-17', { families: ['ALPHARD'] })
+ok(fam.length === 1 && fam[0].n === 3 && fam[0].sellers === 2 && fam[0].model_key === 'ALPHARD', 'family: three variant spellings group into one ALPHARD row with 2 sellers')
+const { confidence: conf, marketStats: ms } = await import('../packages/core/src/index.ts')
+const many = ms(Array.from({ length: 20 }, (_, i) => 200000 + i * 500))
+ok(conf(many) === 'high' && conf(many, 1) === 'low' && conf(many, 3) === 'high', 'confidence: one seller is never better than low; several sellers can be high')
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

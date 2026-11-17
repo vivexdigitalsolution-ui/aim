@@ -7,19 +7,31 @@ import { marketStats } from './marketStats.ts'
 
 export interface RawListing { brand: string; model: string; year: number; price: number; km?: number | null; seller?: string | null }
 export interface MarketRow {
-  brand: string; model_key: string; year_from: number; year_to: number; n: number
+  brand: string; model_key: string; year_from: number; year_to: number; n: number; sellers: number
   min_myr: number; p25_myr: number; median_myr: number; p75_myr: number; max_myr: number; avg_km: number | null; as_of: string; source: string
 }
 
 /** "Vellfire", "VELLFIRE 2.5 Z" -> VELLFIRE: the model name as one upper-case token (letters and digits only). */
 export const modelKey = (model: string): string => String(model || '').toUpperCase().replace(/[^A-Z0-9]+/g, '')
 
-export function buildMarketRows(listings: RawListing[], asOf: string, opts: { minN?: number; minSellers?: number } = {}): MarketRow[] {
+/**
+ * The model FAMILY of a listing name: dealer lists write the whole variant in the model name ("ALPHARD 25 SC 7 SEATER").
+ * `families` = the model-family names the Japan side knows (scrape_targets.model_name: VELLFIRE, ALPHARD, LAND CRUISER ...);
+ * the longest one the name starts with wins; otherwise the first word.
+ */
+export function familyKey(modelName: string, families: string[] = []): string {
+  const norm = modelKey(modelName)
+  const fam = families.map(modelKey).filter((f) => f && norm.startsWith(f)).sort((a, b) => b.length - a.length)[0]
+  if (fam) return fam
+  return modelKey(String(modelName || '').trim().split(/[\s]+/)[0] || '')
+}
+
+export function buildMarketRows(listings: RawListing[], asOf: string, opts: { minN?: number; minSellers?: number; families?: string[] } = {}): MarketRow[] {
   const minN = opts.minN ?? 3, minSellers = opts.minSellers ?? 2
   const groups = new Map<string, RawListing[]>()
   for (const l of listings) {
     if (!(l.price > 0) || !l.year || !l.model) continue
-    const k = docketBrand(l.brand) + '|' + modelKey(l.model)
+    const k = docketBrand(l.brand) + '|' + familyKey(l.model, opts.families)
     ;(groups.get(k) || groups.set(k, []).get(k)!).push(l)
   }
   const out: MarketRow[] = []
@@ -32,7 +44,7 @@ export function buildMarketRows(listings: RawListing[], asOf: string, opts: { mi
       const s = marketStats(win.map((l) => l.price))!
       const kms = win.map((l) => l.km).filter((v): v is number => typeof v === 'number' && v >= 0)
       out.push({
-        brand, model_key, year_from: y - 1, year_to: y + 1, n: s.n,
+        brand, model_key, year_from: y - 1, year_to: y + 1, n: s.n, sellers,
         min_myr: Math.round(s.min), p25_myr: Math.round(s.p25), median_myr: Math.round(s.median), p75_myr: Math.round(s.p75), max_myr: Math.round(s.max),
         avg_km: kms.length ? Math.round(kms.reduce((a, b) => a + b, 0) / kms.length) : null, as_of: asOf, source: 'carznexus',
       })

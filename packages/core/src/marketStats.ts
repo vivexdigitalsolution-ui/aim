@@ -29,8 +29,10 @@ export function percentileRank(prices: number[], value: number): number | null {
 }
 
 /** How far to trust a market range: by the number of comparable listings and how tight they are. Never "high" on a handful of listings. */
-export function confidence(s: MarketStats | null): Confidence {
+export function confidence(s: MarketStats | null, sellers?: number | null): Confidence {
   if (!s || s.n < 3) return 'none'
+  // one seller's price list is not a market: never better than "low"
+  if (sellers != null && sellers < 2) return 'low'
   const tight = s.stdev / s.median <= 0.12
   if (s.n >= 12 && tight) return 'high'
   if (s.n >= 6) return 'medium'
