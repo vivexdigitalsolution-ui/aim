@@ -1,0 +1,8 @@
+{
+  "name": "@aim/base",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Nuxt layer shared by the full AIM app and the lite app: Supabase client, sign-in state, one shared clock.",
+  "dependencies": { "@supabase/supabase-js": "^2.112.3" }
+}

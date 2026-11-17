@@ -1,5 +1,6 @@
 // @aim/core: the logic shared by the full AIM app and the lite app (and the scraper). Pure functions, no UI, no database.
 export * from './duty.ts'
+export * from './format.ts'
 export * from './docketDecision.ts'
 export * from './docketAi.ts'
 export * from './features.ts'
