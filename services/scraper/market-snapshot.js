@@ -30,9 +30,8 @@ async function main() {
   await db.connect()
   await db.query('set default_transaction_read_only = on')
   // customer price (asking_price) of live used / recon cars priced in MYR. seller_tenant_id is only used to count different sellers.
-  const { rows } = await db.query(`select brand_name, model_name, manufacture_year, asking_price, mileage, seller_tenant_id
-                                   from marketplace.listings
-                                   where status = 'active' and condition in ('used', 'recon') and currency_code = 'MYR' and asking_price > 0`)
+  // aim.market_source is a view made for this (docs/carznexus-readonly-user.sql): live used cars in MYR, 6 columns only
+  const { rows } = await db.query('select brand_name, model_name, manufacture_year, asking_price, mileage, seller_tenant_id from aim.market_source')
   await db.end()
   console.log(`${rows.length} active CarzNexus listings read`)
 
