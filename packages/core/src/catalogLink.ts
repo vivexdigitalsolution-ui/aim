@@ -42,14 +42,16 @@ export function linkLot(catalog: CatalogVariant[], aliases: CatalogAlias[], lot:
   const brandId = rows[0]!.brand_id, modelId = rows[0]!.model_id
   const text = tokens(lot.model)
   // every name a variant of this code goes by: its own names plus the lookup spellings
-  const names: { variantId: string; t: string[] }[] = []
+  const names: { variantId: string; t: string[]; direct: boolean }[] = []
   const ids = new Set(rows.map((r) => r.variant_id))
-  for (const r of rows) for (const n of [r.variant, r.variant_ja]) if (n) names.push({ variantId: r.variant_id, t: tokens(n) })
-  for (const a of aliases) if (ids.has(a.variant_id)) names.push({ variantId: a.variant_id, t: tokens(a.name) })
+  for (const r of rows) for (const n of [r.variant, r.variant_ja]) if (n) names.push({ variantId: r.variant_id, t: tokens(n), direct: true })
+  for (const a of aliases) if (ids.has(a.variant_id)) names.push({ variantId: a.variant_id, t: tokens(a.name), direct: false })
   const hits = names.filter((n) => contains(text, n.t))
   if (hits.length) {
     const best = Math.max(...hits.map((h) => h.t.length))
-    const top = new Set(hits.filter((h) => h.t.length === best).map((h) => h.variantId))
+    // at the same length a variant's OWN name beats an alternate spelling (the lookup table can point one spelling, e.g. "Z", at several variants)
+    const tied = hits.filter((h) => h.t.length === best)
+    const top = new Set((tied.some((h) => h.direct) ? tied.filter((h) => h.direct) : tied).map((h) => h.variantId))
     if (top.size === 1) return { brandId, modelId, variantId: [...top][0]!, level: 'variant', how: 'chassis code + grade words' }
     return { brandId, modelId, variantId: null, level: 'model', how: 'several variants fit the grade words' }
   }

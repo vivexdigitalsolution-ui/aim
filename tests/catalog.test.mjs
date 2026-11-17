@@ -29,5 +29,11 @@ const sis = [{ brand_id: 'b1', model_id: 'mA', model: 'Alphard', model_code: 'AG
 ok(linkLot(sis, [], { model_code: 'AGH30W', model: 'VELLFIRE 2.5Z G EDITION' }).modelId === 'mV', 'sister cars: the model name picks Vellfire out of a shared chassis code')
 ok(linkLot(sis, [], { model_code: 'AGH30W', model: 'WELCAB 2.5' }).level === 'none', 'sister cars: a name that fits neither model -> none, no guess')
 
+// an alternate spelling that points at two variants: the variant's own name wins
+const cat2 = [{ brand_id: 'b', model_id: 'm', model: 'Harrier', model_code: 'MXUA80', variant_id: 'z', variant: 'Z' }, { brand_id: 'b', model_id: 'm', model: 'Harrier', model_code: 'MXUA80', variant_id: 'zl', variant: 'Z LEATHER PACKAGE' }]
+const al2 = [{ variant_id: 'zl', name: 'Z' }]
+ok(linkLot(cat2, al2, { model_code: '6BA-MXUA80', model: 'HARRIER Z' }).variantId === 'z', 'link: the variant own name Z beats the alternate spelling Z of another variant')
+ok(linkLot(cat2, al2, { model_code: '6BA-MXUA80', model: 'HARRIER Z LEATHER PACKAGE' }).variantId === 'zl', 'link: the longer own name still wins')
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)
