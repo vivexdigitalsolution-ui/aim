@@ -3,7 +3,7 @@ packages:
   - services/*
   - apps/*
 allowBuilds:
-  esbuild: set this to true or false
   sharp: true
+  esbuild: true
 minimumReleaseAgeExclude:
   - '@anthropic-ai/sdk@1.6.0'
