@@ -23,6 +23,7 @@ const route = useRoute()
 const showShell = computed(() => !!user.value && profile.value?.status === 'active' && route.path !== '/login' && route.path !== '/pending')
 const reviewCount = useState<number | null>('review-count', () => null)
 const bidCount = useState<number | null>('bid-count', () => null)
+const alertCount = useState<number | null>('alert-count', () => null)
 const pendingAps = useState<number | null>('pending-aps', () => null)
 const db = useDb()
 const { level: sysLevel, label: sysLabel, load: loadStatus } = useSystemStatus()
@@ -32,10 +33,14 @@ const items = computed<NavItem[]>(() => [
   ...(!isStaff.value && hasTier('member') ? [{ to: '/buylist', label: 'My buy list', short: 'Buy list', icon: 'lists' }] : []),
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
   { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },
+  ...(!isStaff.value && hasTier('member') ? [{ to: '/orders', label: 'My bid orders', short: 'Orders', icon: 'bids' }] : []),
+  { to: '/alerts', label: 'Alerts', short: 'Alerts', icon: 'bell', badge: alertCount.value || null },
   ...(isStaff.value ? [{ to: '/aps', label: 'AP holders', short: 'APs', icon: 'users', badge: pendingAps.value || null }] : []),
 ])
 // badge counts for staff: bid orders waiting to be placed, dockets waiting for a decision (refreshed every minute)
 async function loadCounts() {
+  const a = await db.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null)
+  if (a.count != null) alertCount.value = a.count
   if (!isStaff.value) return
   const [b, r, p] = await Promise.all([
     db.from('bids').select('id', { count: 'exact', head: true }).eq('status', 'pending'),

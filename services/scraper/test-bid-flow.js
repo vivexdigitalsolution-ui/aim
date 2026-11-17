@@ -84,6 +84,7 @@ async function main() {
     ok(!back.error && after.data.status === 'pending' && after.data.final_price_jpy === null && after.data.agent_fee_jpy === null, 'back to waiting clears the price and the fee')
   } finally {
     for (const id of made) { await admin.from('bids').delete().eq('ap_id', id) }
+    await admin.from('notifications').delete().ilike('body', '%AIM TEST%')    // alerts the test bids sent to real staff (migration 27 triggers)
     for (const id of made) { const d = await admin.auth.admin.deleteUser(id); if (d.error) console.log('NOT deleted:', id, d.error.message) }
     console.log('\ntest users and their bids deleted')
   }
