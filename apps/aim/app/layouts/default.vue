@@ -27,7 +27,7 @@ const pendingAps = useState<number | null>('pending-aps', () => null)
 const db = useDb()
 const { level: sysLevel, label: sysLabel, load: loadStatus } = useSystemStatus()
 const items = computed<NavItem[]>(() => [
-  ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'today' }]),
+  ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }, ...(isStaff.value ? [{ to: '/market', label: 'Market prices', short: 'Prices', icon: 'tag' }] : [])] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'today' }]),
   ...(isStaff.value ? [{ to: '/bids', label: 'Bid pipeline', short: 'Bids', icon: 'bids', badge: bidCount.value || null }] : []),
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
   { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },

@@ -1,4 +1,4 @@
-import { DEFAULT_PORT_MYR, DEFAULT_INLAND_MYR, DEFAULT_AP_FEE_MYR, historyPrice, lookupMarketById, sellFromRow, maxBidJpy, marginAtBid, type IdMarketRow, type Confidence } from '@aim/core'
+import { mergeManualRows, DEFAULT_PORT_MYR, DEFAULT_INLAND_MYR, DEFAULT_AP_FEE_MYR, historyPrice, lookupMarketById, sellFromRow, maxBidJpy, marginAtBid, type IdMarketRow, type Confidence } from '@aim/core'
 
 export interface BoardLot {
   id: string; brand: string; model: string; model_code: string | null; grade: string | null; mfg_year: number | null; mileage_km: number | null
@@ -71,18 +71,23 @@ export function useMarginBoard() {
       for (const r of (k.data || []) as any[]) { const v = isStaff.value ? r.duty_myr : r.fixed_myr; if (v != null) cost.set(r.lot_id, Number(v)) }
     }
 
-    // the newest market snapshot
-    const latest = await db.from('market_stats').select('as_of').order('as_of', { ascending: false }).limit(1)
+    // market rows: the newest CarzNexus snapshot, plus every hand-entered (manual) price; a manual price overrides the snapshot for the same car and year
+    const latest = await db.from('market_stats').select('as_of').eq('source', 'carznexus').order('as_of', { ascending: false }).limit(1)
     marketAsOf.value = latest.data?.[0]?.as_of || null
-    const mk: IdMarketRow[] = []
-    if (marketAsOf.value) {
+    const fetchRows = async (q: () => any) => {
+      const out: any[] = []
       for (let from = 0; ; from += 1000) {
-        const { data, error } = await db.from('market_stats').select('*').eq('as_of', marketAsOf.value).range(from, from + 999)
+        const { data, error } = await q().range(from, from + 999)
         if (error) throw error
-        mk.push(...((data || []) as any[]).map((r) => ({ ...r, min_myr: Number(r.min_myr), p25_myr: Number(r.p25_myr), median_myr: Number(r.median_myr), p75_myr: Number(r.p75_myr), max_myr: Number(r.max_myr) })))
+        out.push(...(data || []))
         if ((data || []).length < 1000) break
       }
+      return out
     }
+    const num = (r: any): IdMarketRow => ({ ...r, min_myr: Number(r.min_myr), p25_myr: Number(r.p25_myr), median_myr: Number(r.median_myr), p75_myr: Number(r.p75_myr), max_myr: Number(r.max_myr) })
+    const snap = marketAsOf.value ? (await fetchRows(() => db.from('market_stats').select('*').eq('source', 'carznexus').eq('as_of', marketAsOf.value!))).map(num) : []
+    const manual = (await fetchRows(() => db.from('market_stats').select('*').eq('source', 'manual').order('as_of', { ascending: false }))).map(num)
+    const mk: IdMarketRow[] = mergeManualRows(snap, manual)
     marketRows.value = mk
 
     const out: BoardLot[] = open.map((l) => {

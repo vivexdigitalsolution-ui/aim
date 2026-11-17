@@ -24,5 +24,10 @@ ok(sellFromRow(row, true).confidence === 'low', 'a wider (model-level) row is ne
 ok(sellFromRow({ ...row, sellers: 1 }, false).confidence === 'low', 'one dealer is never above low')
 ok(sellFromRow({ ...row, n: 2 }, false).sellMyr === null, 'fewer than 3 listings: no sell price')
 
+ok(sellFromRow({ ...row, source: 'manual', n: 5, sellers: 1 }, false).confidence === 'medium', 'a hand-checked price from 5 cars: medium (a person checked it)')
+ok(sellFromRow({ ...row, source: 'manual', n: 2 }, false).confidence === 'low' && sellFromRow({ ...row, source: 'manual', n: 8 }, true).confidence === 'low', 'hand-checked: under 3 cars = low, and a model-level price is never above low')
+
+ok(sellFromRow({ ...row, source: 'manual', n: 1 }, false).sellMyr === 205000, 'a hand-checked price still gives a cautious sell price from one car: (low + typical) / 2')
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

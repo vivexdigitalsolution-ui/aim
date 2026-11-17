@@ -1,5 +1,5 @@
 // Catalog ids: a Japan lot is linked to the CarzNexus catalog by chassis code + grade words; listings become id-based market rows.   node tests/catalog.test.mjs
-import { linkLot, tokens, buildIdMarketRows, lookupMarketById } from '../packages/core/src/index.ts'
+import { linkLot, tokens, buildIdMarketRows, lookupMarketById, mergeManualRows } from '../packages/core/src/index.ts'
 
 let fails = 0
 const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++ }
@@ -34,6 +34,13 @@ const cat2 = [{ brand_id: 'b', model_id: 'm', model: 'Harrier', model_code: 'MXU
 const al2 = [{ variant_id: 'zl', name: 'Z' }]
 ok(linkLot(cat2, al2, { model_code: '6BA-MXUA80', model: 'HARRIER Z' }).variantId === 'z', 'link: the variant own name Z beats the alternate spelling Z of another variant')
 ok(linkLot(cat2, al2, { model_code: '6BA-MXUA80', model: 'HARRIER Z LEATHER PACKAGE' }).variantId === 'zl', 'link: the longer own name still wins')
+
+// hand-entered prices override the snapshot for the same car and year
+const snap = buildIdMarketRows([L(200000, 2022, 'A', 'v1'), L(210000, 2022, 'B', 'v1'), L(205000, 2022, 'C', 'v1')], '2026-11-17')
+const mrow = (year, median, asOf) => ({ level: 'variant', ref_id: 'v1', brand_id: 'b1', model_id: 'm1', variant_id: 'v1', brand: 'T', model_key: 'M', variant_name: 'V', year_from: year - 1, year_to: year + 1, n: 5, sellers: 1, min_myr: 1, p25_myr: 1, median_myr: median, p75_myr: 2, max_myr: 2, avg_km: null, as_of: asOf, source: 'manual' })
+const merged = mergeManualRows(snap, [mrow(2022, 250000, '2026-11-01'), mrow(2022, 260000, '2026-11-10'), mrow(2023, 270000, '2026-11-10')])
+ok(lookupMarketById(merged, { variantId: 'v1', year: 2022 }).row.median_myr === 260000, 'manual: the newest hand-checked price replaces the snapshot row for the same car and year')
+ok(lookupMarketById(merged, { variantId: 'v1', year: 2023 }).row.source === 'manual' && merged.filter((r) => r.level === 'variant' && r.year_from === 2021).length === 1, 'manual: a year with no snapshot row still gets the hand-checked price; no duplicate rows')
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

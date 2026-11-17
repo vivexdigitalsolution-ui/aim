@@ -38,7 +38,8 @@
 
             <div class="kv">
               <div><small>Market (RM)</small><b>{{ myr(c.market!.row.p25_myr) }} – {{ myr(c.market!.row.p75_myr) }}</b>
-                <small>{{ c.market!.row.n }} listing{{ c.market!.row.n === 1 ? '' : 's' }} · {{ c.market!.row.sellers }} dealer{{ c.market!.row.sellers === 1 ? '' : 's' }}</small></div>
+                <small v-if="c.market!.row.source === 'manual'">hand-checked {{ c.market!.row.as_of }} · {{ c.market!.row.n }} car{{ c.market!.row.n === 1 ? '' : 's' }}</small>
+                <small v-else>{{ c.market!.row.n }} listing{{ c.market!.row.n === 1 ? '' : 's' }} · {{ c.market!.row.sellers }} dealer{{ c.market!.row.sellers === 1 ? '' : 's' }}</small></div>
               <div><small>Usually sells</small><b>{{ c.history ? yen(c.history.price) : '—' }}</b><small>{{ c.history ? c.history.n + ' sale' + (c.history.n === 1 ? '' : 's') + ' · ' + c.history.basis : 'no history' }}</small></div>
               <div><small>Room to bid</small><b :class="c.headroom == null ? '' : c.headroom >= 0 ? 'up' : 'down'">{{ c.headroom == null ? '—' : (c.headroom >= 0 ? '+' : '−') + yen(Math.abs(c.headroom)) }}</b>
                 <small>{{ c.atHistory ? 'margin ' + c.atHistory.marginPct + '% at the usual price' : '' }}</small></div>

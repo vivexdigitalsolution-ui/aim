@@ -35,8 +35,11 @@ export function statsFromRow(r: Pick<IdMarketRow, 'n' | 'min_myr' | 'max_myr' | 
 }
 
 /** The cautious sell price and how far to trust it for a market row. `wider` (the model, not the grade) never rates above "low". */
-export function sellFromRow(r: Pick<IdMarketRow, 'n' | 'sellers' | 'min_myr' | 'max_myr' | 'p25_myr' | 'median_myr' | 'p75_myr'>, wider: boolean): { sellMyr: number | null; confidence: Confidence } {
+export function sellFromRow(r: Pick<IdMarketRow, 'n' | 'sellers' | 'min_myr' | 'max_myr' | 'p25_myr' | 'median_myr' | 'p75_myr'> & { source?: string }, wider: boolean): { sellMyr: number | null; confidence: Confidence } {
   const s = statsFromRow(r)
-  const c = confidence(s, r.sellers)
-  return { sellMyr: conservativeSell(s), confidence: wider && (c === 'high' || c === 'medium') ? 'low' : c }
+  // a hand-checked price (a person looked at n comparable cars) is trusted as "medium" from 3 cars, never "high"; the range the person typed is used as it is
+  const c: Confidence = r.source === 'manual' ? (r.n >= 3 ? 'medium' : 'low') : confidence(s, r.sellers)
+  // a typed price is used even from 1-2 cars checked (a person chose to enter it); the cautious sell price is the typical figure pulled towards the low end
+  const sellMyr = r.source === 'manual' ? Math.round((r.p25_myr + r.median_myr) / 2) : conservativeSell(s)
+  return { sellMyr, confidence: wider && (c === 'high' || c === 'medium') ? 'low' : c }
 }

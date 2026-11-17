@@ -41,7 +41,8 @@
 
         <div class="card">
           <h2>Malaysian market</h2>
-          <div class="muted small" style="margin-bottom: 12px">{{ ev.market.row.n }} CarzNexus listing{{ ev.market.row.n === 1 ? '' : 's' }} from {{ ev.market.row.sellers }} dealer{{ ev.market.row.sellers === 1 ? '' : 's' }}, years {{ ev.market.row.year_from }}–{{ ev.market.row.year_to }}, asking prices{{ marketAsOf ? ' as of ' + marketAsOf : '' }}.</div>
+          <div v-if="ev.market.row.source === 'manual'" class="muted small" style="margin-bottom: 12px">Hand-checked by our team on {{ ev.market.row.as_of }} from {{ ev.market.row.n }} comparable car{{ ev.market.row.n === 1 ? '' : 's' }}.<template v-if="ev.market.row.note"> {{ ev.market.row.note }}</template></div>
+          <div v-else class="muted small" style="margin-bottom: 12px">{{ ev.market.row.n }} CarzNexus listing{{ ev.market.row.n === 1 ? '' : 's' }} from {{ ev.market.row.sellers }} dealer{{ ev.market.row.sellers === 1 ? '' : 's' }}, years {{ ev.market.row.year_from }}–{{ ev.market.row.year_to }}, asking prices{{ marketAsOf ? ' as of ' + marketAsOf : '' }}.</div>
           <div class="bar">
             <div class="rng" :style="{ left: pos(ev.market.row.p25_myr) + '%', width: pos(ev.market.row.p75_myr) - pos(ev.market.row.p25_myr) + '%' }" />
             <div class="whisk" :style="{ left: pos(ev.market.row.min_myr) + '%', width: pos(ev.market.row.max_myr) - pos(ev.market.row.min_myr) + '%' }" />
@@ -50,7 +51,7 @@
           </div>
           <div class="row small muted" style="margin-top: 6px"><span>RM {{ myr(ev.market.row.min_myr) }}</span><span>RM {{ myr(ev.market.row.max_myr) }}</span></div>
           <table class="t" style="margin-top: 12px">
-            <tr><td>Middle half of listings</td><td>RM {{ myr(ev.market.row.p25_myr) }} – {{ myr(ev.market.row.p75_myr) }}</td></tr>
+            <tr><td>{{ ev.market.row.source === 'manual' ? 'Usual range (low – high)' : 'Middle half of listings' }}</td><td>RM {{ myr(ev.market.row.p25_myr) }} – {{ myr(ev.market.row.p75_myr) }}</td></tr>
             <tr><td>Median</td><td>RM {{ myr(ev.market.row.median_myr) }}</td></tr>
             <tr><td>Average mileage</td><td>{{ ev.market.row.avg_km != null ? ev.market.row.avg_km.toLocaleString('en-US') + ' km' : '—' }}</td></tr>
             <tr><td>Confidence</td><td><span class="chip" :class="ev.confidence === 'high' ? 'ok' : ev.confidence === 'medium' ? 'warn' : ''">{{ ev.confidence }}</span></td></tr>

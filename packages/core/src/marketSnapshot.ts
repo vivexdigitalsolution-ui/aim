@@ -92,6 +92,15 @@ export function buildIdMarketRows(listings: LinkedListing[], asOf: string, names
   return out
 }
 
+/** The market rows the app uses: the CarzNexus snapshot, with hand-entered (manual) prices on top. For the same car + year the newest manual price replaces the snapshot row. */
+export function mergeManualRows(snapshot: IdMarketRow[], manual: IdMarketRow[]): IdMarketRow[] {
+  const key = (r: IdMarketRow) => r.level + '|' + r.ref_id + '|' + r.year_from
+  const byKey = new Map<string, IdMarketRow>()
+  for (const r of snapshot) byKey.set(key(r), r)
+  for (const r of manual) if (!manual.some((o) => key(o) === key(r) && o.as_of > r.as_of)) byKey.set(key(r), r)
+  return [...byKey.values()]
+}
+
 /** The market row for a linked lot: its variant row if there is one, else its model row (`wider` = true: the whole model, not the grade). Never a guess: null when nothing is linked. */
 export function lookupMarketById(rows: IdMarketRow[], lot: { variantId?: string | null; modelId?: string | null; year: number | null | undefined }): { row: IdMarketRow; wider: boolean } | null {
   if (!lot.year) return null

@@ -25,7 +25,7 @@ async function main() {
   const db = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
   await db.connect()
   await db.query('set default_transaction_read_only = on')
-  const cat = (await db.query('select brand_id, model_id, model, model_code, variant_id, variant, variant_ja from aim.catalog_variants')).rows
+  const cat = (await db.query('select brand_id, brand, model_id, model, model_code, variant_id, variant, variant_ja, engine_cc from aim.catalog_variants')).rows
   const ali = (await db.query('select variant_id, name from aim.catalog_aliases')).rows
   await db.end()
   console.log(`catalog: ${cat.length} variants, ${ali.length} alternate spellings`)
