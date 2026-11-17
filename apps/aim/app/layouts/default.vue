@@ -22,6 +22,7 @@ const route = useRoute()
 const showShell = computed(() => !!user.value && profile.value?.status === 'active' && route.path !== '/login' && route.path !== '/pending')
 const reviewCount = useState<number | null>('review-count', () => null)
 const items = computed<NavItem[]>(() => [
+  ...(isStaff.value ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }] : []),
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
   { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },
 ])
