@@ -1,14 +1,14 @@
-import { historyPrice, lookupMarketById, sellFromRow, maxBidJpy, marginAtBid, type IdMarketRow, type Confidence } from '@aim/core'
+import { DEFAULT_PORT_MYR, DEFAULT_INLAND_MYR, DEFAULT_AP_FEE_MYR, historyPrice, lookupMarketById, sellFromRow, maxBidJpy, marginAtBid, type IdMarketRow, type Confidence } from '@aim/core'
 
 export interface BoardLot {
   id: string; brand: string; model: string; model_code: string | null; grade: string | null; mfg_year: number | null; mileage_km: number | null
   start_price_jpy: number | null; photos: string[] | null; venue: string; auction_date: string; lot_no: string; bid_deadline: string
   variant_id: string | null; model_id: string | null; level: 'variant' | 'model' | 'none'
-  dutyMyr: number | null
+  dutyMyr: number | null            // staff: the duty. AP holder: duty + port + inland as ONE number (never the duty alone)
   market: { row: IdMarketRow; wider: boolean } | null
   history: { price: number; n: number; basis: string } | null
 }
-export interface Settings { targetPct: number; reconMyr: number }
+export interface Settings { targetPct: number; reconMyr: number; apFeeMyr: number }
 export interface Evaluated extends BoardLot {
   sellMyr: number | null; confidence: Confidence; maxBid: number | null
   headroom: number | null            // max bid minus the usual winning price: positive = room to move
@@ -21,7 +21,9 @@ export interface Evaluated extends BoardLot {
  */
 export function useMarginBoard() {
   const db = useDb()
+  const { isStaff } = useAuth()
   const { load: loadRef } = useReference()
+  const fees = useState('margin-fees', () => ({ portMyr: DEFAULT_PORT_MYR, inlandMyr: DEFAULT_INLAND_MYR, apFeeMyr: DEFAULT_AP_FEE_MYR }))
   const lots = useState<BoardLot[]>('margin-lots', () => [])
   const rate = useState<number>('margin-rate', () => 0)
   const marketAsOf = useState<string | null>('margin-asof', () => null)
@@ -33,8 +35,20 @@ export function useMarginBoard() {
 
   async function load(force = false) {
     if (loaded.value && !force) return
-    const ref = await loadRef()
-    rate.value = ref.fx['JPY']?.rate || 0
+    if (isStaff.value) {
+      const ref = await loadRef()
+      rate.value = ref.fx['JPY']?.rate || 0
+      // the Offer report's own settings, so staff see the same numbers as the report
+      const pr = await db.from('calc_presets').select('preset_key,amount').in('preset_key', ['fx_jpy_myr', 'offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr'])
+      const g = (k: string) => Number((pr.data || []).find((r: any) => r.preset_key === k)?.amount)
+      if (g('fx_jpy_myr') > 0) rate.value = g('fx_jpy_myr')
+      fees.value = { portMyr: g('offer_port_myr') >= 0 ? g('offer_port_myr') : DEFAULT_PORT_MYR, inlandMyr: g('offer_inland_myr') >= 0 ? g('offer_inland_myr') : DEFAULT_INLAND_MYR, apFeeMyr: g('offer_ap_fee_myr') >= 0 ? g('offer_ap_fee_myr') : DEFAULT_AP_FEE_MYR }
+    } else {
+      const r = await db.rpc('ap_jpy_rate')
+      if (r.error) throw r.error
+      rate.value = Number(r.data) || 0
+      fees.value = { portMyr: 0, inlandMyr: 0, apFeeMyr: DEFAULT_AP_FEE_MYR }   // port + inland are inside the one cost number the server gives an AP
+    }
 
     const open: any[] = []
     for (let from = 0; ; from += 1000) {
@@ -49,12 +63,12 @@ export function useMarginBoard() {
     for (const part of chunks(ids, 100)) {
       const [c, k] = await Promise.all([
         db.from('lot_catalog').select('lot_id,variant_id,model_id,level').in('lot_id', part),
-        db.from('lot_costs').select('lot_id,duty_myr').in('lot_id', part),
+        isStaff.value ? db.from('lot_costs').select('lot_id,duty_myr').in('lot_id', part) : db.rpc('ap_lot_costs', { p_lot_ids: part }),
       ])
       if (c.error) throw c.error
       if (k.error) throw k.error
       for (const r of c.data || []) cat.set(r.lot_id, r)
-      for (const r of k.data || []) if (r.duty_myr != null) cost.set(r.lot_id, Number(r.duty_myr))
+      for (const r of (k.data || []) as any[]) { const v = isStaff.value ? r.duty_myr : r.fixed_myr; if (v != null) cost.set(r.lot_id, Number(v)) }
     }
 
     // the newest market snapshot
@@ -104,11 +118,11 @@ export function useMarginBoard() {
     if (!l.market || l.dutyMyr == null || !(rate.value > 0)) return none
     const { sellMyr, confidence } = sellFromRow(l.market.row, l.market.wider)
     if (!sellMyr) return { ...none, confidence }
-    const costs = { rate: rate.value, dutyMyr: l.dutyMyr, reconMyr: s.reconMyr }
+    const costs = { rate: rate.value, dutyMyr: l.dutyMyr, reconMyr: s.reconMyr, portMyr: fees.value.portMyr, inlandMyr: fees.value.inlandMyr, apFeeMyr: s.apFeeMyr }
     const maxBid = maxBidJpy({ sellMyr, targetPct: s.targetPct, ...costs })
     const at = l.history ? marginAtBid({ bodyJpy: l.history.price, sellMyr, ...costs }) : null
     return { ...l, sellMyr, confidence, maxBid, headroom: l.history ? maxBid - l.history.price : null, atHistory: at ? { profitMyr: at.profitMyr, marginPct: at.marginPct, landedMyr: at.landedMyr } : null }
   }
 
-  return { lots, rate, marketAsOf, marketRows, stats, loaded, load, evaluate }
+  return { lots, rate, fees, marketAsOf, marketRows, stats, loaded, load, evaluate }
 }

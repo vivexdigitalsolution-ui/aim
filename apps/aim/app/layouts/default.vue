@@ -17,12 +17,12 @@
 
 <script setup lang="ts">
 import type { NavItem } from '~/components/NavPill.vue'
-const { user, profile, isStaff, signOut } = useAuth()
+const { user, profile, isStaff, hasTier, signOut } = useAuth()
 const route = useRoute()
 const showShell = computed(() => !!user.value && profile.value?.status === 'active' && route.path !== '/login' && route.path !== '/pending')
 const reviewCount = useState<number | null>('review-count', () => null)
 const items = computed<NavItem[]>(() => [
-  ...(isStaff.value ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }] : []),
+  ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'today' }]),
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
   { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },
 ])

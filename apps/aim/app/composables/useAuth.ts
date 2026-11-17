@@ -14,6 +14,9 @@ export function useAuth() {
 
   const isStaff = computed(() => profile.value?.role === 'admin' || profile.value?.role === 'staff')
   const isAdmin = computed(() => profile.value?.role === 'admin')
+  const RANK: Record<string, number> = { free: 0, member: 1, partner: 2 }
+  /** Staff pass every tier; an AP holder needs a tier at least `min` (a missing tier counts as member: the default). */
+  const hasTier = (min: 'free' | 'member' | 'partner') => isStaff.value || (RANK[profile.value?.tier || 'member'] ?? 1) >= RANK[min]!
   const hasHistory = computed(() => !!profile.value?.history_until && profile.value.history_until >= new Date().toISOString().slice(0, 10))
 
   async function loadProfile() {
@@ -59,5 +62,5 @@ export function useAuth() {
     profile.value = null
   }
 
-  return { user, profile, ready, isStaff, isAdmin, hasHistory, init, loadProfile, signIn, signUp, signOut }
+  return { user, profile, ready, isStaff, isAdmin, hasTier, hasHistory, init, loadProfile, signIn, signUp, signOut }
 }

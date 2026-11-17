@@ -8,6 +8,7 @@
     <div class="card row wrap" style="gap: 18px; margin-bottom: 14px">
       <label class="fld">Target margin %<input v-model.number="targetPct" type="number" min="0" max="60" step="1" /></label>
       <label class="fld">Recon / prep (RM)<input v-model.number="reconMyr" type="number" min="0" step="500" /></label>
+      <label class="fld">Your AP fee (RM)<input v-model.number="apFeeMyr" type="number" min="0" step="500" /></label>
       <div class="muted small">Margin is on cost: RM 12 back for every RM 100 put in. Price source: CarzNexus asking prices{{ marketAsOf ? ', ' + marketAsOf : '' }}. These are estimates, not sold prices.</div>
     </div>
 
@@ -55,18 +56,18 @@
 </template>
 
 <script setup lang="ts">
-const { load, lots, evaluate, stats, marketAsOf } = useMarginBoard()
-const targetPct = ref(12), reconMyr = ref(3000), loading = ref(true), err = ref(''), limit = ref(30)
+const { load, lots, evaluate, stats, marketAsOf, fees } = useMarginBoard()
+const targetPct = ref(12), reconMyr = ref(3000), apFeeMyr = ref(10500), loading = ref(true), err = ref(''), limit = ref(30)
 const now = useNow()
 const yen = (n: number) => '¥' + Math.round(n).toLocaleString('en-US')
 const myr = (n: number) => Math.round(n).toLocaleString('en-US')
 const left = (iso: string) => { const m = Math.max(0, Math.round((new Date(iso).getTime() - now.value) / 60000)); return m >= 1440 ? Math.floor(m / 1440) + 'd ' + Math.floor((m % 1440) / 60) + 'h' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm' }
 
-const ranked = computed(() => lots.value.map((l) => evaluate(l, { targetPct: targetPct.value || 0, reconMyr: reconMyr.value || 0 })).filter((c) => c.market && c.sellMyr && c.dutyMyr != null)
+const ranked = computed(() => lots.value.map((l) => evaluate(l, { targetPct: targetPct.value || 0, reconMyr: reconMyr.value || 0, apFeeMyr: apFeeMyr.value || 0 })).filter((c) => c.market && c.sellMyr && c.dutyMyr != null)
   .sort((a, b) => (b.headroom ?? -Infinity) - (a.headroom ?? -Infinity) || (b.maxBid ?? 0) - (a.maxBid ?? 0)))
 const shown = computed(() => ranked.value.slice(0, limit.value))
 
-onMounted(async () => { try { await load() } catch (e: any) { err.value = e.message } finally { loading.value = false } })
+onMounted(async () => { try { await load(); apFeeMyr.value = fees.value.apFeeMyr } catch (e: any) { err.value = e.message } finally { loading.value = false } })
 </script>
 
 <style scoped>

@@ -22,8 +22,10 @@
           <table class="t">
             <tr><td>Car at auction</td><td>RM {{ myr(p.bodyMyr) }}</td></tr>
             <tr><td>Agent fee & shipping</td><td>RM {{ myr(p.agentMyr) }}</td></tr>
-            <tr><td>Duty (docket)</td><td>RM {{ myr(car.dutyMyr) }}</td></tr>
-            <tr><td>Port, inland, AP fee</td><td>RM {{ myr(fees) }}</td></tr>
+            <tr v-if="isStaff"><td>Duty (docket)</td><td>RM {{ myr(car.dutyMyr) }}</td></tr>
+            <tr v-if="isStaff"><td>Port, inland, AP fee</td><td>RM {{ myr(fees.portMyr + fees.inlandMyr + apFeeMyr) }}</td></tr>
+            <tr v-if="!isStaff"><td>Duty, port clearance & inland transfer</td><td>RM {{ myr(car.dutyMyr) }}</td></tr>
+            <tr v-if="!isStaff"><td>Your AP fee</td><td>RM {{ myr(apFeeMyr) }}</td></tr>
             <tr class="sum"><td>Landed cost</td><td>RM {{ myr(m.landedMyr) }}</td></tr>
             <tr><td>Recon / prep</td><td>RM {{ myr(reconMyr) }}</td></tr>
             <tr><td>Sell price (cautious)</td><td>RM {{ myr(ev.sellMyr!) }}</td></tr>
@@ -33,6 +35,7 @@
           <div class="row wrap" style="gap: 14px; margin-top: 12px">
             <label class="fld">Target margin %<input v-model.number="targetPct" type="number" min="0" max="60" /></label>
             <label class="fld">Recon (RM)<input v-model.number="reconMyr" type="number" min="0" step="500" /></label>
+            <label class="fld">AP fee (RM)<input v-model.number="apFeeMyr" type="number" min="0" step="500" /></label>
           </div>
         </div>
 
@@ -78,19 +81,19 @@
 </template>
 
 <script setup lang="ts">
-import { offerPricing, marginAtBid, sellFromRow, DEFAULT_PORT_MYR, DEFAULT_INLAND_MYR, DEFAULT_AP_FEE_MYR } from '@aim/core'
+import { offerPricing, marginAtBid, sellFromRow } from '@aim/core'
 
 const route = useRoute()
-const { load, lots, rate, evaluate, marketRows, marketAsOf } = useMarginBoard()
-const targetPct = ref(12), reconMyr = ref(3000), loading = ref(true), err = ref(''), bid = ref(0)
+const { isStaff } = useAuth()
+const { load, lots, rate, fees, evaluate, marketRows, marketAsOf } = useMarginBoard()
+const targetPct = ref(12), reconMyr = ref(3000), apFeeMyr = ref(10500), loading = ref(true), err = ref(''), bid = ref(0)
 const yen = (n: number) => '¥' + Math.round(n).toLocaleString('en-US')
 const myr = (n: number) => Math.round(n).toLocaleString('en-US')
-const fees = DEFAULT_PORT_MYR + DEFAULT_INLAND_MYR + DEFAULT_AP_FEE_MYR
 
 const car = computed(() => lots.value.find((l) => l.id === route.query.lot) || null)
-const ev = computed(() => evaluate(car.value!, { targetPct: targetPct.value || 0, reconMyr: reconMyr.value || 0 }))
-const p = computed(() => offerPricing({ historyJpy: bid.value || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, portMyr: DEFAULT_PORT_MYR, inlandMyr: DEFAULT_INLAND_MYR, apFeeMyr: DEFAULT_AP_FEE_MYR }))
-const m = computed(() => marginAtBid({ bodyJpy: bid.value || 0, sellMyr: ev.value.sellMyr || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, reconMyr: reconMyr.value || 0 })!)
+const ev = computed(() => evaluate(car.value!, { targetPct: targetPct.value || 0, reconMyr: reconMyr.value || 0, apFeeMyr: apFeeMyr.value || 0 }))
+const p = computed(() => offerPricing({ historyJpy: bid.value || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, portMyr: fees.value.portMyr, inlandMyr: fees.value.inlandMyr, apFeeMyr: apFeeMyr.value || 0 }))
+const m = computed(() => marginAtBid({ bodyJpy: bid.value || 0, sellMyr: ev.value.sellMyr || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, reconMyr: reconMyr.value || 0, portMyr: fees.value.portMyr, inlandMyr: fees.value.inlandMyr, apFeeMyr: apFeeMyr.value || 0 })!)
 const sliderMax = computed(() => Math.max(2_000_000, Math.ceil(((ev.value.maxBid || 0) * 1.6) / 100000) * 100000))
 
 // the range bar: min..max of the market row, with a little margin either side
@@ -102,7 +105,7 @@ const table = computed(() => [...marketRows.value].sort((a, b) => (a.brand + a.m
 
 watch(() => [car.value?.id, rate.value], () => { if (car.value) bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0 })
 onMounted(async () => {
-  try { await load() } catch (e: any) { err.value = e.message } finally { loading.value = false }
+  try { await load(); apFeeMyr.value = fees.value.apFeeMyr } catch (e: any) { err.value = e.message } finally { loading.value = false }
   if (car.value) bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0
 })
 </script>
