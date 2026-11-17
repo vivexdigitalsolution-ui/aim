@@ -37,8 +37,19 @@
           </div>
           <div class="st">
             <span class="chip" :class="STATUS[b.status]?.cls">{{ STATUS[b.status]?.label }}</span>
-            <div v-if="b.status === 'won'" class="small" style="margin-top: 3px">¥{{ Number(b.final_price_jpy).toLocaleString('en-US') }} <span class="muted">({{ rm(b.final_price_jpy) }})</span><br /><span class="muted">agent fee ¥{{ Number(b.agent_fee_jpy || 0).toLocaleString('en-US') }}</span></div>
+            <div v-if="b.status === 'won'" class="small" style="margin-top: 3px">¥{{ Number(b.final_price_jpy).toLocaleString('en-US') }} <span class="muted">({{ rm(b.final_price_jpy) }})</span><br /><span class="muted">agent fee ¥{{ Number(b.agent_fee_jpy || 0).toLocaleString('en-US') }}<template v-if="b.rebate_jpy"> after a {{ b.rebate_pct }}% volume rebate (¥{{ Number(b.rebate_jpy).toLocaleString('en-US') }} off)</template></span></div>
             <div v-if="b.team_note" class="small muted" style="margin-top: 3px">Note: {{ b.team_note }}</div>
+          </div>
+          <div v-if="b.status === 'won'" class="stepsrow">
+            <div class="row wrap" style="gap: 6px; justify-content: flex-start">
+              <span v-for="u in (updates[b.id] || [])" :key="u.id" class="chip ok" :title="u.note || ''">{{ STAGE[u.stage] }} · {{ fmtMytDateTime(u.created_at).slice(0, 10) }}</span>
+              <span v-if="!(updates[b.id] || []).length" class="muted small">No order steps yet.</span>
+            </div>
+            <div class="row wrap" style="gap: 6px; margin-top: 8px; justify-content: flex-start">
+              <select v-model="stageSel[b.id]" style="height: 32px"><option value="">Add a step ...</option><option v-for="(label, k) in STAGE" :key="k" :value="k">{{ label }}</option></select>
+              <input v-model="stageNote[b.id]" class="note" placeholder="Note to the dealer (optional)" style="max-width: 280px" />
+              <button class="btn sm" :disabled="!stageSel[b.id] || busy === b.id" @click="addStep(b)">Add step</button>
+            </div>
           </div>
           <div class="act">
             <template v-if="wonFor === b.id">
@@ -72,6 +83,8 @@ const now = useNow()
 const { loadRate, rm } = useRate()
 const bidCount = useState<number | null>('bid-count', () => null)
 const bids = ref<any[]>([]), loading = ref(true), err = ref(''), busy = ref(''), tab = ref('todo')
+const STAGE: Record<string, string> = { payment_due: 'Payment due', paid: 'Payment received', deregistered: 'Deregistered in Japan', shipped: 'Shipped', arrived: 'Arrived in Malaysia', cleared: 'Cleared customs', delivered: 'Delivered' }
+const updates = reactive<Record<string, any[]>>({}), stageSel = reactive<Record<string, string>>({}), stageNote = reactive<Record<string, string>>({})
 const wonFor = ref(''), wonPrice = ref<number | null>(null), notes = reactive<Record<string, string>>({}), copied = ref(false)
 
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -117,12 +130,29 @@ async function load() {
   try {
     await loadRate()
     const { data, error } = await db.from('bids')
-      .select('id,ap_id,lot_id,max_bid_jpy,status,ap_note,team_note,final_price_jpy,agent_fee_jpy,created_at,decided_at,ap:profiles!ap_id(id,company_name,contact_name,phone,whatsapp,open_limit_jpy),lots(id,brand,model,grade,mfg_year,mileage_km,venue,auction_date,lot_no,start_price_jpy,bid_deadline)')
+      .select('id,ap_id,lot_id,max_bid_jpy,status,ap_note,team_note,final_price_jpy,agent_fee_jpy,rebate_pct,rebate_jpy,created_at,decided_at,ap:profiles!ap_id(id,company_name,contact_name,phone,whatsapp,open_limit_jpy),lots(id,brand,model,grade,mfg_year,mileage_km,venue,auction_date,lot_no,start_price_jpy,bid_deadline)')
       .order('created_at', { ascending: false }).limit(1000)
     if (error) throw error
     bids.value = data || []
     bidCount.value = bids.value.filter((b) => b.status === 'pending').length
+    const wonIds = bids.value.filter((b) => b.status === 'won').map((b) => b.id)
+    for (const k of Object.keys(updates)) delete updates[k]
+    if (wonIds.length) {
+      const u = await db.from('order_updates').select('*').in('bid_id', wonIds).order('created_at')
+      if (u.error) throw u.error
+      for (const r of u.data || []) (updates[r.bid_id] ||= []).push(r)
+    }
   } catch (e: any) { err.value = e.message } finally { loading.value = false }
+}
+
+async function addStep(b: any) {
+  busy.value = b.id; err.value = ''
+  try {
+    const { error } = await db.from('order_updates').insert({ bid_id: b.id, stage: stageSel[b.id], note: (stageNote[b.id] || '').trim() || null })
+    if (error) throw error
+    stageSel[b.id] = ''; stageNote[b.id] = ''
+    await load()
+  } catch (e: any) { err.value = e.message } finally { busy.value = '' }
 }
 
 async function set(b: any, status: string, final?: number | null) {
@@ -141,6 +171,7 @@ onMounted(load)
 
 <style scoped>
 .bid { display: grid; grid-template-columns: minmax(0, 1.3fr) 110px minmax(0, 1fr) minmax(0, 1.5fr); gap: 14px; align-items: start; padding: 12px 0 2px; margin-top: 12px; border-top: 1px solid var(--line); }
+.stepsrow { grid-column: 1 / -1; background: var(--s2); border-radius: 10px; padding: 10px 12px; }
 .amt { text-align: right; } .amt b { font-size: 16px; }
 .act { display: grid; gap: 8px; justify-items: start; }
 .note { width: 100%; height: 34px; font-size: 13px; }

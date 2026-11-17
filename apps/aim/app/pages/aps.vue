@@ -56,6 +56,40 @@
       </div>
     </template>
 
+    <!-- SERVICE LEVELS -->
+    <template v-if="tab === 'levels'">
+      <div class="row" style="margin-bottom: 10px">
+        <p class="muted small" style="margin: 0; max-width: 720px">A service level is a named package with its own agent fee, for example Basic, Professional or Premium. Give a dealer a level on their page. A fee rule pinned to a dealer beats their level; a dealer with no level uses the default fee rules.</p>
+        <button v-if="isAdmin" class="btn" @click="lvForm = { name: '', description: '', fee_type: 'flat_jpy', fee_value: 0, active: true, sort_order: levels.length }; lvErr = ''">Add service level</button>
+      </div>
+      <div v-if="!isAdmin" class="chip warn" style="margin-bottom: 10px">Read only: only an admin can change service levels</div>
+      <div class="card" style="overflow-x: auto; padding: 4px 14px">
+        <table class="t">
+          <thead><tr><th>Name</th><th>Agent fee</th><th>What is included</th><th>Dealers</th><th>Active</th><th /></tr></thead>
+          <tr v-for="l in levels" :key="l.id">
+            <td><b>{{ l.name }}</b></td><td>{{ l.fee_type === 'percent' ? l.fee_value + '% of price' : yen(l.fee_value) + ' flat' }}</td><td class="small muted">{{ l.description }}</td>
+            <td>{{ aps.filter((a) => a.service_level_id === l.id).length }}</td><td><span class="chip" :class="l.active ? 'ok' : ''">{{ l.active ? 'yes' : 'no' }}</span></td>
+            <td class="r nowrap"><template v-if="isAdmin"><button class="btn ghost sm" @click="lvForm = { ...l }; lvErr = ''">Edit</button> <button class="btn ghost sm down" @click="removeLevel(l)">Delete</button></template></td>
+          </tr>
+          <tr v-if="!levels.length"><td colspan="6" class="muted" style="padding: 18px 4px">No service levels yet. Fees work as before until you add some.</td></tr>
+        </table>
+      </div>
+    </template>
+
+    <!-- VOLUME REBATE -->
+    <template v-if="tab === 'rebates'">
+      <p class="muted small" style="margin: 0 0 10px; max-width: 720px">The more cars a dealer wins in one calendar month (Malaysia time), the bigger the discount on the agent fee of that win. Example: from 3 cars, 10% off. The car being recorded counts. No steps means no rebate.</p>
+      <div v-if="!isAdmin" class="chip warn" style="margin-bottom: 10px">Read only: only an admin can change the rebate steps</div>
+      <div class="card" style="overflow-x: auto; padding: 4px 14px">
+        <table class="t">
+          <thead><tr><th>From this many won cars in a month</th><th>Discount on the agent fee</th><th /></tr></thead>
+          <tr v-for="r in rebates" :key="r.min_units"><td><b>{{ r.min_units }}</b> cars</td><td>{{ r.rebate_pct }}%</td><td class="r"><button v-if="isAdmin" class="btn ghost sm down" @click="removeRebate(r)">Delete</button></td></tr>
+          <tr v-if="!rebates.length"><td colspan="3" class="muted" style="padding: 18px 4px">No rebate steps yet.</td></tr>
+          <tr v-if="isAdmin"><td><input v-model.number="rb.min_units" type="number" min="2" placeholder="e.g. 3" style="width: 110px" /></td><td><input v-model.number="rb.rebate_pct" type="number" min="1" max="100" step="0.5" placeholder="e.g. 10" style="width: 110px" /> %</td><td class="r"><button class="btn sm" :disabled="!rb.min_units || !rb.rebate_pct" @click="addRebate">Add step</button></td></tr>
+        </table>
+      </div>
+    </template>
+
     <!-- ── SETTINGS ── -->
     <template v-if="tab === 'settings' && settings">
       <div class="card col">
@@ -97,7 +131,10 @@
           <label class="f">History price until<input v-model="edit.history_until" type="date" /></label>
           <label class="f">Highest bid per car (¥)<input v-model.number="edit.bid_limit_jpy" type="number" inputmode="numeric" step="100000" /></label>
           <label class="f">Total open orders cap (¥, empty = none)<input v-model.number="edit.open_limit_jpy" type="number" inputmode="numeric" step="100000" /></label>
-          <label class="f" style="grid-column: 1 / -1">Agent fee rule
+          <label class="f" style="grid-column: 1 / -1">Service level
+            <select v-model="edit.service_level_id"><option :value="null">None</option><option v-for="l in levels.filter((x) => x.active)" :key="l.id" :value="l.id">{{ l.name }} ({{ l.fee_type === 'percent' ? l.fee_value + '%' : yen(l.fee_value) }})</option></select>
+          </label>
+          <label class="f" style="grid-column: 1 / -1">Agent fee rule (a negotiated rule beats the service level)
             <select v-model="edit.fee_rule_id"><option :value="null">Default rules (by winning price)</option><option v-for="r in rules.filter((x) => x.active)" :key="r.id" :value="r.id">{{ r.name }} ({{ r.fee_type === 'percent' ? r.fee_value + '%' : yen(r.fee_value) }})</option></select>
           </label>
         </div>
@@ -118,6 +155,22 @@
             <button class="btn ghost sm" :disabled="!nc.name.trim()" @click="addContact">Add</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ONE SERVICE LEVEL -->
+    <div v-if="lvForm" class="overlay" @click.self="lvForm = null">
+      <div class="dialog">
+        <h2>{{ lvForm.id ? 'Edit service level' : 'New service level' }}</h2>
+        <label class="f">Name<input v-model="lvForm.name" placeholder="e.g. Professional" /></label>
+        <label class="f">What is included<textarea v-model="lvForm.description" rows="2" placeholder="e.g. pre-bid check, sheet translation, priority bidding" /></label>
+        <div class="grid2">
+          <label class="f">Fee type<select v-model="lvForm.fee_type"><option value="flat_jpy">Flat amount (¥)</option><option value="percent">Percent of winning price</option></select></label>
+          <label class="f">{{ lvForm.fee_type === 'percent' ? 'Percent (%)' : 'Amount (¥)' }}<input v-model.number="lvForm.fee_value" type="number" step="any" /></label>
+        </div>
+        <label class="row small" style="justify-content: flex-start"><input v-model="lvForm.active" type="checkbox" style="width: auto; height: auto" /> Active</label>
+        <div v-if="lvErr" class="err">{{ lvErr }}</div>
+        <div class="row wrap" style="gap: 8px; justify-content: flex-start"><button class="btn" @click="saveLevel">Save</button><button class="btn ghost" @click="lvForm = null">Cancel</button></div>
       </div>
     </div>
 
@@ -147,7 +200,8 @@ import { fmtMytDateTime } from '@aim/core'
 const db = useDb()
 const { isAdmin } = useAuth()
 const tab = ref('aps'), err = ref(''), msg = ref(''), busy = ref(false)
-const tabs = [{ key: 'aps', label: 'AP holders' }, { key: 'fees', label: 'Agent fees' }, { key: 'settings', label: 'Settings' }]
+const tabs = [{ key: 'aps', label: 'AP holders' }, { key: 'fees', label: 'Agent fees' }, { key: 'levels', label: 'Service levels' }, { key: 'rebates', label: 'Volume rebate' }, { key: 'settings', label: 'Settings' }]
+const levels = ref<any[]>([]), rebates = ref<any[]>([]), lvForm = ref<any>(null), lvErr = ref(''), rb = reactive({ min_units: null as number | null, rebate_pct: null as number | null })
 const aps = ref<any[]>([]), rules = ref<any[]>([]), bids = ref<any[]>([]), settings = ref<any>(null), hk = ref<any>(null)
 const filter = ref('all'), search = ref('')
 const sel = ref<any>(null), edit = reactive<any>({}), contacts = ref<any[]>([]), nc = reactive({ name: '', position: '', phone: '' })
@@ -174,22 +228,24 @@ const stat = (a: any) => statMap.value.get(a.id) || { open: 0, openJpy: 0, won: 
 
 async function load() {
   err.value = ''
-  const [a, r, b, s] = await Promise.all([
+  const [a, r, b, s, lv, rbt] = await Promise.all([
     db.from('profiles').select('*').eq('role', 'ap_holder').order('created_at', { ascending: false }),
     db.from('fee_rules').select('*').order('min_price_jpy').order('name'),
     db.from('bids').select('ap_id,status,max_bid_jpy').limit(20000),
     db.from('app_settings').select('*').maybeSingle(),
+    db.from('service_levels').select('*').order('sort_order').order('name'),
+    db.from('volume_rebates').select('*').order('min_units'),
   ])
-  const bad = [a, r, b, s].find((x) => x.error)
+  const bad = [a, r, b, s, lv, rbt].find((x) => x.error)
   if (bad) { err.value = bad.error!.message; return }
-  aps.value = a.data || []; rules.value = r.data || []; bids.value = b.data || []; settings.value = s.data
+  aps.value = a.data || []; rules.value = r.data || []; bids.value = b.data || []; settings.value = s.data; levels.value = lv.data || []; rebates.value = rbt.data || []
   if (sel.value) select(aps.value.find((x) => x.id === sel.value.id) || null)
 }
 async function select(a: any | null) {
   sel.value = a; msg.value = ''
   if (!a) return
   const n = await db.from('ap_notes').select('notes').eq('ap_id', a.id).maybeSingle()   // staff-only table: a dealer can read their own profile row, never this
-  Object.assign(edit, { tier: a.tier || 'free', bid_limit_jpy: a.bid_limit_jpy, open_limit_jpy: a.open_limit_jpy, fee_rule_id: a.fee_rule_id, history_until: a.history_until, notes: n.data?.notes || '' })
+  Object.assign(edit, { tier: a.tier || 'free', bid_limit_jpy: a.bid_limit_jpy, open_limit_jpy: a.open_limit_jpy, fee_rule_id: a.fee_rule_id, service_level_id: a.service_level_id || null, history_until: a.history_until, notes: n.data?.notes || '' })
   const { data } = await db.from('ap_contacts').select('*').eq('ap_id', a.id).order('created_at')
   contacts.value = data || []
 }
@@ -197,7 +253,7 @@ async function save() {
   busy.value = true; msg.value = ''; err.value = ''
   const { error } = await db.from('profiles').update({
     tier: edit.tier, bid_limit_jpy: Number(edit.bid_limit_jpy) || 0, open_limit_jpy: edit.open_limit_jpy === '' || edit.open_limit_jpy == null ? null : Number(edit.open_limit_jpy),
-    fee_rule_id: edit.fee_rule_id || null, history_until: edit.history_until || null,
+    fee_rule_id: edit.fee_rule_id || null, service_level_id: edit.service_level_id || null, history_until: edit.history_until || null,
   }).eq('id', sel.value.id)
   const nt = error ? null : await db.from('ap_notes').upsert({ ap_id: sel.value.id, notes: edit.notes || null, updated_at: new Date().toISOString() }, { onConflict: 'ap_id' })
   busy.value = false
@@ -237,6 +293,26 @@ async function removeRule(r: any) {
   if (error) { err.value = error.message; return }
   await load()
 }
+async function saveLevel() {
+  const f = lvForm.value
+  if (!f.name?.trim()) { lvErr.value = 'Give it a name'; return }
+  const row = { name: f.name.trim(), description: f.description?.trim() || null, fee_type: f.fee_type, fee_value: Number(f.fee_value) || 0, active: !!f.active, sort_order: f.sort_order ?? 0 }
+  const { error } = f.id ? await db.from('service_levels').update(row).eq('id', f.id) : await db.from('service_levels').insert(row)
+  if (error) { lvErr.value = error.message; return }
+  lvForm.value = null; await load()
+}
+async function removeLevel(l: any) {
+  if (!confirm('Delete "' + l.name + '"? Dealers on it go back to the default fee rules.')) return
+  const { error } = await db.from('service_levels').delete().eq('id', l.id)
+  if (error) { err.value = error.message; return }
+  await load()
+}
+async function addRebate() {
+  const { error } = await db.from('volume_rebates').upsert({ min_units: rb.min_units, rebate_pct: rb.rebate_pct }, { onConflict: 'min_units' })
+  if (error) { err.value = error.message; return }
+  rb.min_units = rb.rebate_pct = null; await load()
+}
+async function removeRebate(r: any) { const { error } = await db.from('volume_rebates').delete().eq('min_units', r.min_units); if (error) err.value = error.message; else await load() }
 async function saveSettings() {
   busy.value = true; msg.value = ''; err.value = ''
   const s = settings.value

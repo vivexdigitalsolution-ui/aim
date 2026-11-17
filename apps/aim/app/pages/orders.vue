@@ -16,6 +16,10 @@
           <div style="margin-top: 8px">Your highest bid <b>¥{{ Number(o.max_bid_jpy).toLocaleString('en-US') }}</b></div>
           <div v-if="o.status === 'won' && o.final_price_jpy" class="up">Won at ¥{{ Number(o.final_price_jpy).toLocaleString('en-US') }}</div>
           <div v-if="o.team_note" class="small" style="margin-top: 6px"><span class="muted">Our team:</span> {{ o.team_note }}</div>
+          <div v-if="o.status === 'won'" class="tl">
+            <div v-for="u in (steps[o.id] || [])" :key="u.id" class="tlrow"><span class="tdot" /><div><b>{{ STAGE[u.stage] }}</b> <span class="muted small">{{ fmtMytDateTime(u.created_at).slice(0, 10) }}</span><div v-if="u.note" class="small muted">{{ u.note }}</div></div></div>
+            <div v-if="!(steps[o.id] || []).length" class="muted small">Our team will post the next steps here: payment, deregistration, shipping.</div>
+          </div>
           <div v-if="o.status === 'pending' && isOpen(o)" class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start">
             <NuxtLink :to="`/margin?lot=${o.lot_id}`" class="btn ghost sm" style="display: inline-flex; align-items: center">Change</NuxtLink>
             <button class="btn ghost sm down" :disabled="busy === o.id" @click="cancel(o)">Cancel</button>
@@ -28,10 +32,12 @@
 </template>
 
 <script setup lang="ts">
-import { timeLeft } from '@aim/core'
+import { timeLeft, fmtMytDateTime } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
+const STAGE: Record<string, string> = { payment_due: 'Payment due', paid: 'Payment received', deregistered: 'Deregistered in Japan', shipped: 'Shipped', arrived: 'Arrived in Malaysia', cleared: 'Cleared customs', delivered: 'Delivered' }
+const steps = reactive<Record<string, any[]>>({})
 const orders = ref<any[]>([]), loading = ref(true), err = ref(''), busy = ref('')
 const STATUS: Record<string, { label: string; cls: string }> = {
   pending: { label: 'Waiting for our team', cls: 'warn' }, placed: { label: 'Placed at the auction', cls: 'ac' }, won: { label: 'Won', cls: 'ok' },
@@ -44,6 +50,12 @@ async function load() {
   const { data, error } = await db.from('bids').select('id,lot_id,max_bid_jpy,status,team_note,final_price_jpy,created_at,lots(brand,model,mfg_year,venue,lot_no,photos,bid_deadline)').order('created_at', { ascending: false }).limit(200)
   if (error) throw error
   orders.value = data || []
+  const won = orders.value.filter((o) => o.status === 'won').map((o) => o.id)
+  for (const k of Object.keys(steps)) delete steps[k]
+  if (won.length) {
+    const u = await db.from('order_updates').select('*').in('bid_id', won).order('created_at')
+    for (const r of u.data || []) (steps[r.bid_id] ||= []).push(r)
+  }
 }
 async function cancel(o: any) {
   if (!confirm('Cancel this bid order?')) return
@@ -58,5 +70,7 @@ onMounted(async () => { try { await load() } catch (e: any) { err.value = e.mess
 .ph { border-radius: 10px; background: var(--s2); overflow: hidden; aspect-ratio: 4 / 3; align-self: start; display: block; }
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .down { color: var(--bad); }
+.tl { margin-top: 10px; display: grid; gap: 8px; border-left: 2px solid var(--line); padding-left: 12px; }
+.tlrow { display: flex; gap: 8px; position: relative; } .tdot { width: 9px; height: 9px; border-radius: 50%; background: var(--ok); margin: 5px 0 0 -18px; flex: none; }
 @media (max-width: 560px) { .order { grid-template-columns: 90px 1fr; } }
 </style>
