@@ -52,6 +52,17 @@ async function main() {
   Object.entries(why).sort((a, b) => b[1] - a[1]).slice(0, 8).forEach(([k, n]) => console.log(`  ${n}  ${k}`))
 
   if (!WRITE) { console.log('\nDry run: nothing written. Run with --write to save.'); return }
+  // the catalog names, for the pickers in the app (names only)
+  const idx = [], seenModel = new Set()
+  for (const c of cat) {
+    idx.push({ level: 'variant', ref_id: c.variant_id, brand_id: c.brand_id, model_id: c.model_id, brand: c.brand, model: c.model, variant: c.variant, model_code: c.model_code, engine_cc: c.engine_cc })
+    if (!seenModel.has(c.model_id)) { seenModel.add(c.model_id); idx.push({ level: 'model', ref_id: c.model_id, brand_id: c.brand_id, model_id: c.model_id, brand: c.brand, model: c.model, variant: null, model_code: null, engine_cc: null }) }
+  }
+  for (let i = 0; i < idx.length; i += 500) {
+    const { error: e } = await supabase.from('catalog_index').upsert(idx.slice(i, i + 500).map((r) => ({ ...r, updated_at: new Date().toISOString() })), { onConflict: 'level,ref_id' })
+    if (e) throw new Error(/catalog_index/.test(e.message) ? 'catalog_index does not exist yet: run supabase/migrations/25_catalog_index_manual_prices.sql first.' : e.message)
+  }
+  console.log(`catalog_index: ${idx.length} names saved`)
   for (let i = 0; i < out.length; i += 500) {
     const { error: e } = await supabase.from('lot_catalog').upsert(out.slice(i, i + 500), { onConflict: 'lot_id' })
     if (e) throw new Error(/lot_catalog/.test(e.message) ? 'lot_catalog does not exist yet: run supabase/migrations/20_catalog_links.sql first.' : e.message)
