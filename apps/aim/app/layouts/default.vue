@@ -6,7 +6,8 @@
       <NavPill :items="items" />
       <div class="sidefoot">
         <b>{{ profile?.company_name || profile?.contact_name || profile?.email }}</b>
-        {{ isStaff ? 'Staff access' : (profile?.tier || 'member') + ' tier' }}
+        {{ isStaff ? 'Staff access' : (profile?.tier || 'free') + ' tier' }}
+        <NuxtLink v-if="isStaff && sysLabel" to="/status" class="sysline"><span class="sdot" :class="sysLevel" />{{ sysLabel }}</NuxtLink>
         <div style="margin-top: 8px"><button class="btn ghost sm" @click="logout">Sign out</button></div>
       </div>
     </aside>
@@ -24,6 +25,7 @@ const reviewCount = useState<number | null>('review-count', () => null)
 const bidCount = useState<number | null>('bid-count', () => null)
 const pendingAps = useState<number | null>('pending-aps', () => null)
 const db = useDb()
+const { level: sysLevel, label: sysLabel, load: loadStatus } = useSystemStatus()
 const items = computed<NavItem[]>(() => [
   ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'today' }]),
   ...(isStaff.value ? [{ to: '/bids', label: 'Bid pipeline', short: 'Bids', icon: 'bids', badge: bidCount.value || null }] : []),
@@ -44,7 +46,13 @@ async function loadCounts() {
   if (p.count != null) pendingAps.value = p.count
 }
 let timer: ReturnType<typeof setInterval> | null = null
-onMounted(() => { loadCounts(); timer = setInterval(loadCounts, 60_000) })
+onMounted(() => { loadCounts(); loadStatus().catch(() => {}); timer = setInterval(() => { loadCounts(); loadStatus().catch(() => {}) }, 60_000) })
 onBeforeUnmount(() => { if (timer) clearInterval(timer) })
 async function logout() { await signOut(); await navigateTo('/login') }
 </script>
+
+<style scoped>
+.sysline { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--mu); font-size: 12px; text-decoration: none; }
+.sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--mu2); flex: none; }
+.sdot.ok { background: var(--ok); } .sdot.warn { background: var(--warn); } .sdot.bad { background: var(--bad); }
+</style>

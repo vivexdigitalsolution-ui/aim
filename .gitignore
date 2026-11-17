@@ -13,3 +13,5 @@ android/.gradle
 android/build
 android/app/build
 android/local.properties
+services/scraper/logs
+services/scraper/.chrome-profile
