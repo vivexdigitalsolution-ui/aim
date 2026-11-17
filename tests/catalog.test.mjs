@@ -24,5 +24,10 @@ ok(rows.find((r) => r.level === 'model' && r.year_from === 2021)?.n === 4, 'ids:
 ok(lookupMarketById(rows, { variantId: 'v1', modelId: 'm1', year: 2022 })?.wider === false && lookupMarketById(rows, { variantId: 'v9', modelId: 'm1', year: 2022 })?.wider === true, 'lookup by ids: variant row first, else the model row marked wider')
 ok(lookupMarketById(rows, { variantId: null, modelId: null, year: 2022 }) === null && lookupMarketById(rows, { variantId: 'v1', year: 2030 }) === null, 'lookup by ids: not linked, or no listings that year = no price')
 
+// sister cars share a chassis code: the lot's model name decides
+const sis = [{ brand_id: 'b1', model_id: 'mA', model: 'Alphard', model_code: 'AGH30W', variant_id: 'a1', variant: '2.5S' }, { brand_id: 'b1', model_id: 'mV', model: 'Vellfire', model_code: 'AGH30W', variant_id: 'v1', variant: '2.5Z' }]
+ok(linkLot(sis, [], { model_code: 'AGH30W', model: 'VELLFIRE 2.5Z G EDITION' }).modelId === 'mV', 'sister cars: the model name picks Vellfire out of a shared chassis code')
+ok(linkLot(sis, [], { model_code: 'AGH30W', model: 'WELCAB 2.5' }).level === 'none', 'sister cars: a name that fits neither model -> none, no guess')
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

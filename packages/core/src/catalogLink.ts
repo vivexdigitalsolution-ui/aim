@@ -2,7 +2,7 @@
 // The same ids are what CarzNexus listings will carry (brand_id / model_id / variant_id), so the two sides meet on ids, never on names.
 // No guessing: a link is made only when the chassis code AND (for a variant) the grade words say so. Otherwise: model level, or none.
 
-export interface CatalogVariant { brand_id: string; model_id: string; model_code: string | null; variant_id: string; variant: string; variant_ja?: string | null }
+export interface CatalogVariant { brand_id: string; model_id: string; model?: string | null; model_code: string | null; variant_id: string; variant: string; variant_ja?: string | null }
 export interface CatalogAlias { variant_id: string; name: string }          // vehicle_variants_lookup: other spellings of a grade ("2.5S Type Gold 3")
 export type LinkLevel = 'variant' | 'model' | 'none'
 export interface CatalogLink { brandId: string | null; modelId: string | null; variantId: string | null; level: LinkLevel; how: string }
@@ -26,10 +26,19 @@ export function linkLot(catalog: CatalogVariant[], aliases: CatalogAlias[], lot:
   const none = (how: string): CatalogLink => ({ brandId: null, modelId: null, variantId: null, level: 'none', how })
   const code = baseCode(lot.model_code)
   if (!code) return none('no chassis code')
-  const rows = catalog.filter((c) => baseCode(c.model_code) === code)
+  let rows = catalog.filter((c) => baseCode(c.model_code) === code)
   if (!rows.length) return none('chassis code ' + code + ' not in the catalog')
-  const models = new Set(rows.map((r) => r.model_id))
-  if (models.size > 1) return none('chassis code ' + code + ' belongs to several catalog models')
+  let models = new Set(rows.map((r) => r.model_id))
+  if (models.size > 1) {
+    // sister cars share a chassis code (Noah / Voxy, Alphard / Vellfire): the lot's own model name says which one
+    const text0 = tokens(lot.model)
+    const named = [...models].map((id) => ({ id, t: tokens(rows.find((r) => r.model_id === id)!.model) })).filter((m) => contains(text0, m.t))
+    const best = Math.max(0, ...named.map((m) => m.t.length))
+    const top = named.filter((m) => m.t.length === best)
+    if (top.length !== 1) return none('chassis code ' + code + ' belongs to several catalog models and the name does not say which')
+    rows = rows.filter((r) => r.model_id === top[0]!.id)
+    models = new Set([top[0]!.id])
+  }
   const brandId = rows[0]!.brand_id, modelId = rows[0]!.model_id
   const text = tokens(lot.model)
   // every name a variant of this code goes by: its own names plus the lookup spellings

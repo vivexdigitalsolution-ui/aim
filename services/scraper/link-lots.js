@@ -25,15 +25,21 @@ async function main() {
   const db = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
   await db.connect()
   await db.query('set default_transaction_read_only = on')
-  const cat = (await db.query('select brand_id, model_id, model_code, variant_id, variant, variant_ja from aim.catalog_variants')).rows
+  const cat = (await db.query('select brand_id, model_id, model, model_code, variant_id, variant, variant_ja from aim.catalog_variants')).rows
   const ali = (await db.query('select variant_id, name from aim.catalog_aliases')).rows
   await db.end()
   console.log(`catalog: ${cat.length} variants, ${ali.length} alternate spellings`)
 
-  let q = supabase.from('lots').select('id, brand, model, model_code, bid_deadline').order('bid_deadline')
-  if (!ALL) q = q.gt('bid_deadline', new Date().toISOString())
-  const { data: lots, error } = await q.limit(5000)
-  if (error) throw new Error(error.message)
+  // the database hands out 1000 rows at a time: read page after page
+  const lots = []
+  for (let from = 0; ; from += 1000) {
+    let q = supabase.from('lots').select('id, brand, model, model_code, bid_deadline').order('bid_deadline').order('id')
+    if (!ALL) q = q.gt('bid_deadline', new Date().toISOString())
+    const { data, error } = await q.range(from, from + 999)
+    if (error) throw new Error(error.message)
+    lots.push(...data)
+    if (data.length < 1000) break
+  }
 
   const out = [], tally = { variant: 0, model: 0, none: 0 }, why = {}
   for (const l of lots) {
