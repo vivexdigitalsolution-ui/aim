@@ -1,0 +1,8 @@
+packages:
+  - packages/*
+  - services/*
+  - apps/*
+allowBuilds:
+  sharp: true
+minimumReleaseAgeExclude:
+  - '@anthropic-ai/sdk@1.6.0'

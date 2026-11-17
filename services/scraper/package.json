@@ -1,0 +1,22 @@
+{
+  "name": "auction-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fills the Auction app: tomorrow's cars (bid) and sold prices (history)",
+  "type": "commonjs",
+  "scripts": {
+    "brand-models": "node brand-model-scraper.js en",
+    "targets": "node make-targets.js",
+    "scrape:bid": "node scrape.js bid",
+    "scrape:history": "node scrape.js history",
+    "playwright:install": "playwright install chromium"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "@aws-sdk/client-s3": "^3.600.0",
+    "@supabase/supabase-js": "^2.112.3",
+    "dotenv": "^16.4.5",
+    "playwright": "^1.48.0",
+    "sharp": "^0.33.5"
+  }
+}

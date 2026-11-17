@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AIM - Auction Import Margin (mockup)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+:root{
+  --bg:#0f0f11; --s1:#17171a; --s2:#1f1f24; --s3:#28282f; --line:#2d2d35;
+  --tx:#f3f3f5; --mu:#9a9aa6; --mu2:#6c6c78;
+  --ac:#ff6a3d; --ac2:#ff8a5c; --acbg:rgba(255,106,61,.12);
+  --ok:#3ddc97; --okbg:rgba(61,220,151,.12); --bad:#ff6b6b; --badbg:rgba(255,107,107,.12); --warn:#ffc15c; --warnbg:rgba(255,193,92,.12);
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0}
+body{background:#060607;color:var(--tx);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px}
+button,input,select{font:inherit;color:inherit}
+.bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap;justify-content:center}
+.bar .note{color:var(--mu);font-size:12px}
+.seg{display:flex;background:var(--s2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{background:none;border:0;padding:6px 12px;border-radius:8px;cursor:pointer;color:var(--mu)}
+.seg button.on{background:var(--ac);color:#1a0b05;font-weight:600}
+
+/* frame */
+.frame{width:min(1280px,100%);height:min(800px,calc(100vh - 80px));min-height:620px;background:var(--bg);border:1px solid var(--line);border-radius:20px;overflow:hidden;display:grid;grid-template-columns:232px 1fr;position:relative}
+.frame.m{width:390px;grid-template-columns:1fr;height:780px;border-radius:34px;border:6px solid #000;outline:1px solid var(--line)}
+.side{background:var(--s1);border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:4px;position:relative}
+.brand{display:flex;gap:10px;align-items:center;padding:4px 8px 16px}
+.logo{width:34px;height:34px;border-radius:10px;background:var(--ac);display:grid;place-items:center;font-weight:800;color:#1a0b05;letter-spacing:-.5px}
+.brand b{display:block;font-size:15px;line-height:1.1}.brand small{color:var(--mu);font-size:11px}
+.navwrap{position:relative;display:flex;flex-direction:column;gap:2px}
+.pill{position:absolute;left:0;right:0;top:0;height:40px;background:var(--ac);border-radius:10px;z-index:0;pointer-events:none}
+.nav{position:relative;z-index:1;display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border:0;background:none;border-radius:10px;cursor:pointer;color:var(--mu);text-align:left;transition:color .25s}
+.nav svg{width:18px;height:18px;flex:none}
+.nav.on{color:#1a0b05;font-weight:600}
+.nav .n{margin-left:auto;font-size:11px;background:var(--s3);color:var(--tx);border-radius:20px;padding:1px 7px}
+.nav.on .n{background:rgba(0,0,0,.2);color:#1a0b05}
+.sidefoot{margin-top:auto;background:var(--s2);border:1px solid var(--line);border-radius:12px;padding:12px;font-size:12px;color:var(--mu)}
+.sidefoot b{color:var(--tx);display:block;font-size:13px}
+.main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.top{display:flex;gap:10px;align-items:center;padding:14px 22px;border-bottom:1px solid var(--line)}
+.search{flex:1;display:flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--line);border-radius:10px;padding:0 12px;height:38px;color:var(--mu);max-width:460px}
+.search input{background:none;border:0;outline:0;flex:1;min-width:0}
+.chip{display:inline-flex;gap:6px;align-items:center;border-radius:20px;padding:3px 10px;font-size:12px;background:var(--s2);border:1px solid var(--line);color:var(--mu);white-space:nowrap}
+.chip.ok{background:var(--okbg);color:var(--ok);border-color:transparent}
+.chip.bad{background:var(--badbg);color:var(--bad);border-color:transparent}
+.chip.warn{background:var(--warnbg);color:var(--warn);border-color:transparent}
+.chip.ac{background:var(--acbg);color:var(--ac2);border-color:transparent}
+.btn{background:var(--ac);color:#1a0b05;border:0;border-radius:10px;padding:0 16px;height:38px;font-weight:600;cursor:pointer}
+.btn.ghost{background:var(--s2);color:var(--tx);border:1px solid var(--line);font-weight:500}
+.view{flex:1;overflow:auto;padding:22px;display:none}
+.view.on{display:block}
+h1{font-size:24px;letter-spacing:-.4px}h2{font-size:15px}
+.sub{color:var(--mu);margin:4px 0 18px}
+.card{background:var(--s1);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}
+.stat small{color:var(--mu);font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+.stat b{display:block;font-size:24px;margin-top:4px;letter-spacing:-.5px}
+.stat span{font-size:12px;color:var(--mu)}
+.stat b span{font-size:inherit;color:inherit}
+.frame.m .ph{align-self:start;min-height:80px;height:96px}
+.up{color:var(--ok)}.down{color:var(--bad)}.ac{color:var(--ac2)}
+.hero{background:linear-gradient(135deg,#ff6a3d,#e0481f);color:#1a0b05;border:0}
+.hero small,.hero span{color:rgba(26,11,5,.75)}
+.car{display:grid;grid-template-columns:150px 1fr;gap:14px;cursor:pointer;transition:border-color .2s,transform .2s}
+.car:hover{border-color:var(--ac);transform:translateY(-2px)}
+.ph{border-radius:10px;background:linear-gradient(135deg,var(--s3),var(--s2));display:grid;place-items:center;color:var(--mu2);font-size:11px;min-height:96px;position:relative;overflow:hidden}
+.ph:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent 0 10px,rgba(255,255,255,.025) 10px 20px)}
+.car h3{font-size:15px}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.kv div{background:var(--s2);border-radius:10px;padding:8px 10px}
+.kv small{display:block;color:var(--mu);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+.kv b{font-size:14px}
+.meter{height:6px;border-radius:6px;background:var(--s3);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok);width:0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--mu);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:8px 8px;border-bottom:1px solid var(--line)}
+td{padding:9px 8px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+td.r,th.r{text-align:right}
+svg text{fill:var(--mu);font-size:10px}
+.cols{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start}
+.col h2{display:flex;justify-content:space-between;margin-bottom:10px;color:var(--mu);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.col .card{padding:12px;margin-bottom:10px;font-size:13px}
+.fgrid{display:grid;grid-template-columns:210px 1fr;gap:16px;align-items:start}
+.facet h2{font-size:11px;color:var(--mu);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px}
+.facet label{display:flex;gap:8px;align-items:center;padding:3px 0;color:var(--tx);cursor:pointer}
+.facet input{accent-color:var(--ac)}
+.tags{display:flex;gap:6px;flex-wrap:wrap}
+.tag{cursor:pointer;user-select:none;transition:.2s}
+.tag.on{background:var(--ac);color:#1a0b05;border-color:var(--ac);font-weight:600}
+.hit{background:var(--acbg);color:var(--ac2);border-radius:4px;padding:0 3px}
+.field{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.field label{color:var(--mu);font-size:12px}
+.field input[type=number],.field select{background:var(--s2);border:1px solid var(--line);border-radius:10px;height:38px;padding:0 10px;width:100%}
+input[type=range]{accent-color:var(--ac);width:100%}
+.big{font-size:34px;font-weight:700;letter-spacing:-1px}
+.tabbar{display:none}
+.frame.m .side{display:none}
+.frame.m .top{padding:12px 14px}
+.frame.m .top .search{max-width:none}
+.frame.m .top .hide-m{display:none}
+.frame.m .view{padding:14px 14px 84px}
+.frame.m .g4{grid-template-columns:1fr 1fr}.frame.m .g2,.frame.m .g3{grid-template-columns:1fr}
+.frame.m .car{grid-template-columns:96px 1fr}
+.frame.m .cols{grid-template-columns:repeat(4,78%);overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:8px}
+.frame.m .col{scroll-snap-align:start}
+.frame.m .fgrid{grid-template-columns:1fr}
+.frame.m .facet{display:none}
+.frame.m .tabbar{display:flex;position:absolute;left:10px;right:10px;bottom:10px;background:var(--s2);border:1px solid var(--line);border-radius:18px;padding:5px;z-index:5}
+.frame.m .tabbar .navwrap{flex-direction:row;width:100%}
+.frame.m .tabbar .pill{height:100%;width:20%;right:auto}
+.frame.m .tabbar .nav{flex:1;flex-direction:column;gap:2px;height:48px;justify-content:center;padding:0;font-size:10px}
+.frame.m .tabbar .nav .n{display:none}
+.frame.m h1{font-size:20px}
+.frame.m .kv{grid-template-columns:repeat(3,1fr)}
+.frame.m .stat b{font-size:20px}
+@media (max-width:760px){.frame:not(.m){width:100%}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="seg" id="devseg"><button data-d="d" class="on">Desktop</button><button data-d="m">Mobile / APK</button></div>
+  <div class="seg" id="verseg"><button data-v="full" class="on">AIM full</button><button data-v="lite">Lite (boss)</button></div>
+  <span class="note">Mockup with sample data. Numbers are illustrations, not real prices.</span>
+</div>
+
+<div class="frame" id="frame">
+  <aside class="side" id="side">
+    <div class="brand"><div class="logo">AIM</div><div><b>Auction Import Margin</b><small id="ver">Full version</small></div></div>
+    <div class="navwrap" id="navD"></div>
+    <div class="sidefoot"><b>Ahmad Auto Sdn Bhd</b>Partner tier - 3 APs left this year</div>
+  </aside>
+
+  <div class="main">
+    <div class="top">
+      <div class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="gs" placeholder="Search a car or feature: Vellfire JBL GR kit..."></div>
+      <span class="chip hide-m">JPY 1 = RM 0.0295</span>
+      <button class="btn hide-m" id="topbtn">Bid for me</button>
+    </div>
+
+    <!-- TODAY -->
+    <section class="view on" id="v-today">
+      <h1>Good morning, Ahmad</h1>
+      <p class="sub">5 cars match your buy list today. Ranked by estimated margin.</p>
+      <div class="grid g4" style="margin-bottom:16px">
+        <div class="card hero stat"><small>Best margin today</small><b>RM <span data-count="31200">0</span></b><span>Vellfire Z Golden Eyes</span></div>
+        <div class="card stat"><small>Cars for you</small><b><span data-count="5">0</span></b><span>of 52 in today's pool</span></div>
+        <div class="card stat"><small>Average margin</small><b class="up"><span data-count="11.8" data-dec="1">0</span>%</b><span>estimate, asking prices</span></div>
+        <div class="card stat"><small>Fits AP budget</small><b><span data-count="4">0</span> / 5</b><span>under RM 220k landed</span></div>
+      </div>
+      <div class="grid g2" id="cars"></div>
+    </section>
+
+    <!-- DETAIL -->
+    <section class="view" id="v-detail">
+      <div class="row" style="margin-bottom:6px"><div><h1>2019 Toyota Vellfire 2.5 Z Golden Eyes</h1><p class="sub" style="margin-bottom:0">USS Tokyo - lot 30031 - grade 4.5 - 41,200 km - sample data</p></div><span class="chip ok">Margin RM 31,200</span></div>
+      <div class="grid g4" style="margin:16px 0">
+        <div class="card stat"><small>Landed cost</small><b>RM 168,400</b><span>bid JPY 2.9M + duty + fees</span></div>
+        <div class="card stat"><small>Market median</small><b>RM 203,800</b><span>asking, 18 listings</span></div>
+        <div class="card stat"><small>Est. margin</small><b class="up">17.2%</b><span>after RM 4,200 recon</span></div>
+        <div class="card stat"><small>Position</small><b class="ac">22nd pct</b><span>cheaper than 78% of market</span></div>
+      </div>
+      <div class="grid g2">
+        <div class="card"><div class="row"><h2>Price distribution</h2><span class="chip">asking prices, 18 listings</span></div><svg id="hist" viewBox="0 0 520 240" width="100%"></svg></div>
+        <div class="card"><div class="row"><h2>Price vs mileage</h2><span class="chip">this car highlighted</span></div><svg id="scat" viewBox="0 0 520 240" width="100%"></svg></div>
+      </div>
+      <div class="grid g2" style="margin-top:14px">
+        <div class="card"><h2 style="margin-bottom:10px">Cost breakdown (illustrative)</h2>
+          <table id="cost"></table></div>
+        <div class="card"><div class="row"><h2>Comparable listings</h2><span class="chip warn">asking, not sold</span></div>
+          <table><thead><tr><th>Dealer</th><th class="r">KM</th><th class="r">Price</th><th class="r">Vs median</th></tr></thead><tbody id="comps"></tbody></table></div>
+      </div>
+    </section>
+
+    <!-- FEATURE SEARCH -->
+    <section class="view" id="v-search">
+      <h1>Find by feature</h1>
+      <p class="sub">Claude reads every auction sheet, so you can search what is on the car, not only the model.</p>
+      <div class="tags" id="tagbar" style="margin-bottom:14px"></div>
+      <div class="fgrid">
+        <div class="facet card">
+          <h2 style="margin-top:0">Model</h2><label><input type="checkbox" checked> Vellfire</label><label><input type="checkbox" checked> Alphard</label><label><input type="checkbox"> Harrier</label>
+          <h2>Year</h2><label><input type="checkbox" checked> 2020+</label><label><input type="checkbox" checked> 2018-2019</label>
+          <h2>Sheet grade</h2><label><input type="checkbox" checked> 4.5 and up</label><label><input type="checkbox"> 4</label>
+          <h2>Landed budget</h2><input type="range" min="120" max="320" value="240">
+          <h2>Seen on</h2><label><input type="checkbox" checked> USS</label><label><input type="checkbox" checked> ASNET</label>
+        </div>
+        <div>
+          <div class="row" style="margin-bottom:10px"><b id="rcount"></b><span class="chip ac">Read from auction sheets by Claude</span></div>
+          <div class="grid" id="results"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PIPELINE -->
+    <section class="view" id="v-pipe">
+      <div class="row"><div><h1>Bid pipeline</h1><p class="sub">Your orders from request to shipping.</p></div><button class="btn ghost">Export</button></div>
+      <div class="cols" id="cols"></div>
+    </section>
+
+    <!-- CALC -->
+    <section class="view" id="v-calc">
+      <h1>Reverse bid calculator</h1>
+      <p class="sub">Enter what you can sell for and the margin you want. AIM gives the highest bid in yen.</p>
+      <div class="grid g2">
+        <div class="card">
+          <div class="field"><label>Selling price in Malaysia (RM)</label><input type="number" id="c-sell" value="203800"></div>
+          <div class="field"><label>Wanted margin: <b id="c-mv">12</b>%</label><input type="range" id="c-m" min="3" max="30" value="12"></div>
+          <div class="field"><label>Recon and other costs (RM)</label><input type="number" id="c-rec" value="4200"></div>
+          <div class="field"><label>Customs docket value (RM, sample)</label><input type="number" id="c-dk" value="96000"></div>
+          <div class="field"><label>Duty and tax on docket (%, sample)</label><input type="number" id="c-dp" value="95"></div>
+          <p class="sub" style="margin:8px 0 0;font-size:12px">Sample formula only. The real one comes from the shared duty engine and is an estimate, never a tax quotation.</p>
+        </div>
+        <div class="card hero" style="display:flex;flex-direction:column;justify-content:center;gap:6px">
+          <small>Highest bid you can place</small>
+          <div class="big">JPY <span id="c-bid">0</span></div>
+          <span id="c-info"></span>
+          <button class="btn" style="background:#1a0b05;color:var(--ac2);margin-top:12px;align-self:flex-start">Bid for me at this limit</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <nav class="tabbar" id="tabbar"><div class="navwrap" id="navM"></div></nav>
+</div>
+
+<script>
+const ICON={
+ today:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+ search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+ detail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+ pipe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>',
+ calc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 12h2M12 12h2M8 16h2M12 16h2"/></svg>'
+};
+const NAV=[['today','Today for you',5],['search','Find by feature',''],['detail','Margin analysis',''],['pipe','Bid pipeline',3],['calc','Calculator','']];
+const CARS=[
+ {id:1,t:'2019 Vellfire 2.5 Z Golden Eyes',s:'USS Tokyo - 4.5 - 41k km',landed:168400,lo:196,hi:212,m:31200,pct:17.2,l:18,dom:'~3 wks',c:'ok',cl:'High confidence',f:['JBL audio','GR body kit','Sunroof','7 seats','Alpine 11in']},
+ {id:2,t:'2020 Harrier Z Leather Package',s:'USS Nagoya - 4.5 - 28k km',landed:152000,lo:172,hi:188,m:27400,pct:15.2,l:24,dom:'~2 wks',c:'ok',cl:'High confidence',f:['Sunroof','JBL audio','Leather','5 seats']},
+ {id:3,t:'2018 Alphard 2.5 S C Package',s:'USS Osaka - 4 - 56k km',landed:139500,lo:158,hi:171,m:19800,pct:12.4,l:11,dom:'~4 wks',c:'warn',cl:'Medium confidence',f:['Modellista kit','7 seats','Power doors']},
+ {id:4,t:'2019 NX250 version L',s:'USS Tokyo - 4.5 - 33k km',landed:171800,lo:186,hi:199,m:15900,pct:8.6,l:7,dom:'unknown',c:'warn',cl:'Low data: 7 listings',f:['Mark Levinson','Sunroof','Leather','5 seats']},
+ {id:5,t:'2021 Prado TX Limited',s:'USS Yokohama - 4 - 22k km',landed:238000,lo:251,hi:266,m:9200,pct:3.9,l:5,dom:'unknown',c:'bad',cl:'Thin margin',f:['Sunroof','7 seats','4WD','Leather']},
+];
+const RM=n=>'RM '+n.toLocaleString('en-US');
+let ver='full';
+const frame=document.getElementById('frame');
+
+/* nav + sliding pill */
+function buildNav(host,mobile){
+  host.innerHTML='<div class="pill"></div>'+NAV.map(([k,l,n])=>`<button class="nav" data-v="${k}">${ICON[k]}<span>${mobile?l.split(' ')[0]:l}</span>${n?`<span class="n">${n}</span>`:''}</button>`).join('');
+  host.querySelectorAll('.nav').forEach(b=>b.onclick=()=>go(b.dataset.v));
+}
+const pillState=new WeakMap();
+function movePill(host,animate){
+  const pill=host.querySelector('.pill'),btn=host.querySelector('.nav.on');if(!btn||!pill.offsetParent&&!host.offsetParent)return;
+  const horiz=host.parentElement.id==='tabbar';
+  const to=horiz?{a:btn.offsetLeft,b:btn.offsetLeft+btn.offsetWidth}:{a:btn.offsetTop,b:btn.offsetTop+btn.offsetHeight};
+  const set=st=>{ if(horiz){pill.style.left=st.a+'px';pill.style.width=(st.b-st.a)+'px'} else {pill.style.top=st.a+'px';pill.style.height=(st.b-st.a)+'px'} };
+  let st=pillState.get(pill)||{...to};
+  if(!animate){st={...to};pillState.set(pill,st);set(st);return}
+  const fwd=to.a>st.a, lead=fwd?'b':'a', trail=fwd?'a':'b';
+  pillState.set(pill,st);
+  gsap.killTweensOf(st);
+  gsap.to(st,{[lead]:to[lead],duration:.36,ease:'power3.out',onUpdate:()=>set(st)});
+  gsap.to(st,{[trail]:to[trail],duration:.55,ease:'power3.inOut',onUpdate:()=>set(st)});
+}
+let cur='today';
+function go(v){
+  if(v===cur&&document.querySelector('.view.on').id==='v-'+v)return;
+  const old=document.querySelector('.view.on'),nw=document.getElementById('v-'+v);
+  document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+  ['navD','navM'].forEach(id=>movePill(document.getElementById(id),true));
+  gsap.to(old,{opacity:0,filter:'blur(8px)',y:-6,duration:.18,onComplete:()=>{
+    old.classList.remove('on');old.style='';nw.classList.add('on');
+    gsap.fromTo(nw,{opacity:0,filter:'blur(10px)',y:10},{opacity:1,filter:'blur(0px)',y:0,duration:.4,ease:'power2.out',clearProps:'filter,transform'});
+    enter(v);
+  }});
+  cur=v;
+}
+function enter(v){
+  const sel={today:'#v-today .card',detail:'#v-detail .card',search:'#results .card',pipe:'#v-pipe .card',calc:'#v-calc .card'}[v];
+  gsap.from(sel,{opacity:0,y:14,duration:.45,stagger:.045,ease:'power2.out',delay:.05,clearProps:'all'});
+  if(v==='today'||v==='detail')count(document.getElementById('v-'+v));
+  if(v==='today')document.querySelectorAll('.meter i').forEach(i=>gsap.to(i,{width:i.dataset.w+'%',duration:.9,ease:'power3.out',delay:.2}));
+}
+function count(root){
+  root.querySelectorAll('[data-count]').forEach(el=>{
+    const end=+el.dataset.count,dec=+(el.dataset.dec||0),o={v:0};
+    gsap.to(o,{v:end,duration:1.1,ease:'power2.out',onUpdate:()=>el.textContent=o.v.toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec})});
+  });
+}
+
+/* TODAY */
+document.getElementById('cars').innerHTML=CARS.map(c=>`
+ <div class="card car" data-go="detail"><div class="ph">photo from sheet</div>
+  <div><div class="row"><h3>${c.t}</h3><span class="chip ${c.c}">${c.cl}</span></div>
+  <div style="color:var(--mu);font-size:12px">${c.s}</div>
+  <div class="kv"><div><small>Landed (buy)</small><b>${RM(c.landed)}</b></div><div><small>Market (sell)</small><b>RM ${c.lo}k-${c.hi}k</b></div><div><small>Est. margin</small><b class="${c.pct>10?'up':'ac'}">${RM(c.m)}</b></div></div>
+  <div class="row" style="font-size:12px;color:var(--mu)"><span>${c.l} listings - sells ${c.dom}</span><span>${c.pct}%</span></div>
+  <div class="meter" style="margin-top:6px"><i data-w="${Math.min(100,c.pct*5)}" style="background:${c.pct>10?'var(--ok)':c.pct>6?'var(--warn)':'var(--bad)'}"></i></div>
+  <div class="tags" style="margin-top:10px">${c.f.slice(0,3).map(f=>`<span class="chip">${f}</span>`).join('')}</div></div></div>`).join('');
+document.querySelectorAll('[data-go]').forEach(e=>e.onclick=()=>go(e.dataset.go));
+
+/* DETAIL charts */
+(function(){
+  const prices=[176,181,186,189,192,195,196,198,201,203,204,206,208,209,212,215,221,228];
+  const km=[62,55,48,44,70,38,41,35,52,33,29,46,31,26,22,40,18,15];
+  const med=203.8,mine=168.4/1; // landed shown as the cost marker, sell median as median
+  const sx=(v,a,b,w)=>40+(v-a)/(b-a)*(w-60);
+  // histogram
+  const bins=[170,180,190,200,210,220,230],cnt=bins.slice(0,-1).map((b,i)=>prices.filter(p=>p>=b&&p<bins[i+1]).length),mx=Math.max(...cnt);
+  let h='';cnt.forEach((c,i)=>{const x=sx(bins[i],170,230,520),w=sx(bins[i+1],170,230,520)-x-4,hh=c/mx*150;h+=`<rect x="${x}" y="${190-hh}" width="${w}" height="${hh}" rx="4" fill="#ff6a3d" opacity=".75" class="bar"/><text x="${x+w/2}" y="206" text-anchor="middle">${bins[i]}k</text>`});
+  const mx2=sx(med,170,230,520);
+  h+=`<line x1="${mx2}" x2="${mx2}" y1="20" y2="190" stroke="#ffc15c" stroke-dasharray="4 3"/><text x="${mx2+4}" y="30" style="fill:#ffc15c">median 203.8k</text>`;
+  h+=`<text x="40" y="226">Cost for you: RM 168.4k is below the whole market range, so the margin is real if the sell price holds.</text>`;
+  document.getElementById('hist').innerHTML=h;
+  // scatter
+  let s='';for(let i=0;i<4;i++){s+=`<line x1="40" x2="500" y1="${30+i*50}" y2="${30+i*50}" stroke="#2d2d35"/>`}
+  prices.forEach((p,i)=>{s+=`<circle cx="${sx(km[i],10,75,520)}" cy="${190-(p-170)/60*160}" r="5" fill="#6f7bf7" opacity=".7"/>`});
+  s+=`<circle id="me" cx="${sx(41,10,75,520)}" cy="${190-(203.8-170)/60*160}" r="8" fill="#ff6a3d" stroke="#fff" stroke-width="2"/><text x="${sx(41,10,75,520)+12}" y="${190-(203.8-170)/60*160-8}" style="fill:#ff8a5c">this car at market median 41k km</text>`;
+  s+=`<text x="40" y="206">10k km</text><text x="470" y="206">75k km</text><text x="2" y="34">230k</text><text x="2" y="194">170k</text>`;
+  document.getElementById('scat').innerHTML=s;
+  document.getElementById('cost').innerHTML=[['Auction price (JPY 2,900,000)',85550],['Auction + agent fee',5300],['Duty and tax on docket',55200],['Sea freight and port',6800],['AP fee and clearance',9100],['Recon (estimate)',4200]].map(r=>`<tr><td>${r[0]}</td><td class="r">${RM(r[1])}</td></tr>`).join('')+`<tr><td><b>Landed + recon</b></td><td class="r"><b>${RM(168400)}</b></td></tr>`;
+  const D=['D-0412','D-0087','D-0231','D-0119','D-0365','D-0402'];
+  document.getElementById('comps').innerHTML=prices.slice(3,9).map((p,i)=>`<tr><td>${D[i]}</td><td class="r">${km[i+3]},000</td><td class="r">RM ${p}k</td><td class="r ${p<med?'up':'down'}">${p<med?'-':'+'}RM ${Math.abs(Math.round((p-med)*10)/10)}k</td></tr>`).join('');
+})();
+
+/* FEATURE SEARCH */
+const FEATS=['JBL audio','GR body kit','Modellista kit','Sunroof','7 seats','4WD','Leather','Mark Levinson'];
+const sel=new Set(['JBL audio','GR body kit']);
+const SC=[
+ {t:'2019 Vellfire 2.5 Z Golden Eyes',sub:'USS Tokyo - 4.5',p:168400,f:['JBL audio','GR body kit','Sunroof','7 seats'],note:'Sheet: "JBL 14SP", "TRD GR aero kit front/rear, side skirts"'},
+ {t:'2020 Vellfire 3.5 Executive Lounge',sub:'ASNET - 4.5',p:231900,f:['JBL audio','Sunroof','7 seats','Leather'],note:'Sheet: "JBL premium sound, sunroof, leather seats"'},
+ {t:'2019 Alphard 2.5 S C Package',sub:'USS Osaka - 4',p:139500,f:['Modellista kit','7 seats'],note:'Sheet: "Modellista full kit"'},
+ {t:'2020 Vellfire 2.5 Z G Edition',sub:'USS Nagoya - 4',p:176200,f:['GR body kit','7 seats'],note:'Sheet: "GR style bumper set (aftermarket)"'},
+ {t:'2020 Harrier Z Leather Package',sub:'USS Nagoya - 4.5',p:152000,f:['Sunroof','JBL audio','Leather'],note:'Sheet: "JBL 9SP, panoramic roof"'},
+ {t:'2021 Alphard 2.5 Executive Lounge',sub:'USS Tokyo - 4.5',p:243500,f:['JBL audio','Sunroof','7 seats','Leather'],note:'Sheet: "JBL 17SP"'}
+];
+function renderTags(){document.getElementById('tagbar').innerHTML=FEATS.map(f=>`<span class="chip tag ${sel.has(f)?'on':''}" data-f="${f}">${f}</span>`).join('');
+  document.querySelectorAll('.tag').forEach(t=>t.onclick=()=>{sel.has(t.dataset.f)?sel.delete(t.dataset.f):sel.add(t.dataset.f);renderTags();renderRes()})}
+function renderRes(){
+  const rs=SC.filter(c=>[...sel].every(f=>c.f.includes(f)));
+  document.getElementById('rcount').textContent=rs.length+' car'+(rs.length===1?'':'s')+' with '+(sel.size?[...sel].join(' + '):'any features')+' (of 412 in the pool)';
+  document.getElementById('results').innerHTML=rs.length?rs.map(c=>`<div class="card car" data-go="detail"><div class="ph">photo</div><div><div class="row"><h3>${c.t}</h3><b>${RM(c.p)}</b></div><div style="color:var(--mu);font-size:12px">${c.sub} - landed estimate</div><div class="tags" style="margin:8px 0">${c.f.map(f=>`<span class="chip ${sel.has(f)?'ac':''}">${f}</span>`).join('')}</div><div style="font-size:12px;color:var(--mu)">${c.note}</div></div></div>`).join(''):'<div class="card" style="color:var(--mu)">No car has all of those today. Remove a feature, or save this search and get an alert when one appears.</div>';
+  document.querySelectorAll('#results [data-go]').forEach(e=>e.onclick=()=>go('detail'));
+  gsap.from('#results .card',{opacity:0,y:10,duration:.3,stagger:.04,clearProps:'all'});
+}
+renderTags();renderRes();
+document.getElementById('gs').addEventListener('keydown',e=>{if(e.key==='Enter')go('search')});
+
+/* PIPELINE */
+const COLS=[['Requested',[['Vellfire Z GE','Limit JPY 2.9M','USS Tokyo Thu'],['NX250 version L','Limit JPY 3.4M','USS Tokyo Thu']]],['Bidding',[['Harrier Z Leather','Limit JPY 2.6M','Live now']]],['Won',[['Alphard S C','JPY 2.31M','Pay by Fri'],['Prado TX','JPY 4.0M','Docs pending']]],['Shipping',[['Vellfire 3.5 EL','Sailing 21 Nov','Port Klang ETA 3 Dec']]]];
+document.getElementById('cols').innerHTML=COLS.map(([n,cs])=>`<div class="col"><h2><span>${n}</span><span>${cs.length}</span></h2>${cs.map(c=>`<div class="card"><b>${c[0]}</b><div style="color:var(--mu);margin-top:4px">${c[1]}</div><div style="margin-top:8px"><span class="chip ${n==='Won'?'ok':n==='Bidding'?'ac':''}">${c[2]}</span></div></div>`).join('')}</div>`).join('');
+
+/* CALC */
+function calc(){
+  const sell=+c_sell.value,m=+c_m.value/100,rec=+c_rec.value,dk=+c_dk.value,dp=+c_dp.value/100,rate=.0295;
+  document.getElementById('c-mv').textContent=c_m.value;
+  const maxLanded=sell*(1-m)-rec, duty=dk*dp, fixed=6800+9100, fee=1.06;
+  const bidRM=(maxLanded-duty-fixed)/fee, bid=Math.max(0,Math.round(bidRM/rate/1000)*1000);
+  document.getElementById('c-bid').textContent=bid.toLocaleString('en-US');
+  document.getElementById('c-info').textContent='Max landed cost '+RM(Math.round(maxLanded))+' - duty estimate '+RM(Math.round(duty))+' - profit at limit '+RM(Math.round(sell*m));
+}
+['c-sell','c-m','c-rec','c-dk','c-dp'].forEach(i=>window[i.replace('-','_')]=document.getElementById(i));
+['c-sell','c-m','c-rec','c-dk','c-dp'].forEach(i=>document.getElementById(i).addEventListener('input',calc));calc();
+
+/* device + version toggles */
+function setDevice(d){frame.classList.toggle('m',d==='m');document.querySelectorAll('#devseg button').forEach(b=>b.classList.toggle('on',b.dataset.d===d));
+  requestAnimationFrame(()=>{['navD','navM'].forEach(id=>movePill(document.getElementById(id),false))})}
+document.querySelectorAll('#devseg button').forEach(b=>b.onclick=()=>setDevice(b.dataset.d));
+document.querySelectorAll('#verseg button').forEach(b=>b.onclick=()=>{
+  ver=b.dataset.v;document.querySelectorAll('#verseg button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('ver').textContent=ver==='full'?'Full version':'Lite - marketplace';
+  document.getElementById('topbtn').textContent='Bid for me';
+  const lite=ver==='lite';
+  document.documentElement.style.setProperty('--ac',lite?'#4f8cff':'#ff6a3d');
+  document.documentElement.style.setProperty('--ac2',lite?'#86adff':'#ff8a5c');
+  document.documentElement.style.setProperty('--acbg',lite?'rgba(79,140,255,.14)':'rgba(255,106,61,.12)');
+  // lite hides margin analysis and calculator
+  document.querySelectorAll('.nav').forEach(n=>{if(['detail','calc'].includes(n.dataset.v))n.style.display=lite?'none':''});
+  document.querySelector('#v-today h1').textContent=lite?'Auction cars':'Good morning, Ahmad';
+  document.querySelector('#v-today .sub').textContent=lite?'USS and ASNET stock with prices in RM. Place a bid order on any car.':'5 cars match your buy list today. Ranked by estimated margin.';
+  document.querySelector('#v-today .grid.g4').style.display=lite?'none':'';
+  document.querySelectorAll('#cars .kv div:nth-child(2),#cars .kv div:nth-child(3),#cars .meter,#cars .row[style*="font-size:12px"]').forEach(e=>e.style.display=lite?'none':'');
+  ['navD','navM'].forEach(id=>movePill(document.getElementById(id),false));
+});
+
+buildNav(document.getElementById('navD'),false);buildNav(document.getElementById('navM'),true);
+document.querySelectorAll('.nav').forEach(b=>b.classList.toggle('on',b.dataset.v==='today'));
+function init(){setDevice(innerWidth<760?'m':'d');movePill(document.getElementById('navD'),false);movePill(document.getElementById('navM'),false);enter('today')}
+window.addEventListener('load',init);
+</script>
+</body>
+</html>
