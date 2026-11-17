@@ -13,5 +13,5 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   if (['/review', '/bids', '/aps', '/status', '/market', '/lists'].some((p) => to.path.startsWith(p)) && !isStaff.value) return navigateTo('/')
   // margin screens: member tier and up (the server enforces it too: ap_lot_costs, market_stats and lot_catalog need the tier)
-  if (['/today', '/margin'].some((p) => to.path.startsWith(p)) && !hasTier('member')) return navigateTo('/upgrade')
+  if (['/today', '/margin', '/explorer'].some((p) => to.path.startsWith(p)) && !hasTier('member')) return navigateTo('/upgrade')
 })

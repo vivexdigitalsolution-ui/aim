@@ -56,7 +56,7 @@ export function buildMarketRows(listings: RawListing[], asOf: string, opts: { mi
 // ── By catalog ids (the final way) ─────────────────────────────────────────────────────────────────
 // A CarzNexus listing counts only when it carries a catalog link: variant_id (-> a 'variant' row) and/or model_id (-> a 'model' row).
 // No link = no price yet. No minimum number of dealers: every dealer's listing counts, and the row says how many stand behind it.
-export interface LinkedListing { price: number; year: number; km?: number | null; seller?: string | null; brandId?: string | null; modelId?: string | null; variantId?: string | null }
+export interface LinkedListing { price: number; year: number; km?: number | null; seller?: string | null; brandId?: string | null; modelId?: string | null; variantId?: string | null; listedAt?: string | Date | null }
 export interface IdMarketRow {
   level: 'variant' | 'model'; ref_id: string; brand_id: string | null; model_id: string | null; variant_id: string | null
   brand: string; model_key: string; variant_name: string | null
@@ -90,6 +90,31 @@ export function buildIdMarketRows(listings: LinkedListing[], asOf: string, names
     }
   }
   return out
+}
+
+// ── The individual comparable listings (for the comparables explorer) ─────────────────────────────────
+// One row per linked CarzNexus listing: price, year, mileage, days on market. NO dealer id, name or listing id is kept.
+export interface CompRow { brand_id: string | null; model_id: string | null; variant_id: string | null; year: number; price_myr: number; km: number | null; days_listed: number | null; as_of: string; source: string }
+
+export function buildComps(listings: LinkedListing[], asOf: string, now: Date = new Date()): CompRow[] {
+  const out: CompRow[] = []
+  for (const l of listings) {
+    if (!(l.price > 0) || !l.year || !(l.variantId || l.modelId)) continue
+    const t = l.listedAt ? new Date(l.listedAt).getTime() : NaN
+    out.push({
+      brand_id: l.brandId || null, model_id: l.modelId || null, variant_id: l.variantId || null, year: l.year, price_myr: Math.round(l.price),
+      km: typeof l.km === 'number' && l.km >= 0 ? l.km : null, days_listed: Number.isFinite(t) ? Math.max(0, Math.round((now.getTime() - t) / 86400000)) : null, as_of: asOf, source: 'carznexus',
+    })
+  }
+  return out
+}
+
+/** The comparable listings of one car: its variant when it has one, else its model; cars within a year of the same age. */
+export function compsFor(comps: CompRow[], car: { variantId?: string | null; modelId?: string | null; year: number | null | undefined }, level: 'variant' | 'model'): CompRow[] {
+  if (!car.year) return []
+  const id = level === 'variant' ? car.variantId : car.modelId
+  if (!id) return []
+  return comps.filter((c) => (level === 'variant' ? c.variant_id === id : c.model_id === id) && Math.abs(c.year - car.year!) <= 1)
 }
 
 /** The market rows the app uses: the CarzNexus snapshot, with hand-entered (manual) prices on top. For the same car + year the newest manual price replaces the snapshot row. */

@@ -27,7 +27,8 @@ create or replace view aim.catalog_aliases as
 drop view if exists aim.market_source;
 create view aim.market_source as
   select brand_name, model_name, variant_name, manufacture_year, asking_price, mileage, seller_tenant_id,
-         engine_cc, seats, fuel_type, transmission, body_type, variant_id, model_id, brand_id
+         engine_cc, seats, fuel_type, transmission, body_type, variant_id, model_id, brand_id,
+         coalesce(published_at, created_at) as listed_at      -- when it went on sale: gives days on market
   from marketplace.listings
   where status = 'active' and condition in ('used', 'recon') and currency_code = 'MYR' and asking_price > 0;
 

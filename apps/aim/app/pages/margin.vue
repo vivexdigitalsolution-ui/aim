@@ -10,7 +10,16 @@
 
       <div v-if="!ev.market" class="card muted">No market price yet for this car ({{ car.level === 'none' ? 'it is not linked to the catalog' : 'CarzNexus has no linked listing for it' }}). Nothing to compare against, so no margin is shown.</div>
       <div v-else-if="car.dutyMyr == null" class="card muted">No docket is used for this car yet (see Docket review), so the duty and the margin are unknown.</div>
-      <div v-else class="grid two">
+      <template v-else>
+      <div class="grid kpis6">
+        <div class="card kpi"><small>Landed cost</small><b>RM {{ myr(m.landedMyr) }}</b><span class="muted small">at ¥{{ Number(bid || 0).toLocaleString('en-US') }}</span></div>
+        <div class="card kpi"><small>Recon / prep</small><b>RM {{ myr(reconMyr) }}</b></div>
+        <div class="card kpi"><small>Expected sell</small><b>RM {{ myr(ev.sellMyr!) }}</b><span class="muted small">cautious</span></div>
+        <div class="card kpi"><small>Gross profit</small><b :class="m.profitMyr >= 0 ? 'up' : 'down'">RM {{ myr(m.profitMyr) }}</b></div>
+        <div class="card kpi"><small>Margin on cost</small><b :class="m.marginPct >= targetPct ? 'up' : 'down'">{{ m.marginPct }}%</b></div>
+        <div class="card kpi"><small>Local listings</small><b>{{ comps.length || ev.market.row.n }}</b><span class="muted small">{{ avgDays != null ? 'avg ' + Math.round(avgDays) + ' days listed' : (ev.market.row.source === 'manual' ? 'hand-checked' : 'days listed n/a') }}</span></div>
+      </div>
+      <div class="grid two">
         <div class="card">
           <div class="row"><h2>If you win at</h2><b class="big">{{ yen(bid) }}</b></div>
           <input v-model.number="bid" type="range" :min="0" :max="sliderMax" :step="5000" style="width: 100%; margin: 10px 0" />
@@ -75,9 +84,14 @@
             <tr><td>Confidence</td><td><span class="chip" :class="ev.confidence === 'high' ? 'ok' : ev.confidence === 'medium' ? 'warn' : ''">{{ ev.confidence }}</span></td></tr>
           </table>
           <p v-if="ev.market.wider" class="chip warn" style="margin-top: 10px">Model price · wider range: no listing is linked to this exact variant yet.</p>
+          <div v-if="comps.length" style="margin-top: 14px">
+            <div class="row"><b>Closest comparable listings</b><NuxtLink :to="`/explorer?${ev.market.row.level === 'variant' ? 'v' : 'm'}=${ev.market.row.ref_id}&y=${car.mfg_year}`" class="small ac">Open the explorer →</NuxtLink></div>
+            <table class="t" style="margin-top: 6px"><tr v-for="(c, i) in closest" :key="i"><td>{{ c.year }}</td><td>{{ c.km != null ? Number(c.km).toLocaleString('en-US') + ' km' : '—' }}</td><td>RM {{ myr(c.price_myr) }}</td><td class="muted small">{{ c.days_listed != null ? c.days_listed + ' days' : '' }}</td></tr></table>
+          </div>
           <p class="muted small" style="margin-top: 10px">The sell price is cautious: the median, pulled towards the lower quartile unless the range is tight. Asking prices run above what cars finally sell for.</p>
         </div>
       </div>
+      </template>
     </template>
 
     <!-- NO CAR: the market table -->
@@ -144,19 +158,36 @@ async function cancelBid() {
   catch (e: any) { bidOk.value = false; bidMsg.value = e.message } finally { bidBusy.value = false }
 }
 
+// comparable CarzNexus listings of this car (no dealer names are stored)
+const comps = ref<any[]>([])
+const avgDays = computed(() => { const v = comps.value.map((c) => c.days_listed).filter((x: any) => x != null); return v.length ? v.reduce((a: number, b: number) => a + b, 0) / v.length : null })
+const closest = computed(() => [...comps.value].sort((a, b) => Math.abs((a.km ?? 1e9) - (car.value?.mileage_km ?? 0)) - Math.abs((b.km ?? 1e9) - (car.value?.mileage_km ?? 0))).slice(0, 6))
+async function loadComps() {
+  comps.value = []
+  const r = ev.value?.market?.row
+  if (!r || !car.value?.mfg_year) return
+  const latest = await db.from('market_comps').select('as_of').order('as_of', { ascending: false }).limit(1)
+  const asOf = latest.data?.[0]?.as_of
+  if (!asOf) return
+  const { data } = await db.from('market_comps').select('year,km,price_myr,days_listed').eq(r.level === 'variant' ? 'variant_id' : 'model_id', r.ref_id).eq('as_of', asOf).gte('year', car.value.mfg_year - 1).lte('year', car.value.mfg_year + 1).limit(500)
+  comps.value = (data || []).map((c: any) => ({ ...c, price_myr: Number(c.price_myr) }))
+}
+
 const conf = (r: any) => sellFromRow(r, r.level === 'model').confidence
 const table = computed(() => [...marketRows.value].sort((a, b) => (a.brand + a.model_key + (a.variant_name || '')).localeCompare(b.brand + b.model_key + (b.variant_name || '')) || b.year_from - a.year_from).slice(0, 300))
 
 watch(() => [car.value?.id, rate.value], () => { if (car.value) bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0 })
 onMounted(async () => {
   try { await load(); apFeeMyr.value = fees.value.apFeeMyr } catch (e: any) { err.value = e.message } finally { loading.value = false }
-  if (car.value) { bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0; await loadOpen(); if (open.value) bid.value = Number(open.value.max_bid_jpy) }
+  if (car.value) { bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0; await loadOpen(); if (open.value) bid.value = Number(open.value.max_bid_jpy); await loadComps() }
 })
 </script>
 
 <style scoped>
 .bidbox { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }
 textarea { background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; color: var(--tx); font: inherit; outline: none; resize: vertical; }
+.kpis6 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); margin-bottom: 16px; }
+.kpi { display: grid; gap: 2px; } .kpi small { color: var(--mu); } .kpi b { font-size: 17px; }
 .two { grid-template-columns: 1fr 1fr; align-items: start; }
 .big { font-size: 22px; color: var(--ac2); }
 .fld { display: flex; flex-direction: column; gap: 4px; color: var(--mu); font-size: 12px; } .fld input { width: 120px; }

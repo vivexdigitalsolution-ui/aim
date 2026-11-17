@@ -1,5 +1,5 @@
 // Catalog ids: a Japan lot is linked to the CarzNexus catalog by chassis code + grade words; listings become id-based market rows.   node tests/catalog.test.mjs
-import { linkLot, tokens, buildIdMarketRows, lookupMarketById, mergeManualRows } from '../packages/core/src/index.ts'
+import { linkLot, tokens, buildIdMarketRows, lookupMarketById, mergeManualRows, buildComps, compsFor, histogram } from '../packages/core/src/index.ts'
 
 let fails = 0
 const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++ }
@@ -41,6 +41,16 @@ const mrow = (year, median, asOf) => ({ level: 'variant', ref_id: 'v1', brand_id
 const merged = mergeManualRows(snap, [mrow(2022, 250000, '2026-11-01'), mrow(2022, 260000, '2026-11-10'), mrow(2023, 270000, '2026-11-10')])
 ok(lookupMarketById(merged, { variantId: 'v1', year: 2022 }).row.median_myr === 260000, 'manual: the newest hand-checked price replaces the snapshot row for the same car and year')
 ok(lookupMarketById(merged, { variantId: 'v1', year: 2023 }).row.source === 'manual' && merged.filter((r) => r.level === 'variant' && r.year_from === 2021).length === 1, 'manual: a year with no snapshot row still gets the hand-checked price; no duplicate rows')
+
+// comparable listings for the explorer: no dealer id, days on market
+const now = new Date('2026-11-17T00:00:00Z')
+const comps = buildComps([{ price: 200000, year: 2022, km: 30000, seller: 'SECRET-DEALER', variantId: 'v1', modelId: 'm1', brandId: 'b1', listedAt: '2026-11-07T00:00:00Z' }, { price: 210000, year: 2023, km: null, variantId: 'v1', modelId: 'm1', listedAt: null }, { price: 99, year: 2022 }, { price: 300000, year: 2022, modelId: 'm2' }], '2026-11-17', now)
+ok(comps.length === 3 && comps[0].days_listed === 10 && comps[1].days_listed === null && comps[1].km === null, 'comps: linked listings only; days on market from the publish date; unknown stays unknown')
+ok(!JSON.stringify(comps).includes('SECRET'), 'comps: the dealer is never stored')
+ok(compsFor(comps, { variantId: 'v1', year: 2022 }, 'variant').length === 2 && compsFor(comps, { modelId: 'm1', year: 2022 }, 'model').length === 2 && compsFor(comps, { modelId: 'm1', year: 2030 }, 'model').length === 0 && compsFor(comps, { year: 2022 }, 'variant').length === 0, 'comps: a car gets its variant (or model) listings within a year of the same age')
+const hist = histogram([100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210, 220, 230, 240, 250])
+ok(hist.length === 4 && hist.reduce((s, b) => s + b.count, 0) === 16 && hist[0].from === 100 && hist[3].to === 250, 'histogram: bins cover the whole range and count every price once')
+ok(histogram([5]).length === 1 && histogram([]).length === 0, 'histogram: one price = one bar, none = nothing')
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

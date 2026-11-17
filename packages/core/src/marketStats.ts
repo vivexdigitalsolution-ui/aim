@@ -58,3 +58,16 @@ export function conservativeSell(s: MarketStats | null): number | null {
   if (c === 'none') return null
   return Math.round(c === 'high' ? s.median : (s.p25 + s.median) / 2)
 }
+
+/** Price histogram: equal-width bins between the lowest and highest price (about √n bins, 4 to 12). */
+export function histogram(values: number[], maxBins = 12): { from: number; to: number; count: number }[] {
+  const v = values.filter((x) => Number.isFinite(x) && x > 0)
+  if (!v.length) return []
+  const lo = Math.min(...v), hi = Math.max(...v)
+  if (lo === hi) return [{ from: lo, to: hi, count: v.length }]
+  const bins = Math.min(maxBins, Math.max(4, Math.round(Math.sqrt(v.length))))
+  const step = (hi - lo) / bins
+  const out = Array.from({ length: bins }, (_, i) => ({ from: lo + i * step, to: lo + (i + 1) * step, count: 0 }))
+  for (const x of v) out[Math.min(bins - 1, Math.floor((x - lo) / step))]!.count++
+  return out
+}

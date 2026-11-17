@@ -27,7 +27,13 @@ async function main() {
   const db = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } })
   await db.connect()
   await db.query('set default_transaction_read_only = on')
-  const { rows } = await db.query('select manufacture_year, asking_price, mileage, seller_tenant_id, brand_id, model_id, variant_id from aim.market_source')
+  // listed_at (days on market) needs the updated view in docs/carznexus-readonly-catalog.sql; without it the days stay empty
+  let rows, hasListed = true
+  try { rows = (await db.query('select manufacture_year, asking_price, mileage, seller_tenant_id, brand_id, model_id, variant_id, listed_at from aim.market_source')).rows } catch (e) {
+    if (!/listed_at/.test(e.message)) throw e
+    hasListed = false; rows = (await db.query('select manufacture_year, asking_price, mileage, seller_tenant_id, brand_id, model_id, variant_id from aim.market_source')).rows
+    console.log('  (days on market: re-run docs/carznexus-readonly-catalog.sql in CarzNexus to add the listing date)')
+  }
   const cat = (await db.query('select brand_id, brand, model_id, model, variant_id, variant from aim.catalog_variants')).rows
   await db.end()
 
@@ -37,9 +43,10 @@ async function main() {
   console.log(`${rows.length} active CarzNexus listings read, ${linked.length} linked to the catalog (${rows.filter((r) => r.variant_id).length} to a variant)`)
   if (!linked.length) console.log('  No listing is linked yet: no market price can be made. Prices appear as soon as CarzNexus links its listings.')
 
-  const raw = linked.map((r) => ({ price: Number(r.asking_price), year: r.manufacture_year, km: r.mileage, seller: String(r.seller_tenant_id || ''), brandId: r.brand_id, modelId: r.model_id, variantId: r.variant_id }))
+  const raw = linked.map((r) => ({ price: Number(r.asking_price), year: r.manufacture_year, km: r.mileage, seller: String(r.seller_tenant_id || ''), brandId: r.brand_id, modelId: r.model_id, variantId: r.variant_id, listedAt: hasListed ? r.listed_at : null }))
   const today = new Date().toISOString().slice(0, 10)
   const out = core.buildIdMarketRows(raw, today, { brand: (id) => brand.get(id) || '', model: (id) => model.get(id) || '', variant: (id) => variant.get(id) || null })
+  const comps = core.buildComps(raw, new Date().toISOString().slice(0, 10))
   console.log(`${out.length} market rows (${out.filter((r) => r.level === 'variant').length} by variant, ${out.filter((r) => r.level === 'model').length} by model)`)
   out.sort((a, b) => b.n - a.n).slice(0, 15).forEach((r) => console.log(`  ${r.brand} ${r.model_key}${r.variant_name ? ' / ' + r.variant_name : ''} ${r.year_from + 1}: ${r.n} listings / ${r.sellers} dealer${r.sellers === 1 ? '' : 's'}, median RM ${r.median_myr.toLocaleString('en-US')}`))
 
@@ -51,5 +58,15 @@ async function main() {
     if (error) throw new Error(/ref_id|level/.test(error.message) ? 'market_stats is not ready: run supabase/migrations/20_catalog_links.sql first.' : error.message)
   }
   console.log(`\nSaved ${out.length} rows to market_stats (as of ${today}).`)
+
+  // the individual comparable listings (no dealer): today's set replaces today's; anything older than 14 days is dropped
+  const dc = await supabase.from('market_comps').delete().eq('source', 'carznexus').eq('as_of', today)
+  if (dc.error) throw new Error(/market_comps/.test(dc.error.message) ? 'market_comps does not exist yet: run supabase/migrations/28_market_comps.sql first.' : dc.error.message)
+  await supabase.from('market_comps').delete().lt('as_of', new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10))
+  for (let i = 0; i < comps.length; i += 500) {
+    const { error } = await supabase.from('market_comps').insert(comps.slice(i, i + 500))
+    if (error) throw new Error(error.message)
+  }
+  console.log(`Saved ${comps.length} comparable listings to market_comps.`)
 }
 main().catch((e) => { console.error(e.message); process.exit(1) })
