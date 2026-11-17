@@ -1,7 +1,7 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   const { init, user, profile, isStaff, hasTier } = useAuth()
   // a personal list link opens without a login (the long random token is the key)
-  if (to.path.startsWith('/t/')) return
+  if (to.path.startsWith('/t/') || to.path === '/reset') return
   await init()
 
   if (!user.value) return to.path === '/login' ? undefined : navigateTo({ path: '/login', query: to.fullPath === '/' ? {} : { next: to.fullPath } })

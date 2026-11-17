@@ -5,7 +5,7 @@
       <div class="brand"><div class="logo">AIM</div><div><b>Auction Import Margin</b><small>{{ isStaff ? 'Staff' : 'AP holder' }}</small></div></div>
       <NavPill :items="items" />
       <div class="sidefoot">
-        <b>{{ profile?.company_name || profile?.contact_name || profile?.email }}</b>
+        <NuxtLink to="/account" class="acctlink"><b>{{ profile?.company_name || profile?.contact_name || profile?.email }}</b><small>My account</small></NuxtLink>
         {{ isStaff ? 'Staff access' : (profile?.tier || 'free') + ' tier' }}
         <NuxtLink v-if="isStaff && sysLabel" to="/status" class="sysline"><span class="sdot" :class="sysLevel" />{{ sysLabel }}</NuxtLink>
         <div style="margin-top: 8px"><button class="btn ghost sm" @click="logout">Sign out</button></div>
@@ -58,6 +58,8 @@ async function logout() { await signOut(); await navigateTo('/login') }
 </script>
 
 <style scoped>
+.acctlink { display: block; text-decoration: none; color: inherit; }
+.acctlink small { display: block; color: var(--mu); font-size: 11px; }
 .sysline { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--mu); font-size: 12px; text-decoration: none; }
 .sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--mu2); flex: none; }
 .sdot.ok { background: var(--ok); } .sdot.warn { background: var(--warn); } .sdot.bad { background: var(--bad); }

@@ -56,11 +56,17 @@ export function useAuth() {
     return data
   }
 
+  /** Sends the "choose a new password" e-mail. The answer never says whether the address has an account. */
+  async function resetPassword(email: string) {
+    const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: location.origin + '/reset' })
+    if (error) throw error
+  }
+
   async function signOut() {
     await db.auth.signOut()
     user.value = null
     profile.value = null
   }
 
-  return { user, profile, ready, isStaff, isAdmin, hasTier, hasHistory, init, loadProfile, signIn, signUp, signOut }
+  return { user, profile, ready, isStaff, isAdmin, hasTier, hasHistory, init, loadProfile, signIn, signUp, resetPassword, signOut }
 }

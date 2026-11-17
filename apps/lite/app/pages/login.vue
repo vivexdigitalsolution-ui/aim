@@ -12,14 +12,21 @@
     <div v-if="error" class="err">{{ error }}</div>
     <div v-if="done" class="okmsg">{{ done }}</div>
     <button class="btn" :disabled="busy" @click="submit">{{ register ? 'Create account' : 'Sign in' }}</button>
+    <a v-if="!register" href="#" class="small" @click.prevent="forgot">Forgot your password?</a>
     <a href="#" class="small" @click.prevent="register = !register; error = ''; done = ''">{{ register ? 'I already have an account' : 'New dealer? Create an account' }}</a>
   </div>
 </template>
 
 <script setup lang="ts">
-const { signIn, signUp } = useAuth()
+const { signIn, signUp, resetPassword } = useAuth()
 const email = ref(''), password = ref(''), company = ref(''), contact = ref(''), phone = ref('')
 const register = ref(false), busy = ref(false), error = ref(''), done = ref('')
+
+async function forgot() {
+  error.value = ''; done.value = ''
+  if (!email.value.trim()) { error.value = 'Type your email above first, then press “Forgot your password?”'; return }
+  try { await resetPassword(email.value.trim()); done.value = 'If that email has an account, we sent a link to choose a new password. Check your inbox.' } catch (e: any) { error.value = e.message }
+}
 
 async function submit() {
   error.value = ''; done.value = ''

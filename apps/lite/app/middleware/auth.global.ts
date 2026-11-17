@@ -1,5 +1,6 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   const { init, user, profile } = useAuth()
+  if (to.path === '/reset') return       // the e-mail link to choose a new password
   await init()
   if (!user.value) return to.path === '/login' ? undefined : navigateTo('/login')
   if (to.path === '/login') return navigateTo('/')
