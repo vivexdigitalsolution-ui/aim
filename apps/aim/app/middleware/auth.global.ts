@@ -5,7 +5,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   await init()
 
   if (!user.value) return to.path === '/login' ? undefined : navigateTo({ path: '/login', query: to.fullPath === '/' ? {} : { next: to.fullPath } })
-  if (to.path === '/login') return navigateTo(hasTier('member') ? '/today' : '/search')
+  if (to.path === '/login') return navigateTo(hasTier('member') ? '/today' : '/cars')
 
   // signed in, but waiting for approval or suspended
   if (!profile.value || profile.value.status !== 'active') return to.path === '/pending' ? undefined : navigateTo('/pending')
