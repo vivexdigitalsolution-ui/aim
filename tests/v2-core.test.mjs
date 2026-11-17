@@ -95,5 +95,23 @@ ok(cr.cost && cr.cost.duty_myr === direct.dutyMyr && cr.cost.docket_id === 'x', 
 ok(dutyCostRow({ docket: dk, regYear: 2021, regMonth: 5, ref: { ...cref, fx: {} }, today }).cost === null, 'no exchange rate: no cost row, with a reason')
 ok(dutyCostRow({ docket: dk, regYear: null, regMonth: null, ref: cref, today }).cost === null, 'no register year: no cost row')
 
+// ── market snapshot: privacy and lookup ──
+const { buildMarketRows, lookupMarket, modelKey } = await import('../packages/core/src/index.ts')
+const raw = (seller, year, price, model = 'Vellfire') => ({ brand: 'Toyota', model, year, price, km: 30000, seller })
+const rows = buildMarketRows([raw('A', 2020, 190000), raw('B', 2020, 200000), raw('C', 2021, 210000), raw('A', 2019, 185000), raw('B', 2021, 205000)], '2026-11-17')
+ok(rows.length > 0 && rows.every((r) => r.n >= 3), 'snapshot: every row has at least 3 listings')
+const r2020 = rows.find((r) => r.year_from === 2019 && r.year_to === 2021)
+ok(r2020 && r2020.n === 5 && r2020.min_myr === 185000 && r2020.max_myr === 210000 && r2020.as_of === '2026-11-17', 'snapshot: window year-1..year+1 around 2020 holds all 5 listings')
+ok(buildMarketRows([raw('A', 2020, 190000), raw('A', 2020, 195000), raw('A', 2020, 200000), raw('A', 2020, 205000)], '2026-11-17').length === 0, 'snapshot: 4 listings from ONE seller make no row (one dealer cannot be read back)')
+ok(buildMarketRows([raw('A', 2020, 190000), raw('B', 2020, 195000)], '2026-11-17').length === 0, 'snapshot: 2 listings make no row')
+ok(!JSON.stringify(rows).includes('"A"') && !('seller' in rows[0]), 'snapshot: no seller id in the output')
+ok(buildMarketRows([raw('A', 2020, 0), raw('B', 2020, -5), raw('C', 2020, 190000)], '2026-11-17').length === 0, 'snapshot: zero or negative prices are ignored')
+ok(modelKey('C-Class') === 'CCLASS' && modelKey('Vellfire') === 'VELLFIRE', 'modelKey: letters and digits only')
+ok(lookupMarket(rows, { brand: 'TOYOTA', model: 'VELLFIRE 2.5 Z GOLDEN EYES', year: 2020 })?.n === 5, 'lookup: a Japanese lot finds its market row (brand, model start, year)')
+ok(lookupMarket(rows, { brand: 'TOYOTA', model: 'VELLFIRE 2.5 Z', year: 2015 }) === null, 'lookup: no row for a year with no listings')
+ok(lookupMarket(rows, { brand: 'HONDA', model: 'VELLFIRE', year: 2020 }) === null, 'lookup: another brand finds nothing')
+const two = [...rows, { ...r2020, model_key: 'VELLFIREHYBRID', median_myr: 1 }]
+ok(lookupMarket(two, { brand: 'TOYOTA', model: 'VELLFIRE HYBRID ZR', year: 2020 })?.model_key === 'VELLFIREHYBRID', 'lookup: the longest matching model key wins')
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)
