@@ -1,6 +1,6 @@
 <template>
   <div class="rbox card">
-    <h1 style="font-size: 20px; margin: 0 0 6px">Choose a new password</h1>
+    <h1 style="font-size: 20px; margin: 0 0 6px">Choose your password</h1>
     <div v-if="state === 'checking'" class="muted">Checking your link ...</div>
     <template v-else-if="state === 'ready'">
       <label class="f">New password (at least 8 characters)<input v-model="pw" type="password" autocomplete="new-password" /></label>
@@ -9,7 +9,7 @@
       <button class="btn" :disabled="busy" @click="save">Save new password</button>
     </template>
     <template v-else-if="state === 'done'">
-      <div class="okmsg">Your password is changed. You are signed in.</div>
+      <div class="okmsg">Your password is saved. You are signed in.</div>
       <NuxtLink to="/" class="btn" style="display: inline-flex; align-items: center; justify-content: center; text-decoration: none">Continue</NuxtLink>
     </template>
     <template v-else>

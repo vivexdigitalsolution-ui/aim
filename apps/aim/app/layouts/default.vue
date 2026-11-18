@@ -20,7 +20,7 @@
 import type { NavItem } from '~/components/NavPill.vue'
 const { user, profile, isStaff, hasTier, signOut } = useAuth()
 const route = useRoute()
-const showShell = computed(() => !!user.value && profile.value?.status === 'active' && route.path !== '/login' && route.path !== '/pending' && route.path !== '/join')
+const showShell = computed(() => !!user.value && profile.value?.status === 'active' && route.path !== '/login' && route.path !== '/pending')
 const reviewCount = useState<number | null>('review-count', () => null)
 const bidCount = useState<number | null>('bid-count', () => null)
 const alertCount = useState<number | null>('alert-count', () => null)

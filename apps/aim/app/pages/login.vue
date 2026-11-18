@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-const { signIn, hasTier, resetPassword, profile, redeemPass } = useAuth()
+const { signIn, hasTier, resetPassword, profile } = useAuth()
 const route = useRoute()
 const email = ref(''), password = ref(''), busy = ref(false), error = ref(''), info = ref('')
 async function forgot() {
@@ -27,12 +27,6 @@ async function submit() {
   busy.value = true
   try {
     await signIn(email.value.trim(), password.value)
-    // a walk-in customer who had to confirm their email first: finish with the code they typed on the join page
-    let code = ''
-    try { code = localStorage.getItem('aim-pass') || '' } catch { /* private window */ }
-    if (code && profile.value?.role === 'ap_holder' && profile.value.status === 'pending') {
-      try { await redeemPass(code); localStorage.removeItem('aim-pass') } catch (e: any) { error.value = e.message; return }
-    }
     if (profile.value?.role === 'customer') { await navigateTo('/for-you'); return }
     const next = String(route.query.next || ''); await navigateTo(next.startsWith('/') && !next.startsWith('//') ? next : hasTier('member') ? '/today' : '/cars')
   }

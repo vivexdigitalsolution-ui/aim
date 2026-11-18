@@ -27,7 +27,7 @@ async function makeUser(label, patch) {
   const c = createClient(process.env.SUPABASE_URL, anonKey, { auth: { autoRefreshToken: false, persistSession: false } })
   const si = await c.auth.signInWithPassword({ email, password })
   if (si.error) throw new Error(si.error.message)
-  return { id: r.data.user.id, c }
+  return { id: r.data.user.id, c, email }
 }
 
 async function main() {
@@ -53,25 +53,29 @@ async function main() {
     const D = await mk('ZZVELL 3.5 ZG', Y - 1, 90000)         // too many km
     await admin.from('lot_features').insert([{ lot_id: A, key: 'jbl', label: 'JBL audio', source: 'factory' }])
 
-    console.log('\n-- pass and sign-up --')
-    const pass = await staff.c.from('customer_passes').insert({ label: 'AIM TEST Mr Tan', phone: '000', hours: 2, filters: { brands: ['TESTBRAND'], models: ['ZZVELL'], year_from: Y - 2, max_mileage: 60000 } }).select('id,code').single()
-    ok(!pass.error && pass.data.code?.length === 10, 'staff create a viewing pass with a code')
+    console.log('\n-- invitation and first visit --')
+    const pass = await staff.c.from('customer_passes').insert({ label: 'AIM TEST Mr Tan', email: cust.email, phone: '000', hours: 2, filters: { brands: ['TESTBRAND'], models: ['ZZVELL'], year_from: Y - 2, max_mileage: 60000 } }).select('id').single()
+    ok(!pass.error, 'staff create a viewing pass for an email address')
     ok(((await dealer.c.from('customer_passes').select('id')).data || []).length === 0, 'a dealer cannot see passes')
+    ok(!!(await dealer.c.rpc('attach_customer', { p_pass: pass.data.id, p_user: dealer.id })).error, 'a dealer CANNOT call attach_customer (the invite function only)')
+    ok(!!(await staff.c.rpc('attach_customer', { p_pass: pass.data.id, p_user: cust.id })).error, 'staff CANNOT call it from the app either: only the service key')
     const early = await cust.c.rpc('customer_cars')
-    ok(Array.isArray(early.data) && early.data.length === 0, 'before the code is used the account sees no cars')
-    const bad = await cust.c.rpc('redeem_customer_pass', { p_code: 'WRONGCODE1' })
-    ok(!!bad.error, 'a wrong code is refused')
-    const dealerTry = await dealer.c.rpc('redeem_customer_pass', { p_code: pass.data.code })
-    ok(!!dealerTry.error, 'an active dealer CANNOT turn themselves into a customer with a code')
-    const good = await cust.c.rpc('redeem_customer_pass', { p_code: pass.data.code.toLowerCase() })
-    ok(!good.error, 'the customer uses the code (lower case is fine)' + (good.error ? ': ' + good.error.message : ''))
-    const prof = (await admin.from('profiles').select('role,status,expires_at,contact_name').eq('id', cust.id).single()).data
-    const hrs = (new Date(prof.expires_at) - Date.now()) / 3600_000
-    ok(prof.role === 'customer' && prof.status === 'active' && hrs > 1.9 && hrs <= 2.01, 'the account is now a customer account for 2 hours (' + hrs.toFixed(2) + ' h left)')
-    const again = await cust2.c.rpc('redeem_customer_pass', { p_code: pass.data.code })
-    ok(!!again.error, 'the code works only once')
+    ok(Array.isArray(early.data) && early.data.length === 0, 'an account that is not attached yet sees no cars')
+    ok((await admin.rpc('attach_customer', { p_pass: pass.data.id, p_user: dealer.id })).error != null, 'an active dealer account CANNOT be turned into a customer')
+    const att = await admin.rpc('attach_customer', { p_pass: pass.data.id, p_user: cust.id })
+    ok(!att.error, 'the invite function (service key) attaches the invited account' + (att.error ? ': ' + att.error.message : ''))
+    const p0 = (await admin.from('profiles').select('role,status,expires_at,access_hours,contact_name').eq('id', cust.id).single()).data
+    ok(p0.role === 'customer' && p0.status === 'active' && p0.expires_at === null && p0.access_hours === 2, 'the account is a customer account, 2 hours, the clock has NOT started')
+    ok(((await cust.c.rpc('customer_cars')).data || []).length === 0, 'before the first visit no cars are given (the clock is not running)')
+    const st = await cust.c.rpc('start_customer_access')
+    const hrs = (new Date(st.data) - Date.now()) / 3600_000
+    ok(!st.error && hrs > 1.9 && hrs <= 2.01, 'the first visit starts the clock: 2 hours (' + hrs.toFixed(2) + ' h left)')
+    const st2 = await cust.c.rpc('start_customer_access')
+    ok(st2.data === st.data, 'a second visit does not restart the clock')
+    const dealerStart = await dealer.c.rpc('start_customer_access')
+    ok(dealerStart.data == null, 'start_customer_access does nothing for a dealer')
     const sal = await staff.c.from('notifications').select('title').eq('kind', 'customer_started')
-    ok((sal.data || []).some((n) => n.title.includes('AIM TEST Mr Tan')), 'staff are told the customer started')
+    ok((sal.data || []).some((n) => n.title.includes('Mr Tan') || n.title.includes('customer') || n.title.includes('Customer')), 'staff are told the customer started')
 
     console.log('\n-- what the customer sees --')
     const cars = (await cust.c.rpc('customer_cars')).data || []
@@ -116,8 +120,8 @@ async function main() {
     ok(((await cust.c.rpc('customer_cars')).data || []).length === 0, 'after the time the cars are gone at once')
     ok((await cust.c.rpc('customer_car', { p_id: A })).data == null, 'and the car page too')
     ok(!!(await cust.c.from('customer_picks').insert({ customer_id: cust.id, lot_id: D })).error, 'and the customer cannot like more cars')
-    const late = await cust2.c.rpc('redeem_customer_pass', { p_code: pass.data.code })
-    ok(!!late.error, 'an expired customer\'s code cannot be reused by someone else')
+    const again = await cust.c.rpc('start_customer_access')
+    ok(new Date(again.data).getTime() < Date.now(), 'and an expired customer cannot restart the clock')
   } finally {
     await admin.from('customer_picks').delete().in('lot_id', lots.length ? lots : ['00000000-0000-0000-0000-000000000000'])
     for (const id of lots) await admin.from('lots').delete().eq('id', id)

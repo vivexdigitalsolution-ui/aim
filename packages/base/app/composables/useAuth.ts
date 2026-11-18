@@ -66,9 +66,9 @@ export function useAuth() {
     if (error) throw error
   }
 
-  /** Turns a brand-new account into a customer account with the viewing time staff set. */
-  async function redeemPass(code: string) {
-    const { error } = await db.rpc('redeem_customer_pass', { p_code: code })
+  /** A customer's first visit starts their viewing clock (the server does it once). */
+  async function startCustomerAccess() {
+    const { error } = await db.rpc('start_customer_access')
     if (error) throw error
     await loadProfile()
   }
@@ -79,5 +79,5 @@ export function useAuth() {
     profile.value = null
   }
 
-  return { user, profile, ready, isStaff, isAdmin, isCustomer, customerExpired, hasTier, hasHistory, init, loadProfile, signIn, signUp, redeemPass, resetPassword, signOut }
+  return { user, profile, ready, isStaff, isAdmin, isCustomer, customerExpired, hasTier, hasHistory, init, loadProfile, signIn, signUp, startCustomerAccess, resetPassword, signOut }
 }
