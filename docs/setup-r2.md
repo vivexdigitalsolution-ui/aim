@@ -11,7 +11,7 @@ Dashboard → **R2 Object Storage → Create bucket**. Name it `lot-photos` (any
 Leave public access **off**: the photos are served through the Worker in step 4.
 
 ## 3. Delete old photos automatically
-Bucket → **Settings → Object lifecycle rules → Add rule**: delete objects **14 days** (3 days was too short: a car can wait a week for its auction day, and its photos were gone before it closed) after they were created (prefix `l/`).
+Bucket → **Settings → Object lifecycle rules → Add rule**: delete objects **8 days** after they were created (prefix `l/`). The auction house lists cars about once a week, so a car's photos must outlive the days between its scrape and its auction (3 days was too short).
 This is what keeps storage small — a car is only listed for a day or two.
 
 ## 4. Photo address (Worker, no domain)
