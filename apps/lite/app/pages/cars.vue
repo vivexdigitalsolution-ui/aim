@@ -23,7 +23,7 @@
     <div class="grid cars">
       <NuxtLink v-for="c in cars" :key="c.id" :to="`/car/${c.id}`" class="card car">
         <div class="ph"><img v-if="c.photos?.[0] && !broken.has(c.id)" :src="c.photos[0]" loading="lazy" alt="" @error="broken.add(c.id)" /><span v-else>no photo</span>
-          <button class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from favourites' : 'Add to favourites'" @click.prevent.stop="star(c.id)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
+          <button v-if="!isStaff" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from favourites' : 'Add to favourites'" @click.prevent.stop="star(c.id)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
         <div class="body">
           <div class="plabel">Start price</div>
           <div class="price">{{ money(c.start_price_jpy) }}</div>
@@ -43,6 +43,7 @@ const db = useDb()
 const now = useNow()
 const { rate, loadRate, left, cur, loadCur, setCur, money } = useLite()
 const watch = useWatch()
+const { isStaff } = useAuth()
 const broken = reactive(new Set<string>())      // photos that no longer load: show the grey box instead of a broken-image icon
 function clearQ() { q.value = ''; reload() }
 async function star(id: string) { try { await watch.toggle(id) } catch (e: any) { err.value = e.message } }

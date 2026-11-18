@@ -60,7 +60,7 @@
           <div class="strip">
             <NuxtLink v-for="c in soon" :key="c.id" :to="`/car/${c.id}`" class="mini">
               <div class="ph"><img v-if="c.photos?.[0] && !broken.has(c.id)" :src="c.photos[0]" loading="lazy" alt="" @error="broken.add(c.id)" /><span v-else>no photo</span>
-                <button class="star" :class="{ on: watch.has(c.id) }" @click.prevent.stop="star(c.id)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
+                <button v-if="!isStaff" class="star" :class="{ on: watch.has(c.id) }" @click.prevent.stop="star(c.id)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
               <div class="mb">
                 <b class="nm">{{ c.brand }} {{ c.model }}</b>
                 <div class="muted small ln">{{ [c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null].filter(Boolean).join(' · ') }}</div>
@@ -72,7 +72,7 @@
         </div>
 
         <!-- favourites -->
-        <div class="card">
+        <div v-if="!isStaff" class="card">
           <div class="row"><div class="sect">Recently favourited cars</div><NuxtLink to="/watchlist" class="small">View all</NuxtLink></div>
           <div v-if="!favs.length" class="empty">Your favourite cars will be added here. Go to the marketplace and press the heart on a car.<br /><NuxtLink to="/cars" class="btn yellow" style="margin-top: 10px">Browse cars</NuxtLink></div>
           <div class="strip">
@@ -183,10 +183,9 @@ const tasks = computed(() => isStaff.value
       { key: 'won', label: 'Won', n: counts.won, to: '/orders', icon: 'trophy' },
       { key: 'lost', label: 'Not won', n: counts.lost, to: '/orders', icon: 'cross' },
     ])
-const quick = computed(() => [
-  { to: '/cars', label: 'Marketplace', icon: 'cars' }, { to: '/watchlist', label: 'Favourites', icon: 'heart' }, { to: '/orders', label: 'My orders', icon: 'orders' }, { to: '/calculator', label: 'Calculator', icon: 'calc' },
-  ...(isStaff.value ? [{ to: '/bids', label: 'Bid queue', icon: 'queue' }, { to: '/aps', label: 'AP holders', icon: 'users' }, { to: '/offer', label: 'Offer report', icon: 'offer' }, { to: '/targets', label: 'Scrape targets', icon: 'target' }] : []),
-])
+const quick = computed(() => isStaff.value
+  ? [{ to: '/cars', label: 'Marketplace', icon: 'cars' }, { to: '/calculator', label: 'Calculator', icon: 'calc' }, { to: '/bids', label: 'Bid queue', icon: 'queue' }, { to: '/aps', label: 'AP holders', icon: 'users' }, { to: '/offer', label: 'Offer report', icon: 'offer' }, { to: '/targets', label: 'Scrape targets', icon: 'target' }, { to: '/aps?tab=fees', label: 'Settings', icon: 'settings' }]
+  : [{ to: '/cars', label: 'Marketplace', icon: 'cars' }, { to: '/watchlist', label: 'Favourites', icon: 'heart' }, { to: '/orders', label: 'My orders', icon: 'orders' }, { to: '/calculator', label: 'Calculator', icon: 'calc' }])
 
 // cars
 const soon = ref<any[]>([]), favs = ref<any[]>([]), loading = ref(true)

@@ -97,4 +97,25 @@ details summary { cursor: pointer; }
   .page { margin-left: 0; padding: calc(var(--topbar) + 16px) 14px 84px; }
   .page > * { max-width: none; }
 }
+/* the "More" button and the bottom drawer (phones, staff) */
+.morebtn { display: none; }
+.sheet-back { position: fixed; inset: 0; z-index: 60; background: rgba(16, 24, 40, .45); display: flex; align-items: flex-end; }
+.sheet { width: 100%; background: var(--card); border-radius: 18px 18px 0 0; padding: 8px 14px calc(18px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; box-shadow: 0 -8px 30px rgba(16, 24, 40, .2); }
+.grab { width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 14px; }
+.sgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.sgrid a { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; padding: 12px 4px; border-radius: 12px; background: var(--s2); color: var(--tx); font-size: 12.5px; font-weight: 600; line-height: 1.2; }
+.sgrid a.on { background: var(--ylbg); }
+.sgrid a.out { background: #1b1f27; color: #fff; }
+.sic { width: 40px; height: 40px; border-radius: 50%; background: #fff; display: grid; place-items: center; color: var(--ac); } .sic svg { width: 21px; height: 21px; }
+.sgrid a.out .sic { background: rgba(255, 255, 255, .15); color: #fff; }
+.sgrid .badge { position: absolute; top: 6px; right: 10px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 10px; display: grid; place-items: center; }
+.sheet-enter-active, .sheet-leave-active { transition: background .22s; } .sheet-enter-active .sheet, .sheet-leave-active .sheet { transition: transform .25s ease; }
+.sheet-enter-from, .sheet-leave-to { background: rgba(16, 24, 40, 0); } .sheet-enter-from .sheet, .sheet-leave-to .sheet { transform: translateY(100%); }
+@media (max-width: 760px) {
+  .rail a.m-hide { display: none; }
+  .morebtn { display: flex; flex: 1 0 66px; flex-direction: column; align-items: center; gap: 3px; padding: 5px 2px; border: 0; background: none; border-radius: 10px; color: #4a5160; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; position: relative; }
+  .morebtn svg { width: 20px; height: 20px; }
+  .morebtn.on { background: var(--ylbg); color: #1b1f27; }
+}
+@media (min-width: 761px) { .sheet-back { display: none; } }
 @media print { .topbar, .rail { display: none !important; } .page { margin: 0; padding: 0; } }

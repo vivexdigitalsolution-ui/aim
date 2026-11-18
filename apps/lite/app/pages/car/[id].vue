@@ -26,7 +26,7 @@
             <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
           </div>
           <div v-if="car.start_price_jpy > 0" class="muted small">{{ yen(car.start_price_jpy) }} at ¥1 = RM {{ rate }}. The final price is set at the auction.</div>
-          <div class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm fav" :class="{ starred: watching }" @click="star"><RailIcon name="heart" :filled="watching" />{{ watching ? 'In your favourites' : 'Add to favourites' }}</button></div>
+          <div class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button v-if="!isStaff" class="btn ghost sm fav" :class="{ starred: watching }" @click="star"><RailIcon name="heart" :filled="watching" />{{ watching ? 'In your favourites' : 'Add to favourites' }}</button></div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px"><span class="chip" :class="soon ? 'warn' : 'ac'">closes in {{ left(car.bid_deadline, now) }}</span><span class="chip">{{ fmtMyt(car.bid_deadline) }} MYT</span></div>
         </div>
 

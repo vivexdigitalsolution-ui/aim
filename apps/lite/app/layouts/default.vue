@@ -9,14 +9,29 @@
       </div>
     </header>
     <nav class="rail">
-      <a v-for="i in items" :key="i.to" :href="i.to" :class="{ on: isOn(i) }" :title="i.label" @click.prevent="navigateTo(i.to)">
+      <a v-for="i in items" :key="i.to" :href="i.to" :class="{ on: isOn(i), 'm-hide': isStaff && !i.primary }" :title="i.label" @click.prevent="navigateTo(i.to)">
         <RailIcon :name="i.icon" />{{ i.label }}<span v-if="i.badge" class="badge">{{ i.badge }}</span>
       </a>
+      <button v-if="isStaff" class="morebtn" :class="{ on: moreOpen || hiddenActive }" @click="moreOpen = true"><RailIcon name="more" />More<span v-if="hiddenBadge" class="badge">{{ hiddenBadge }}</span></button>
       <span class="spacer" />
       <a href="/account" class="acct" :class="{ on: route.path.startsWith('/account') }" title="My account" @click.prevent="navigateTo('/account')"><RailIcon name="user" />My account</a>
       <button class="logout" @click="logout"><RailIcon name="logout" />Log out</button>
     </nav>
     <main class="page"><slot /></main>
+
+    <!-- phone: everything the bottom bar has no room for -->
+    <Transition name="sheet">
+      <div v-if="moreOpen" class="sheet-back" @click.self="moreOpen = false">
+        <div class="sheet" role="dialog" aria-label="All options">
+          <div class="grab" />
+          <div class="sgrid">
+            <a v-for="i in items" :key="i.to" :href="i.to" :class="{ on: isOn(i) }" @click.prevent="navigateTo(i.to)"><span class="sic"><RailIcon :name="i.icon" /></span>{{ i.label }}<span v-if="i.badge" class="badge">{{ i.badge }}</span></a>
+            <a href="/account" :class="{ on: route.path.startsWith('/account') }" @click.prevent="navigateTo('/account')"><span class="sic"><RailIcon name="user" /></span>My account</a>
+            <a href="#" class="out" @click.prevent="logout"><span class="sic"><RailIcon name="logout" /></span>Log out</a>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -35,20 +50,28 @@ async function loadBadge() {
 }
 watch(() => [isStaff.value, route.path], loadBadge, { immediate: true })
 
-type Item = { to: string; label: string; icon: string; badge?: number | null; match?: (p: string) => boolean }
-const items = computed<Item[]>(() => [
+type Item = { to: string; label: string; icon: string; badge?: number | null; primary?: boolean; match?: (p: string) => boolean }
+// A dealer buys cars: favourites and their own orders. Staff do not bid or keep favourites: they place the dealers' bids (Bid queue) and run the office.
+// On a phone staff get 4 icons + More (a drawer with everything); a dealer's 5 fit the bar as they are.
+const items = computed<Item[]>(() => isStaff.value ? [
+  { to: '/', label: 'Home', icon: 'home', primary: true, match: (p) => p === '/' },
+  { to: '/calculator', label: 'Calculator', icon: 'calc', primary: true },
+  { to: '/bids', label: 'Bid queue', icon: 'queue', primary: true, badge: toPlace.value || null },
+  { to: '/aps', label: 'AP holders', icon: 'users', primary: true, match: (p: string) => p === '/aps' && !route.query.tab },
+  { to: '/cars', label: 'Marketplace', icon: 'cars', match: (p) => p.startsWith('/cars') || p.startsWith('/car/') },
+  { to: '/offer', label: 'Offer report', icon: 'offer' },
+  { to: '/targets', label: 'Scrape targets', icon: 'target' },
+  { to: '/aps?tab=fees', label: 'Settings', icon: 'settings', match: (p: string) => p === '/aps' && !!route.query.tab },
+] : [
   { to: '/', label: 'Home', icon: 'home', match: (p) => p === '/' },
   { to: '/cars', label: 'Marketplace', icon: 'cars', match: (p) => p.startsWith('/cars') || p.startsWith('/car/') },
   { to: '/watchlist', label: 'Favourites', icon: 'heart' },
   { to: '/orders', label: 'My orders', icon: 'orders' },
   { to: '/calculator', label: 'Calculator', icon: 'calc' },
-  ...(isStaff.value ? [
-    { to: '/bids', label: 'Bid queue', icon: 'queue', badge: toPlace.value || null },
-    { to: '/aps', label: 'AP holders', icon: 'users', match: (p: string) => p === '/aps' && !route.query.tab },
-    { to: '/offer', label: 'Offer report', icon: 'offer' },
-    { to: '/targets', label: 'Scrape targets', icon: 'target' },
-    { to: '/aps?tab=fees', label: 'Settings', icon: 'settings', match: (p: string) => p === '/aps' && !!route.query.tab },
-  ] : []),
 ])
+const moreOpen = ref(false)
+watch(() => route.fullPath, () => { moreOpen.value = false })
+const hiddenActive = computed(() => items.value.some((i) => !i.primary && isOn(i)) || route.path.startsWith('/account'))
+const hiddenBadge = computed(() => 0)
 const isOn = (i: Item) => { const p = route.path.replace(/\/$/, '') || '/'; return i.match ? i.match(p) : p === i.to || p.startsWith(i.to + '/') }
 </script>
