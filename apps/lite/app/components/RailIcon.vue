@@ -12,6 +12,7 @@
     <template v-else-if="name === 'user'"><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" /></template>
     <template v-else-if="name === 'logout'"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3" /><path d="M16 8l4 4-4 4M20 12H9" /></template>
     <template v-else-if="name === 'more'"><circle cx="5" cy="12" r="1.600" fill="currentColor" /><circle cx="12" cy="12" r="1.600" fill="currentColor" /><circle cx="19" cy="12" r="1.600" fill="currentColor" /></template>
+    <template v-else-if="name === 'back'"><path d="m14.500 5-7 7 7 7" /></template>
     <template v-else-if="name === 'clock'"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></template>
     <template v-else-if="name === 'gavel'"><path d="m14 4 6 6-3 3-6-6zM11 7 4 14l3 3 7-7M3 21h9" /></template>
     <template v-else-if="name === 'trophy'"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.500 20h7M10 17h4" /></template>

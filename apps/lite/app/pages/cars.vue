@@ -7,7 +7,7 @@
       <div class="sbox"><input v-model="q" placeholder="Search make or model" @keyup.enter="reload" /><button v-if="q" class="clr" type="button" aria-label="Clear the search" title="Clear" @click="clearQ">×</button></div>
       <select v-model="brand" @change="reload"><option value="">All makes</option><option v-for="b in brands" :key="b" :value="b">{{ b }}</option></select>
       <select v-model="yearFrom" @change="reload"><option :value="0">Any year</option><option v-for="y in years" :key="y" :value="y">{{ y }} +</option></select>
-      <NumInput v-model="maxRm" placeholder="Max price RM" style="width: 150px" @keyup.enter="reload" />
+      <NumInput v-model="maxRm" class="maxp" placeholder="Max price RM" @keyup.enter="reload" />
       <select v-model="sort" @change="reload">
         <option value="closing">Closing soonest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option>
         <option value="year_desc">Newest year</option><option value="km_asc">Lowest mileage</option>
@@ -85,6 +85,7 @@ onMounted(async () => {
 
 <style scoped>
 .filters { display: flex; flex-wrap: wrap; gap: 10px; }
+.maxp { width: 150px; }
 .sbox { position: relative; flex: 1; min-width: 180px; display: flex; } .sbox input { width: 100%; padding-right: 36px; }
 .clr { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--s3); color: var(--mu); font-size: 18px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0; } .clr:hover { background: var(--line); color: var(--tx); }
 .cars { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
@@ -103,6 +104,13 @@ onMounted(async () => {
 .plabel { font-size: 11.5px; color: var(--mu); line-height: 1.2; }
 .price { font-size: 19px; font-weight: 800; }
 .name { font-weight: 600; margin: 2px 0; }
-@media (max-width: 760px) { .cars { grid-template-columns: 1fr 1fr; gap: 10px; } .filters input, .filters select { flex: 1 1 140px; } }
+@media (max-width: 760px) {
+  .cars { grid-template-columns: 1fr 1fr; gap: 10px; }
+  /* the filters on a phone: search on its own row, then two equal halves per row */
+  .filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .filters select { padding: 0 8px; text-overflow: ellipsis; }
+  .filters .sbox { grid-column: 1 / -1; min-width: 0; }
+  .filters input, .filters select, .filters .btn { width: 100%; min-width: 0; }
+  .filters .cur { display: flex; width: 100%; } .filters .cur button { flex: 1; }
+}
 @media (max-width: 460px) { .cars { grid-template-columns: 1fr; } }
 </style>

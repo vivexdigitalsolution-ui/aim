@@ -1,6 +1,6 @@
 <template>
   <div>
-    <a href="/cars" class="small" @click.prevent="back">← All cars</a>
+    <a href="/cars" class="backlink" @click.prevent="back"><RailIcon name="back" />All cars</a>
     <div v-if="err" class="err" style="margin-top: 10px">{{ err }}</div>
     <div v-if="loading" class="muted" style="margin-top: 14px">Loading ...</div>
     <div v-else-if="!car" class="card muted" style="margin-top: 14px">This car is no longer available.</div>
@@ -32,7 +32,8 @@
 
         <div v-if="recBid" class="card">
           <h2>Suggested bid</h2>
-          <div class="price">{{ money2(recBid.price_jpy) }}</div>
+          <div class="price">{{ cur === 'JPY' ? yen(recBid.price_jpy) : rm(recBid.price_jpy) }}</div>
+          <div class="muted small" style="margin-bottom: 4px">{{ cur === 'JPY' ? rm(recBid.price_jpy) : yen(recBid.price_jpy) }}</div>
           <div class="muted small">What cars like this usually sell for: the average of {{ recBid.sales }} recent sale{{ recBid.sales === 1 ? '' : 's' }} of the same model and grade ({{ recBid.basis }}), rounded up to the next ¥5,000. A guide, not a promise.</div>
           <button v-if="!isStaff && (!open || open.status === 'pending')" class="btn ghost sm" style="margin-top: 8px" @click="useSuggested">Use it as my bid</button>
         </div>
@@ -196,12 +197,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.two { grid-template-columns: 1.15fr 1fr; align-items: start; }
+.two { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
+.two > *, .two .grid { min-width: 0; }      /* a big photo or a long word must never make the page wider than the screen */
+.hero img, .sheet, .thumbs { max-width: 100%; }
+.card { overflow-wrap: anywhere; }
 .hero { aspect-ratio: 4 / 3; background: #e9edf3; border-radius: 10px; overflow: hidden; display: grid; place-items: center; }
 .hero img { width: 100%; height: 100%; object-fit: contain; background: #0f1115; }
 .thumbs { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
 .thumbs img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; flex: none; }
 .thumbs img.on { border-color: var(--ac); }
+.backlink { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; font-weight: 600; padding: 4px 10px 4px 2px; border-radius: 8px; color: var(--ac); } .backlink:hover { background: var(--acbg); } .backlink svg { width: 22px; height: 22px; }
 .starred { color: #ff5a6e; border-color: #ff5a6e; }
 .fav { gap: 6px; } .fav svg { width: 16px; height: 16px; }
 .cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
@@ -213,5 +218,5 @@ onMounted(async () => {
 .price { font-size: 28px; font-weight: 800; margin-top: 4px; }
 .fld { display: grid; gap: 5px; color: var(--mu); font-size: 13px; margin-top: 10px; } .fld input { width: 100%; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 8px; } .spec td { padding: 6px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); width: 42%; }
-@media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
 </style>
