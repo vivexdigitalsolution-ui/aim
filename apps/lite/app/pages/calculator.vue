@@ -61,10 +61,10 @@
         <div v-if="!result" class="muted">Fill in the car and press Calculate.</div>
         <template v-else>
           <div v-for="w in result.warnings" :key="w" class="warnbox" style="margin-bottom: 8px">{{ w }}</div>
-          <div v-if="result.maxBid != null" class="big">Highest price to pay: <b>¥{{ result.maxBid.toLocaleString('en-US') }}</b><small class="muted"> (RM {{ myr(result.maxBid * rate) }}, in ¥5,000 steps)</small></div>
+          <div v-if="result.maxBid != null" class="big">Highest price to pay: <b>¥{{ result.maxBid.toLocaleString('en-US') }}</b><small class="muted note2">(RM {{ myr(result.maxBid * rate) }}, in ¥5,000 steps)</small></div>
           <table class="spec">
-            <tr><td>Car price</td><td class="r">¥{{ result.bodyJpy.toLocaleString('en-US') }} · RM {{ myr(result.p.bodyMyr) }}</td></tr>
-            <tr><td>Agent fee &amp; shipping</td><td class="r">¥{{ (result.p.agentJpy || 0).toLocaleString('en-US') }} · RM {{ myr(result.p.agentMyr) }}</td></tr>
+            <tr><td>Car price</td><td class="r">RM {{ myr(result.p.bodyMyr) }}<small class="yen">¥{{ result.bodyJpy.toLocaleString('en-US') }}</small></td></tr>
+            <tr><td>Agent fee &amp; shipping</td><td class="r">RM {{ myr(result.p.agentMyr) }}<small class="yen">¥{{ (result.p.agentJpy || 0).toLocaleString('en-US') }}</small></td></tr>
             <tr><td>Customs value (docket ¥{{ (result.duty.docketAmountForeign || 0).toLocaleString('en-US') }}, {{ result.duty.band }})</td><td class="r">RM {{ myr(result.duty.customsValueMyr) }}</td></tr>
             <tr><td>Customs duty (× {{ result.duty.multiplier }})</td><td class="r">RM {{ myr(result.duty.dutyMyr) }}</td></tr>
             <tr><td>Port clearance + inland</td><td class="r">RM {{ myr(port + inland) }}</td></tr>
@@ -154,7 +154,7 @@ async function calculate() {
 .seg button { background: transparent; border: 0; color: inherit; padding: 8px 14px; cursor: pointer; }
 .seg button.on { background: var(--ac); color: #fff; font-weight: 700; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 10px; } .spec td { padding: 7px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); }
-.r { text-align: right; } .sum td { border-top: 2px solid var(--line); color: inherit !important; } .up { color: #3ecf8e; } .down { color: #ff6b6b; }
+.r { text-align: right; white-space: nowrap; padding-left: 10px; } .yen { display: block; font-size: 12px; color: var(--mu); font-weight: 400; } .nw { white-space: nowrap; } .note2 { display: block; margin-top: 2px; font-size: 12.5px; } .sum td { border-top: 2px solid var(--line); color: inherit !important; } .up { color: #3ecf8e; } .down { color: #ff6b6b; }
 .big { font-size: 18px; margin-bottom: 6px; }
 .warnbox { background: rgba(255, 170, 0, .12); border: 1px solid rgba(255, 170, 0, .4); border-radius: 8px; padding: 8px 10px; }
 @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }

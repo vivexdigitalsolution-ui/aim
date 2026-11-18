@@ -22,11 +22,11 @@
           <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
           <div class="row wrap" style="gap: 10px; justify-content: space-between; align-items: center">
-            <div class="price">{{ money(car.start_price_jpy) }}</div>
+            <div><div class="muted small">Start price</div><div class="price" style="margin-top: 0">{{ money(car.start_price_jpy) }}</div></div>
             <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
           </div>
-          <div v-if="car.start_price_jpy > 0" class="muted small">Starting price {{ yen(car.start_price_jpy) }} at ¥1 = RM {{ rate }}</div>
-          <div class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? '★ On your watchlist' : '☆ Watch this car' }}</button></div>
+          <div v-if="car.start_price_jpy > 0" class="muted small">{{ yen(car.start_price_jpy) }} at ¥1 = RM {{ rate }}. The final price is set at the auction.</div>
+          <div class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm fav" :class="{ starred: watching }" @click="star"><RailIcon name="heart" :filled="watching" />{{ watching ? 'In your favourites' : 'Add to favourites' }}</button></div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px"><span class="chip" :class="soon ? 'warn' : 'ac'">closes in {{ left(car.bid_deadline, now) }}</span><span class="chip">{{ fmtMyt(car.bid_deadline) }} MYT</span></div>
         </div>
 
@@ -202,7 +202,8 @@ onMounted(async () => {
 .thumbs { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
 .thumbs img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; flex: none; }
 .thumbs img.on { border-color: var(--ac); }
-.starred { color: var(--ac); border-color: var(--ac); }
+.starred { color: #ff5a6e; border-color: #ff5a6e; }
+.fav { gap: 6px; } .fav svg { width: 16px; height: 16px; }
 .cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; }
 .cur button.on { background: var(--ac); color: #fff; }

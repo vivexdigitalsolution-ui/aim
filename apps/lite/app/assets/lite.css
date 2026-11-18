@@ -19,8 +19,14 @@ h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 0; }
 .topbar { position: fixed; top: 0; left: 0; right: 0; height: var(--topbar); z-index: 30; background: var(--card); border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
 .logo { font-weight: 800; letter-spacing: 1.5px; font-size: 18px; color: var(--tx); text-transform: uppercase; }
 .logo b { color: var(--ac); }
-.who { color: var(--mu); font-size: 13px; display: flex; gap: 12px; align-items: center; }
-.who .name { color: var(--tx); font-weight: 600; }
+.rail .spacer { flex: 1; min-height: 12px; }
+.rail .logout { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px 8px; border: 0; border-radius: 10px; background: #1b1f27; color: #fff; font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; cursor: pointer; flex: none; margin-top: 4px; }
+.rail .logout svg { width: 20px; height: 20px; }
+.rail .logout:hover { background: #2c3340; }
+.mbtns { display: none; gap: 8px; }
+.mbtn { background: none; border: 1px solid var(--line); border-radius: 10px; width: 40px; height: 36px; color: var(--tx); cursor: pointer; align-items: center; justify-content: center; display: inline-flex; padding: 0; }
+.mbtn.on { background: var(--ylbg); border-color: transparent; }
+.mbtn svg { width: 20px; height: 20px; }
 .rail { position: fixed; top: var(--topbar); left: 0; bottom: 0; width: var(--rail); z-index: 20; background: var(--card); border-right: 1px solid var(--line); padding: 10px 6px; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
 .rail a { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 2px 7px; border-radius: 10px; color: #4a5160; font-size: 11px; font-weight: 600; text-align: center; line-height: 1.15; }
 .rail a svg { width: 22px; height: 22px; }
@@ -71,19 +77,21 @@ details summary { cursor: pointer; }
 .loginpage { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; width: 100%; background: var(--card); }
 .loginhero { background: linear-gradient(135deg, #1a56a0 0%, #2a7bd6 60%, #3d8fe6 100%); color: #fff; padding: 56px; display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; }
 .loginhero::after { content: ''; position: absolute; right: -120px; bottom: -120px; width: 380px; height: 380px; border-radius: 50%; background: var(--yl); opacity: .9; }
+.loginhero > * { position: relative; z-index: 1; }
 .loginhero .logo { color: #fff; font-size: 22px; } .loginhero .logo b { color: var(--yl); }
 .loginhero h2 { font-size: 34px; line-height: 1.15; margin: 0 0 12px; max-width: 420px; } .loginhero p { max-width: 400px; opacity: .92; margin: 0; }
 .loginform { display: grid; place-items: center; padding: 28px 20px; }
 .loginform .authbox { max-width: 380px; }
 .loginform h1 { font-size: 24px; }
-@media (max-width: 860px) { .loginpage { grid-template-columns: 1fr; } .loginhero { padding: 28px 22px; min-height: 190px; } .loginhero h2 { font-size: 24px; } .loginhero::after { width: 200px; height: 200px; right: -70px; bottom: -90px; } }
+@media (max-width: 860px) { .loginpage { grid-template-columns: 1fr; } .loginhero { padding: 28px 22px; min-height: 190px; } .loginhero h2 { font-size: 24px; } .loginhero::after { width: 150px; height: 150px; right: -50px; top: -50px; bottom: auto; } }
 
 /* ── phones: the rail becomes a bar at the bottom ── */
 @media (max-width: 760px) {
   .topbar { padding: 0 14px; }
-  .who .name { display: none; }
+  .mbtns { display: flex; }
+  .rail .spacer, .rail .logout, .rail .acct { display: none; }
   .rail { top: auto; bottom: 0; left: 0; right: 0; width: auto; height: 62px; flex-direction: row; border-right: 0; border-top: 1px solid var(--line); padding: 5px 6px calc(5px + env(safe-area-inset-bottom)); overflow-x: auto; overflow-y: hidden; gap: 2px; }
-  .rail a { flex: 0 0 66px; padding: 5px 2px; }
+  .rail a { flex: 1 0 66px; padding: 5px 2px; }
   .rail a svg { width: 20px; height: 20px; }
   .rail .sep { width: 1px; height: auto; margin: 6px 4px; }
   .page { margin-left: 0; padding: calc(var(--topbar) + 16px) 14px 84px; }

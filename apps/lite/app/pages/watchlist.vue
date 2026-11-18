@@ -1,22 +1,22 @@
 <template>
   <div>
-    <h1>Watchlist</h1>
-    <p class="muted" style="margin: 0 0 16px">Cars you starred. We send you an alert when one of them is about to close. Press the star on a car to add or remove it.</p>
+    <h1>Favourites</h1>
+    <p class="muted" style="margin: 0 0 16px">Cars you saved. We send you an alert when one of them is about to close. Press the heart on a car to add or remove it.</p>
     <div v-if="err" class="err" style="margin-bottom: 12px">{{ err }}</div>
     <div v-if="loading" class="muted">Loading ...</div>
-    <div v-else-if="!cars.length" class="card muted">Nothing starred yet. <NuxtLink to="/cars">Browse the cars</NuxtLink> and press the star on the ones you like.</div>
+    <div v-else-if="!cars.length" class="card muted">No favourite yet. <NuxtLink to="/cars">Browse the cars</NuxtLink> and press the heart on the ones you like.</div>
     <div v-else class="grid cars">
       <NuxtLink v-for="c in cars" :key="c.id" :to="`/car/${c.id}`" class="card car">
-        <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /></div>
+        <div class="ph"><img v-if="c.photos?.[0] && !broken.has(c.id)" :src="c.photos[0]" loading="lazy" alt="" @error="broken.add(c.id)" /></div>
         <div style="min-width: 0">
           <b>{{ c.brand }} {{ c.model }}</b>
           <div class="muted small">{{ [c.mfg_year, c.grade, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.venue].filter(Boolean).join(' · ') }}</div>
-          <div class="small" style="margin-top: 4px"><span class="chip ac">closes in {{ left(c.bid_deadline, now) }}</span> <b>{{ money(c.start_price_jpy) }}</b></div>
+          <div class="small" style="margin-top: 4px"><span class="chip ac">closes in {{ left(c.bid_deadline, now) }}</span> <span class="muted">Start price</span> <b>{{ money(c.start_price_jpy) }}</b></div>
         </div>
-        <button class="btn ghost sm" title="Remove from the watchlist" @click.prevent="remove(c.id)">★ Remove</button>
+        <button class="btn ghost sm" title="Remove from favourites" @click.prevent="remove(c.id)"><RailIcon name="heart" filled class="hi" /> Remove</button>
       </NuxtLink>
     </div>
-    <p v-if="gone" class="muted small" style="margin-top: 12px">{{ gone }} starred car{{ gone === 1 ? ' has' : 's have' }} already closed and left the list.</p>
+    <p v-if="gone" class="muted small" style="margin-top: 12px">{{ gone }} favourite car{{ gone === 1 ? ' has' : 's have' }} already closed and left the list.</p>
   </div>
 </template>
 
@@ -25,6 +25,7 @@ const db = useDb()
 const now = useNow()
 const { ids, load, toggle } = useWatch()
 const { loadRate, loadCur, money, left } = useLite()
+const broken = reactive(new Set<string>())
 const cars = ref<any[]>([]), loading = ref(true), err = ref(''), gone = ref(0)
 
 async function show() {
@@ -43,6 +44,7 @@ onMounted(async () => { loadCur(); try { await loadRate().catch(() => {}); await
 </script>
 
 <style scoped>
+.hi { width: 15px; height: 15px; color: #ff5a6e; margin-right: 4px; }
 .cars { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
 .car { display: grid; grid-template-columns: 92px 1fr auto; gap: 12px; align-items: center; text-decoration: none; color: inherit; }
 .ph { border-radius: 8px; background: #e9edf3; aspect-ratio: 4 / 3; overflow: hidden; } .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }

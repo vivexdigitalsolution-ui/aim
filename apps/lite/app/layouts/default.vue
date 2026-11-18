@@ -3,12 +3,18 @@
   <div v-else>
     <header class="topbar">
       <NuxtLink to="/" class="logo">Dealer <b>PublicGo</b></NuxtLink>
-      <div class="who"><NuxtLink to="/account" class="name">{{ profile?.company_name || profile?.contact_name || profile?.email }}</NuxtLink><button class="btn ghost sm" @click="logout">Sign out</button></div>
+      <div class="mbtns">
+        <button class="mbtn" :class="{ on: route.path.startsWith('/account') }" title="My account" aria-label="My account" @click="navigateTo('/account')"><RailIcon name="user" /></button>
+        <button class="mbtn" title="Log out" aria-label="Log out" @click="logout"><RailIcon name="logout" /></button>
+      </div>
     </header>
     <nav class="rail">
       <a v-for="i in items" :key="i.to" :href="i.to" :class="{ on: isOn(i) }" :title="i.label" @click.prevent="navigateTo(i.to)">
         <RailIcon :name="i.icon" />{{ i.label }}<span v-if="i.badge" class="badge">{{ i.badge }}</span>
       </a>
+      <span class="spacer" />
+      <a href="/account" class="acct" :class="{ on: route.path.startsWith('/account') }" title="My account" @click.prevent="navigateTo('/account')"><RailIcon name="user" />My account</a>
+      <button class="logout" @click="logout"><RailIcon name="logout" />Log out</button>
     </nav>
     <main class="page"><slot /></main>
   </div>
@@ -33,7 +39,7 @@ type Item = { to: string; label: string; icon: string; badge?: number | null; ma
 const items = computed<Item[]>(() => [
   { to: '/', label: 'Home', icon: 'home', match: (p) => p === '/' },
   { to: '/cars', label: 'Marketplace', icon: 'cars', match: (p) => p.startsWith('/cars') || p.startsWith('/car/') },
-  { to: '/watchlist', label: 'Favourite', icon: 'heart' },
+  { to: '/watchlist', label: 'Favourites', icon: 'heart' },
   { to: '/orders', label: 'My orders', icon: 'orders' },
   { to: '/calculator', label: 'Calculator', icon: 'calc' },
   ...(isStaff.value ? [
