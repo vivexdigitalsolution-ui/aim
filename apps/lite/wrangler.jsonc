@@ -1,0 +1,6 @@
+{
+  // Dealer PublicGo (the lite app): plain static files served by Cloudflare. Every unknown address opens the app (single-page app).
+  "name": "dealer-publicgo",
+  "compatibility_date": "2026-01-01",
+  "assets": { "directory": ".output/public", "not_found_handling": "single-page-application" }
+}

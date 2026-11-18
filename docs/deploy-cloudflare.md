@@ -55,3 +55,19 @@ In this account the GitHub step is just step 2 again (the same GitHub login, the
 ## After both are live
 Supabase > Authentication > URL Configuration: Site URL = `https://dealer.publicgo.my`; Redirect URLs: `https://dealer.publicgo.my/reset`, `https://aim.carznexus.com/reset`, and the two `*.pages.dev/reset` addresses while testing.
 Every push to `main` on GitHub deploys both sites again by itself.
+
+
+---
+# Update: the Workers way (what your Cloudflare accounts use)
+Your accounts already run sites as **Workers** (not Pages), so deploy these the same way. Each app has a `wrangler.jsonc` (static files + single-page fallback). In Workers & Pages > **Create application** > **Import a repository** (GitHub) > `vivexdigitalsolution-ui/aim`, then:
+
+| Setting | Dealer PublicGo (boss account) | AIM (carznexus account) |
+|---|---|---|
+| Project / Worker name | `dealer-publicgo` | `aim-app` |
+| Production branch | `main` | `main` |
+| Root directory | `/` | `/` |
+| Build command | `pnpm install --frozen-lockfile && pnpm --filter ./apps/lite generate` | `pnpm install --frozen-lockfile && pnpm --filter ./apps/aim generate` |
+| Deploy command | `npx wrangler deploy --config apps/lite/wrangler.jsonc` | `npx wrangler deploy --config apps/aim/wrangler.jsonc` |
+| Build variables | `NUXT_PUBLIC_SUPABASE_URL`, `NUXT_PUBLIC_SUPABASE_KEY`, `NODE_VERSION=24` | same |
+
+The Worker name must match the `name` in its wrangler.jsonc. After the first deploy: the Worker > **Settings > Domains & Routes > Add > Custom domain** (`dealer.publicgo.my`, or `aim.carznexus.com`). Cloudflare creates the DNS record by itself when the domain's zone is in the same account.

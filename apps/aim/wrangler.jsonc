@@ -1,0 +1,6 @@
+{
+  // The full AIM app: plain static files served by Cloudflare. Every unknown address opens the app (single-page app).
+  "name": "aim-app",
+  "compatibility_date": "2026-01-01",
+  "assets": { "directory": ".output/public", "not_found_handling": "single-page-application" }
+}
