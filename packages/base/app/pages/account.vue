@@ -17,6 +17,15 @@
       <div style="margin-top: 12px"><button class="btn" :disabled="busy1" @click="saveDetails">Save details</button></div>
     </div>
 
+    <div class="card" style="margin-bottom: 16px">
+      <h2>Notifications on this device</h2>
+      <p class="muted small">Get a notification on this phone or browser: new bid results, cars closing soon, and cars that fit your saved preferences.</p>
+      <div class="muted small" style="margin: 8px 0">{{ pushText }}</div>
+      <div v-if="pushErr" class="err" style="margin-bottom: 8px">{{ pushErr }}</div>
+      <button v-if="push.state.value === 'off'" class="btn" :disabled="pushBusy" @click="pushOn">Turn on notifications</button>
+      <button v-else-if="push.state.value === 'on'" class="btn ghost" :disabled="pushBusy" @click="pushOff">Turn off on this device</button>
+    </div>
+
     <div class="card">
       <h2>Change password</h2>
       <div class="grid2">
@@ -33,6 +42,12 @@
 <script setup lang="ts">
 const db = useDb()
 const { profile, isStaff, loadProfile } = useAuth()
+const push = useFcm()
+const pushBusy = ref(false), pushErr = ref('')
+const pushText = computed(() => ({ on: 'On for this device.', off: 'Off for this device.', blocked: 'Blocked. Allow notifications for this site in your browser or phone settings, then come back.', needs_install: 'On an iPhone, add this app to the Home Screen first, then turn notifications on.', not_configured: 'Not set up yet. The team still has to add the Google Firebase settings.', unsupported: 'This browser cannot receive notifications.' } as Record<string, string>)[push.state.value])
+onMounted(() => push.refresh())
+async function pushOn() { pushBusy.value = true; pushErr.value = ''; try { await push.enable() } catch (e: any) { pushErr.value = e.message } finally { pushBusy.value = false } }
+async function pushOff() { pushBusy.value = true; try { await push.disable() } catch (e: any) { pushErr.value = e.message } finally { pushBusy.value = false } }
 const f = reactive({ company_name: '', contact_name: '', phone: '', whatsapp: '', address: '' })
 const cur = ref(''), next = ref(''), again = ref('')
 const busy1 = ref(false), msg1 = ref(''), ok1 = ref(false), busy2 = ref(false), msg2 = ref(''), ok2 = ref(false)

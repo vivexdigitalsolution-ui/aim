@@ -16,7 +16,7 @@ async function ensureTargets(models) {
     label: `${m.brand_name} / ${m.model_name} (${t})`, lot_type: t, maker_code: m.maker_code, car_code: m.car_code,
     brand_name: m.brand_name, model_name: m.model_name, year_from: year - 5, year_to: year, enabled: true,
   })))
-  const up = await supabase.from('scrape_targets').upsert(rows, { onConflict: 'lot_type,maker_code,car_code', ignoreDuplicates: true })
+  const up = await supabase.from('scrape_targets').upsert(rows, { onConflict: 'source,lot_type,maker_code,car_code', ignoreDuplicates: true })
   if (up.error) throw new Error('targets: ' + up.error.message)
   for (const m of once) {      // a model asked for here is always scraped, history included
     const en = await supabase.from('scrape_targets').update({ enabled: true }).eq('maker_code', m.maker_code).eq('car_code', m.car_code)

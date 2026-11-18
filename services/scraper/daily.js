@@ -16,7 +16,7 @@
  *   features   node extract-features.js --free   free feature matcher for cars still without features
  *   link       node link-lots.js --write  link every open car to the CarzNexus catalog
  *   snapshot   node market-snapshot.js --write   Malaysian market prices from CarzNexus listings
- *   alerts     node alerts.js --only match,top5,send   dealers: new cars that fit their buy list; staff: a DRAFT personal list per dealer (nothing is sent until staff press Send); email / WhatsApp copies (the 15-minute job alerts.js --only close,watch,send is separate)
+ *   alerts     node alerts.js --only match,prefs,top5,send   dealers: new cars that fit their buy list; staff: a DRAFT personal list per dealer (nothing is sent until staff press Send); email / WhatsApp copies (the 15-minute job alerts.js --only close,watch,send is separate)
  *   housekeeping  housekeeping()          delete old cars / history, suspend inactive dealers (the app's own daily rule)
  *
  * A failed step does not stop the others, except that enrich is skipped when scrape failed. The run is saved in job_runs
@@ -37,12 +37,13 @@ const H = 3600 * 1000
 
 const STEPS = [
   { name: 'scrape', script: ['scrape.js', 'bid'], timeout: 6 * H },
+  { name: 'photos', script: ['refresh-photos.js', '--open'], timeout: 3 * H, needs: 'scrape' },
   { name: 'history', script: ['scrape.js', 'history'], timeout: 3 * H },
-  { name: 'enrich', script: ['enrich.js', '--limit', '300'], timeout: 2 * H, needs: 'scrape' },
+  { name: 'enrich', script: ['enrich.js', '--limit', process.env.ENRICH_LIMIT || '1500'], timeout: 5 * H, needs: 'scrape' },
   { name: 'features', script: ['extract-features.js', '--free'], timeout: H },
   { name: 'link', script: ['link-lots.js', '--write'], timeout: H },
   { name: 'snapshot', script: ['market-snapshot.js', '--write'], timeout: H },
-  { name: 'alerts', script: ['alerts.js', '--only', 'match,top5,send'], timeout: H },
+  { name: 'alerts', script: ['alerts.js', '--only', 'match,prefs,top5,send'], timeout: H },
   { name: 'housekeeping', rpc: 'housekeeping', timeout: H },
 ]
 

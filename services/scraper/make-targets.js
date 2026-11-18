@@ -92,7 +92,7 @@ async function main() {
   for (let i = 0; i < rows.length; i += 500) {
     // ignoreDuplicates: a target that already exists keeps its run history and its enabled flag
     const { data, error } = await supabase.from('scrape_targets')
-      .upsert(rows.slice(i, i + 500), { onConflict: 'lot_type,maker_code,car_code', ignoreDuplicates: true }).select('id')
+      .upsert(rows.slice(i, i + 500), { onConflict: 'source,lot_type,maker_code,car_code', ignoreDuplicates: true }).select('id')
     if (error) { console.log(`Error: ${error.message}`); process.exit(1) }
     added += (data || []).length
   }

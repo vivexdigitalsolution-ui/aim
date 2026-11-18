@@ -7,7 +7,8 @@
  *   node alerts.js --only close    staff: bid orders still NOT placed whose car closes soon (run this every 15 minutes)
  *   node alerts.js --only match    dealers: new cars that fit their buy list (run daily, after the snapshot)
  *   node alerts.js --only watch    dealers: a car on their watchlist closes soon (run with the 15-minute job)
- *   node alerts.js --only top5     staff: a DRAFT personal list per dealer (run daily, after the snapshot; nothing is sent until staff press Send)
+ *   node alerts.js --only prefs   dealers: new cars that fit a saved preference (run daily after the scrape); app, email and phone as each preference says
+ *   node alerts.js --only top5    staff: a DRAFT personal list per dealer (run daily, after the snapshot; nothing is sent until staff press Send)
  *   node alerts.js --only send     email / WhatsApp copies of new alerts (only the channels whose keys are in .env)
  *   node alerts.js --dry           show what would happen, change nothing, send nothing
  *
@@ -19,6 +20,7 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 const supabase = require('./lib/db')
 const notify = require('./lib/notify')
+const fcm = require('./lib/fcm')
 
 const has = (n) => process.argv.includes(n)
 const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : null }
@@ -140,17 +142,62 @@ async function matchBuyLists(core) {
   }
 }
 
-async function send() {
-  const channels = [notify.emailReady() && 'email', notify.whatsappReady() && 'whatsapp'].filter(Boolean)
-  if (!channels.length) { console.log('send: no email or WhatsApp keys in .env, so alerts stay in the app (see docs/alerts-setup.md)'); return }
-  const since = new Date(Date.now() - 24 * 3600_000).toISOString()
-  const { data: rows, error } = await supabase.from('notifications').select('id,title,body,link,emailed_at,whatsapped_at,user:profiles!user_id(email,whatsapp,phone,notify_email,notify_whatsapp,status)').gt('created_at', since).or('emailed_at.is.null,whatsapped_at.is.null').order('created_at').limit(200)
+// dealers: new cars that fit one of their saved preferences (My preferences)
+async function matchPreferences() {
+  const { data: prefs, error } = await supabase.from('saved_preferences').select('*, ap:profiles!user_id(id,status,role)')
   if (error) throw new Error(error.message)
-  let em = 0, wa = 0, fail = 0
+  const active = (prefs || []).filter((p) => p.ap?.status === 'active' && p.ap.role === 'ap_holder' && (p.notify_app || p.notify_email || p.notify_push))
+  console.log(`prefs: ${active.length} saved preference(s) with alerts on`)
+  if (!active.length) return
+  const lots = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error: e } = await supabase.from('lots').select('id,brand,model,grade,mfg_year,start_price_jpy').gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true).range(from, from + 999)
+    if (e) throw new Error(e.message)
+    lots.push(...(data || []))
+    if ((data || []).length < 1000) break
+  }
+  const rate = Number((await supabase.from('currency_rates').select('rate').eq('from_currency', 'JPY').eq('to_currency', 'MYR').order('rate_date', { ascending: false }).limit(1)).data?.[0]?.rate) || 0
+  const rank = (g) => (String(g).toUpperCase() === 'S' ? 7 : Number(g))
+  const today = new Date().toISOString().slice(0, 10)
+  for (const p of active) {
+    const brands = (p.brands || []).map((x) => x.toUpperCase()), models = (p.models || []).map((x) => x.toUpperCase())
+    const fits = lots.filter((l) =>
+      (!brands.length || brands.includes(String(l.brand).toUpperCase())) &&
+      (!models.length || models.some((m) => String(l.model).toUpperCase().includes(m))) &&
+      (!p.year_from || (l.mfg_year && l.mfg_year >= p.year_from)) && (!p.year_to || (l.mfg_year && l.mfg_year <= p.year_to)) &&
+      (!p.max_price_myr || !(l.start_price_jpy > 0) || !rate || l.start_price_jpy * rate <= Number(p.max_price_myr)) &&
+      (p.min_score == null || (Number.isFinite(rank(l.grade)) && rank(l.grade) >= Number(p.min_score))))
+    const seen = new Set(((await supabase.from('preference_seen').select('lot_id').eq('pref_id', p.id)).data || []).map((r) => r.lot_id))
+    const fresh = fits.filter((l) => !seen.has(l.id))
+    if (!fresh.length) continue
+    console.log(`  "${p.name}": ${fresh.length} new car(s) fit`)
+    if (DRY) continue
+    const top = fresh.slice(0, 3).map((c) => `${c.brand} ${c.model} ${c.mfg_year || ''}`.trim()).join('\n')
+    const n = await supabase.from('notifications').insert({ user_id: p.user_id, kind: 'pref', title: `${fresh.length} new car${fresh.length === 1 ? '' : 's'} fit "${p.name}"`, body: top + (fresh.length > 3 ? `\n+ ${fresh.length - 3} more` : ''), link: `/cars?pref=${p.id}`, dedupe: `pref:${p.id}:${today}` })
+    if (n.error && n.error.code !== '23505') throw new Error(n.error.message)
+    const s = await supabase.from('preference_seen').upsert(fresh.map((c) => ({ pref_id: p.id, lot_id: c.id })), { onConflict: 'pref_id,lot_id', ignoreDuplicates: true })
+    if (s.error) throw new Error(s.error.message)
+  }
+}
+
+async function send() {
+  const channels = [notify.emailReady() && 'email', notify.whatsappReady() && 'whatsapp', fcm.ready() && 'push'].filter(Boolean)
+  if (!channels.length) { console.log('send: no email, WhatsApp or Google FCM keys in .env, so alerts stay in the app (see docs/alerts-setup.md)'); return }
+  const since = new Date(Date.now() - 24 * 3600_000).toISOString()
+  const { data: rows, error } = await supabase.from('notifications').select('id,user_id,kind,dedupe,title,body,link,emailed_at,whatsapped_at,pushed_at,user:profiles!user_id(email,whatsapp,phone,notify_email,notify_whatsapp,status)').gt('created_at', since).or('emailed_at.is.null,whatsapped_at.is.null,pushed_at.is.null').order('created_at').limit(200)
+  if (error) throw new Error(error.message)
+  let em = 0, wa = 0, ph = 0, fail = 0
+  const prefs = new Map(((await supabase.from('saved_preferences').select('id,notify_email,notify_push')).data || []).map((p) => [p.id, p]))
   for (const r of rows || []) {
     if (r.user?.status !== 'active') continue
     const patch = {}
-    if (channels.includes('email') && !r.emailed_at && r.user.notify_email && r.user.email) {
+    const pref = r.kind === 'pref' ? prefs.get(String(r.dedupe || '').split(':')[1]) : null     // a saved-preference alert follows that preference's own channel choice
+    const wantEmail = pref ? pref.notify_email : r.user.notify_email
+    const wantPush = pref ? pref.notify_push : true
+    if (channels.includes('push') && !r.pushed_at && wantPush) {
+      if (DRY) ph++; else try { const n = await fcm.sendToUser(r.user_id, { title: r.title, body: r.body, url: r.link }); if (n > 0) ph++; patch.pushed_at = new Date().toISOString() } catch (e) { fail++; console.log('  push failed:', e.message) }
+    }
+    if (channels.includes('email') && !r.emailed_at && wantEmail && r.user.email) {
       if (DRY) em++; else try { await notify.sendEmail({ to: r.user.email, title: r.title, body: r.body, link: r.link, appUrl: process.env.APP_URL }); patch.emailed_at = new Date().toISOString(); em++ } catch (e) { fail++; console.log('  email failed:', e.message) }
     }
     const num = notify.waNumber(r.user.whatsapp || r.user.phone)
@@ -159,7 +206,7 @@ async function send() {
     }
     if (!DRY && Object.keys(patch).length) await supabase.from('notifications').update(patch).eq('id', r.id)
   }
-  console.log(`send: ${DRY ? 'would send' : 'sent'} ${em} email(s), ${wa} WhatsApp message(s)${fail ? ', ' + fail + ' failed' : ''}`)
+  console.log(`send: ${DRY ? 'would send' : 'sent'} ${em} email(s), ${wa} WhatsApp message(s), ${ph} phone notification(s)${fail ? ', ' + fail + ' failed' : ''}`)
   if (fail) process.exitCode = 1
 }
 
@@ -168,6 +215,7 @@ async function main() {
   if (run('close')) await closeSoon()
   if (run('watch')) await watchClosing()
   if (run('match')) await matchBuyLists(core)
+  if (run('prefs')) await matchPreferences()
   if (run('top5')) await draftTop5(core)
   if (run('send')) await send()
 }

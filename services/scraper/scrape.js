@@ -39,6 +39,8 @@ const { isOthersGrade, cleanVenue, findExistingLot, updateLiveLot, upsertLot, re
 
 /** Year and score limits come from .env (YEAR_FROM, YEAR_TO, SCORE_MIN), not from the target row. */
 function withCriteria(target) {
+  // a target with its own exact scores (set on the Scrape targets page) keeps its own years and scores
+  if (Array.isArray(target.scores) && target.scores.length) return { ...target, year_from: target.year_from ?? config.yearFrom, year_to: target.year_to ?? config.yearTo }
   return { ...target, year_from: config.yearFrom ?? target.year_from, year_to: config.yearTo ?? target.year_to, score_min: config.scoreMin ?? target.score_min }
 }
 
@@ -184,6 +186,12 @@ async function processBidTarget(page, target, counters) {
 
       if (row.final_price) { console.log(`${logPrefix} already sold — skip`); continue }       // nothing left to bid on
       if (isOthersGrade(row.grade)) { console.log(`${logPrefix} grade is OTHERS — skip (never scraped)`); continue }
+      // model codes chosen on the Scrape targets page: keep only cars of those chassis codes (empty list = every code)
+      if (Array.isArray(target.model_codes) && target.model_codes.length) {
+        const core = (c) => String(c || '').toUpperCase().replace(/^[0-9A-Z]{2,4}-/, '').replace(/[^A-Z0-9]/g, '')
+        const mine = core(row.model_code)
+        if (!target.model_codes.some((c) => core(c) === mine || (mine && core(c).endsWith(mine)) || (mine && mine.endsWith(core(c))))) { console.log(`${logPrefix} model code ${row.model_code || '?'} is not on the target list — skip`); continue }
+      }
       // safety net for the day mode: a venue on the skip list is never saved, even if the page still listed it
       if (WEEKDAY && SKIP_VENUE_NAMES.has(norm(cleanVenue(row.venue)))) { console.log(`${logPrefix} venue ${cleanVenue(row.venue)} is skipped`); continue }
       if (!row.auction_date) { console.log(`${logPrefix} no auction date — skip`); counters.records_failed++; continue }

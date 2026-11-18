@@ -208,7 +208,7 @@ async function applyFilter(page, target, mode) {
   for (const [label, value] of Object.entries(scoreValues)) {
     const cb = page.locator(`input[name="ScoreOption"][value="${value}"]`)
     if (await cb.count() === 0) continue
-    const wanted = minScore == null || rank(label) >= minScore
+    const wanted = Array.isArray(target.scores) && target.scores.length ? target.scores.map(String).includes(label) : minScore == null || rank(label) >= minScore
     const isDisabled = await cb.isDisabled().catch(() => true)
     if (isDisabled) {
       console.log(`[FILTER] Score ${label} disabled (0 available) — skip`)
@@ -322,7 +322,7 @@ async function applyHistoryFilter(page, target) {
   }
 
   const min = target.score_min == null ? null : Number(target.score_min)
-  const wanted = HISTORY_SCORES.filter(s => min == null || s.rank >= min)
+  const wanted = HISTORY_SCORES.filter(s => (Array.isArray(target.scores) && target.scores.length) ? target.scores.map(String).includes(s.label) : (min == null || s.rank >= min))
   const wantedValues = new Set(wanted.map(s => s.value))
   let checkedCount = 0
 

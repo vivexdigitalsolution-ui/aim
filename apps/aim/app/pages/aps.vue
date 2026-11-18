@@ -14,6 +14,7 @@
         <span v-for="s in statuses" :key="s.key" class="chip tag" :class="{ on: filter === s.key }" @click="filter = s.key">{{ s.label }} <small>{{ countOf(s.key) }}</small></span>
         <span class="grow" />
         <input v-model="search" placeholder="Search company, name, phone, email" style="width: 280px; max-width: 100%" />
+        <button class="btn" @click="openAdd">+ Add user</button>
       </div>
       <div class="card" style="overflow-x: auto; padding: 4px 14px">
         <table class="t">
@@ -104,12 +105,48 @@
         <div><button v-if="isAdmin" class="btn" :disabled="busy" @click="saveSettings">Save settings</button><span v-else class="chip warn">Read only: only an admin can change settings</span></div>
       </div>
       <div class="card col" style="margin-top: 14px">
+        <h2>Import calculator: who may use it</h2>
+        <p class="small muted" style="margin: 0">Staff always can. Walk-in customers never can. Choose how often each plan may calculate.</p>
+        <div v-for="l in calcLimits" :key="l.tier" class="row wrap" style="gap: 10px; justify-content: flex-start">
+          <b style="width: 90px; text-transform: capitalize">{{ l.tier }}</b>
+          <select v-model="l.period" :disabled="!isAdmin"><option value="once">in total (once)</option><option value="day">per day</option><option value="month">per month</option><option value="unlimited">unlimited</option></select>
+          <label v-if="l.period !== 'unlimited'" class="small">up to <input v-model.number="l.uses" type="number" min="0" style="width: 70px" :disabled="!isAdmin" /> calculation(s)</label>
+        </div>
+        <div v-if="isAdmin"><button class="btn" :disabled="busy" @click="saveCalcLimits">Save calculator limits</button></div>
+      </div>
+      <div class="card col" style="margin-top: 14px">
         <h2>Housekeeping</h2>
         <p class="small muted" style="margin: 0">Runs every day on its own: deletes cars from past auction days that nobody ordered, deletes old history, and suspends dealers with no order for the number of days above. You can run it now.</p>
         <div v-if="hk" class="okmsg">{{ hk.lots_deleted }} old cars deleted · {{ hk.history_deleted }} old history rows deleted · {{ hk.ap_suspended }} dealer(s) suspended</div>
         <div><button class="btn ghost" :disabled="busy" @click="runHousekeeping">Run housekeeping now</button></div>
       </div>
     </template>
+
+    <!-- ── ADD A USER ── -->
+    <div v-if="nu" class="overlay" @click.self="nu = null">
+      <div class="dialog">
+        <div class="row"><h2>Add a user</h2><button class="btn ghost sm" @click="nu = null">Close</button></div>
+        <p class="small muted" style="margin: 4px 0 10px">We email them an invitation. They choose their own password and the account is active straight away.</p>
+        <div class="grid2">
+          <label class="f">Email *<input v-model="nu.email" type="email" autocomplete="off" /></label>
+          <label class="f">Role
+            <select v-model="nu.role"><option value="ap_holder">AP holder</option><option v-if="isAdmin" value="staff">Staff</option><option v-if="isAdmin" value="admin">Admin</option></select>
+          </label>
+          <label class="f">Company<input v-model="nu.company_name" /></label>
+          <label class="f">Contact name<input v-model="nu.contact_name" /></label>
+          <label class="f">Phone<input v-model="nu.phone" /></label>
+          <label class="f">WhatsApp<input v-model="nu.whatsapp" /></label>
+          <template v-if="nu.role === 'ap_holder'">
+            <label class="f">Plan<select v-model="nu.tier"><option value="free">Free</option><option value="member">Member</option><option value="partner">Partner</option></select></label>
+            <label class="f">Bid limit per car (¥, 0 = cannot bid yet)<input v-model.number="nu.bid_limit_jpy" type="number" step="100000" min="0" /></label>
+            <label class="f" style="grid-column: 1 / -1">Agent fee rule<select v-model="nu.fee_rule_id"><option value="">None yet</option><option v-for="r in rules" :key="r.id" :value="r.id">{{ r.name }}</option></select></label>
+          </template>
+        </div>
+        <div v-if="nuErr" class="err" style="margin-top: 10px">{{ nuErr }}</div>
+        <div v-if="nuOk" class="okmsg" style="margin-top: 10px">{{ nuOk }}</div>
+        <div style="margin-top: 12px"><button class="btn" :disabled="busy || !nu.email" @click="addUser">Send invitation</button></div>
+      </div>
+    </div>
 
     <!-- ── ONE AP HOLDER ── -->
     <div v-if="sel" class="overlay" @click.self="sel = null">
@@ -204,6 +241,27 @@ const tabs = [{ key: 'aps', label: 'AP holders' }, { key: 'fees', label: 'Agent 
 const levels = ref<any[]>([]), rebates = ref<any[]>([]), lvForm = ref<any>(null), lvErr = ref(''), rb = reactive({ min_units: null as number | null, rebate_pct: null as number | null })
 const aps = ref<any[]>([]), rules = ref<any[]>([]), bids = ref<any[]>([]), settings = ref<any>(null), hk = ref<any>(null)
 const filter = ref('all'), search = ref('')
+const calcLimits = ref<any[]>([])
+async function saveCalcLimits() {
+  busy.value = true; err.value = ''; msg.value = ''
+  try {
+    for (const l of calcLimits.value) { const { error } = await db.from('calculator_limits').update({ period: l.period, uses: l.period === 'unlimited' ? 0 : Math.max(0, Number(l.uses) || 0) }).eq('tier', l.tier); if (error) throw error }
+    msg.value = 'Calculator limits saved.'
+  } catch (e: any) { err.value = e.message } finally { busy.value = false }
+}
+onMounted(async () => { const { data } = await db.from('calculator_limits').select('*'); calcLimits.value = ['free', 'member', 'partner'].map((t) => (data || []).find((x: any) => x.tier === t)).filter(Boolean) })
+const nu = ref<any>(null), nuErr = ref(''), nuOk = ref('')
+function openAdd() { nu.value = { email: '', role: 'ap_holder', company_name: '', contact_name: '', phone: '', whatsapp: '', tier: 'free', bid_limit_jpy: 0, fee_rule_id: '' }; nuErr.value = ''; nuOk.value = '' }
+async function addUser() {
+  busy.value = true; nuErr.value = ''; nuOk.value = ''
+  try {
+    const { data, error } = await db.functions.invoke('create-user', { body: { ...nu.value, redirect_to: location.origin + '/reset' } })
+    if (error) { let m = error.message; try { const b = await (error as any).context?.json?.(); if (b?.error) m = b.error } catch { /* keep */ } throw new Error(m) }
+    if (data?.error) throw new Error(data.error)
+    nuOk.value = `Invitation sent to ${data.email}.`
+    await load()
+  } catch (e: any) { nuErr.value = e.message } finally { busy.value = false }
+}
 const sel = ref<any>(null), edit = reactive<any>({}), contacts = ref<any[]>([]), nc = reactive({ name: '', position: '', phone: '' })
 const form = ref<any>(null), formErr = ref('')
 const statuses = [{ key: 'all', label: 'All' }, { key: 'pending', label: 'Waiting approval' }, { key: 'active', label: 'Active' }, { key: 'suspended', label: 'Suspended' }]

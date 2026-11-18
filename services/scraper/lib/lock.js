@@ -30,7 +30,7 @@ async function claimTarget(lotType, minDays = null, skipIds = null) {
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('scrape_targets').select('*')
-      .eq('enabled', true).eq('lot_type', lotType)
+      .eq('enabled', true).eq('lot_type', lotType).eq('source', 'uss')
       .order('priority', { ascending: true }).order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1)
     if (error) { console.log(`[LOCK] fetch error: ${error.message}`); return null }

@@ -153,13 +153,23 @@ async function main() {
     const file = path.join(OUT, 'asnet-codes.json')
     if (!fs.existsSync(file)) throw new Error('Run  node asnet.js --probe  first')
     for (const m of JSON.parse(fs.readFileSync(file, 'utf8')).makers) for (const c of m.cars) targets.push({ label: `${m.maker} ${c.name}`, maker_code: m.maker_code, car_code: c.code })
+  } else if (has('--from-db')) {
+    // the targets set on the staff page "Scrape targets" (source = asnet)
+    const supabase = require('./lib/db')
+    const { data, error } = await supabase.from('scrape_targets').select('*').eq('source', 'asnet').eq('lot_type', 'bid').eq('enabled', true).order('priority')
+    if (error) throw new Error('targets: ' + error.message)
+    for (const r of data || []) {
+      const nums = (r.scores || []).map(Number).filter((n) => Number.isFinite(n))          // the ASNET form has one minimum score, so the lowest wanted score is used
+      targets.push({ label: r.label, maker_code: r.maker_code, car_code: r.car_code, year_from: r.year_from, score_min: nums.length ? Math.min(...nums) : r.score_min })
+    }
+    console.log(`${targets.length} ASNET target(s) from the database`)
   } else if (arg('--maker')) {
     targets = [{ label: `maker ${arg('--maker')}${arg('--car') ? ' model ' + arg('--car') : ''}`, maker_code: arg('--maker'), car_code: arg('--car') || null, form_code: arg('--form') || null }]
   } else throw new Error('Say what to read: --probe, --maker <code> [--car <code>], or --from-codes')
   for (const t of targets) {
     t.lot_type_filter = 'bid'
-    t.year_from = arg('--year-from') ? Number(arg('--year-from')) : null
-    t.score_min = arg('--score-min') ? Number(arg('--score-min')) : null
+    t.year_from = arg('--year-from') ? Number(arg('--year-from')) : (t.year_from ?? null)
+    t.score_min = arg('--score-min') ? Number(arg('--score-min')) : (t.score_min ?? null)
   }
   console.log(WRITE ? 'WRITE mode: cars and photos will be saved' : 'DRY RUN: nothing is saved (add --write to save)')
   const { browser, page } = await open()
