@@ -1,5 +1,6 @@
 export interface Profile {
-  id: string; role: 'admin' | 'staff' | 'ap_holder'; status: 'pending' | 'active' | 'suspended'
+  id: string; role: 'admin' | 'staff' | 'ap_holder' | 'customer'; status: 'pending' | 'active' | 'suspended'
+  expires_at?: string | null
   company_name: string | null; contact_name: string | null; phone: string | null; whatsapp: string | null
   email: string | null; address: string | null
   bid_limit_jpy: number; open_limit_jpy: number | null; fee_rule_id: string | null; history_until: string | null
@@ -17,6 +18,9 @@ export function useAuth() {
   const RANK: Record<string, number> = { free: 0, member: 1, partner: 2 }
   /** Staff pass every tier; an AP holder needs a tier at least `min` (a missing tier counts as member: the default). */
   const hasTier = (min: 'free' | 'member' | 'partner') => isStaff.value || (RANK[profile.value?.tier || 'member'] ?? 1) >= RANK[min]!
+  const isCustomer = computed(() => profile.value?.role === 'customer')
+  /** A walk-in customer whose viewing time is over (the server has already stopped giving them data). */
+  const customerExpired = () => profile.value?.role === 'customer' && (!profile.value.expires_at || new Date(profile.value.expires_at).getTime() <= Date.now())
   const hasHistory = computed(() => !!profile.value?.history_until && profile.value.history_until >= new Date().toISOString().slice(0, 10))
 
   async function loadProfile() {
@@ -62,11 +66,18 @@ export function useAuth() {
     if (error) throw error
   }
 
+  /** Turns a brand-new account into a customer account with the viewing time staff set. */
+  async function redeemPass(code: string) {
+    const { error } = await db.rpc('redeem_customer_pass', { p_code: code })
+    if (error) throw error
+    await loadProfile()
+  }
+
   async function signOut() {
     await db.auth.signOut()
     user.value = null
     profile.value = null
   }
 
-  return { user, profile, ready, isStaff, isAdmin, hasTier, hasHistory, init, loadProfile, signIn, signUp, resetPassword, signOut }
+  return { user, profile, ready, isStaff, isAdmin, isCustomer, customerExpired, hasTier, hasHistory, init, loadProfile, signIn, signUp, redeemPass, resetPassword, signOut }
 }

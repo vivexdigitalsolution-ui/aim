@@ -5,6 +5,7 @@
     <label>Password<input v-model="password" type="password" autocomplete="current-password" @keyup.enter="submit" /></label>
     <div v-if="error" class="err">{{ error }}</div>
     <div v-if="info" class="okmsg">{{ info }}</div>
+    <div v-if="route.query.ended" class="okmsg">Your viewing time has ended. Thank you for visiting: ask us in the shop if you want to look again.</div>
     <button class="btn" :disabled="busy" @click="submit">Sign in</button>
     <a href="#" class="muted small" @click.prevent="forgot">Forgot your password?</a>
     <p class="muted small">New AP holder? Ask us to activate your account.</p>
@@ -12,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-const { signIn, hasTier, resetPassword } = useAuth()
+const { signIn, hasTier, resetPassword, profile, redeemPass } = useAuth()
 const route = useRoute()
 const email = ref(''), password = ref(''), busy = ref(false), error = ref(''), info = ref('')
 async function forgot() {
@@ -24,7 +25,17 @@ async function submit() {
   error.value = ''
   if (!email.value || !password.value) { error.value = 'Enter your email and password'; return }
   busy.value = true
-  try { await signIn(email.value.trim(), password.value); const next = String(route.query.next || ''); await navigateTo(next.startsWith('/') && !next.startsWith('//') ? next : hasTier('member') ? '/today' : '/cars') }
+  try {
+    await signIn(email.value.trim(), password.value)
+    // a walk-in customer who had to confirm their email first: finish with the code they typed on the join page
+    let code = ''
+    try { code = localStorage.getItem('aim-pass') || '' } catch { /* private window */ }
+    if (code && profile.value?.role === 'ap_holder' && profile.value.status === 'pending') {
+      try { await redeemPass(code); localStorage.removeItem('aim-pass') } catch (e: any) { error.value = e.message; return }
+    }
+    if (profile.value?.role === 'customer') { await navigateTo('/for-you'); return }
+    const next = String(route.query.next || ''); await navigateTo(next.startsWith('/') && !next.startsWith('//') ? next : hasTier('member') ? '/today' : '/cars')
+  }
   catch (e: any) { error.value = e.message || 'Something went wrong' } finally { busy.value = false }
 }
 </script>
