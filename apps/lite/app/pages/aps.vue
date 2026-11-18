@@ -398,7 +398,7 @@ onMounted(load)
 </script>
 
 <style scoped>
-.t { width: 100%; border-collapse: collapse; } .t th { text-align: left; color: var(--mu); font-weight: 500; font-size: 12px; padding: 10px 6px; }
+.t { width: 100%; border-collapse: collapse; } .t th { text-align: left; color: var(--mu); font-weight: 500; font-size: 12px; padding: 10px 6px; vertical-align: bottom; } .t th.r { text-align: right; }
 .t td { padding: 10px 6px; border-top: 1px solid var(--line); vertical-align: top; } .r { text-align: right; } .nowrap { white-space: nowrap; }
 .t tr.click { cursor: pointer; } .t tr.click:hover td { background: var(--s2); }
 .col { display: grid; gap: 12px; }
