@@ -4,7 +4,7 @@
     <header class="top">
       <div class="in">
         <div class="logo">Dealer <b>PublicGo</b></div>
-        <nav class="tabs"><NuxtLink to="/" exact-active-class="router-link-active" :class="{ 'router-link-active': route.path === '/' || route.path.startsWith('/car') }">Cars</NuxtLink><NuxtLink to="/orders">My bid orders</NuxtLink></nav>
+        <nav class="tabs"><NuxtLink to="/" exact-active-class="router-link-active" :class="{ 'router-link-active': route.path === '/' || route.path.startsWith('/car') }">Cars</NuxtLink><NuxtLink to="/watchlist">Watchlist</NuxtLink><NuxtLink to="/orders">My bid orders</NuxtLink></nav>
         <div class="who"><NuxtLink to="/account" class="name">{{ profile?.company_name || profile?.contact_name || profile?.email }}</NuxtLink><button class="btn ghost sm" @click="logout">Sign out</button></div>
       </div>
     </header>

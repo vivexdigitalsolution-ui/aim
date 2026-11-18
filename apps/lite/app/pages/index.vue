@@ -13,16 +13,19 @@
         <option value="year_desc">Newest year</option><option value="km_asc">Lowest mileage</option>
       </select>
       <button class="btn" @click="reload">Search</button>
+      <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
     </div>
+    <div v-if="rate" class="muted small" style="margin: 8px 2px 0">Rate used: ¥1 = RM {{ rate }}</div>
 
     <div v-if="err" class="err" style="margin-top: 12px">{{ err }}</div>
     <div class="muted small" style="margin: 12px 2px">{{ loading ? 'Loading ...' : total + ' car' + (total === 1 ? '' : 's') }}</div>
 
     <div class="grid cars">
       <NuxtLink v-for="c in cars" :key="c.id" :to="`/car/${c.id}`" class="card car">
-        <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span></div>
+        <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span>
+          <button class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id)">{{ watch.has(c.id) ? '★' : '☆' }}</button></div>
         <div class="body">
-          <div class="price">{{ rm(c.start_price_jpy) }}</div>
+          <div class="price">{{ money(c.start_price_jpy) }}</div>
           <div class="name">{{ c.brand }} {{ c.model }}</div>
           <div class="muted small">{{ [c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
           <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="soon(c.bid_deadline) ? 'warn' : 'ac'">closes in {{ left(c.bid_deadline, now) }}</span></div>
@@ -37,8 +40,11 @@
 <script setup lang="ts">
 const db = useDb()
 const now = useNow()
-const { rate, loadRate, rm, left } = useLite()
+const { rate, loadRate, left, cur, loadCur, setCur, money } = useLite()
+const watch = useWatch()
+async function star(id: string) { try { await watch.toggle(id) } catch (e: any) { err.value = e.message } }
 const q = ref(''), brand = ref(''), yearFrom = ref(0), maxRm = ref<number | null>(null), sort = ref('closing')
+const url = useUrlFilters('lite-cars', { q, brand, yearFrom, maxRm, sort }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
@@ -59,10 +65,11 @@ async function fetchPage(from: number) {
   total.value = count || 0
   return data || []
 }
-async function reload() { loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
+async function reload() { url.save(); loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
 async function more() { loading.value = true; try { cars.value = [...cars.value, ...(await fetchPage(cars.value.length))] } catch (e: any) { err.value = e.message } finally { loading.value = false } }
 
 onMounted(async () => {
+  loadCur(); url.restore(); watch.load().catch(() => {})
   try {
     await loadRate()
     const { data } = await db.from('lots').select('brand').gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true).limit(3000)
@@ -78,7 +85,13 @@ onMounted(async () => {
 .car { padding: 0; overflow: hidden; color: inherit; transition: box-shadow .2s, transform .2s; display: flex; flex-direction: column; }
 .car:hover { box-shadow: 0 8px 24px rgba(20, 30, 60, .1); transform: translateY(-2px); }
 .ph { aspect-ratio: 4 / 3; background: #e9edf3; display: grid; place-items: center; color: var(--mu2); font-size: 12px; overflow: hidden; }
+.ph { position: relative; }
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.star { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .55); color: #fff; font-size: 19px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.star.on { color: #ffc83d; }
+.cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; }
+.cur button.on { background: var(--ac); color: #fff; }
 .body { padding: 12px 14px 14px; }
 .price { font-size: 19px; font-weight: 800; }
 .name { font-weight: 600; margin: 2px 0; }

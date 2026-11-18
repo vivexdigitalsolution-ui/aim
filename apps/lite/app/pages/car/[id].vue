@@ -1,6 +1,6 @@
 <template>
   <div>
-    <NuxtLink to="/" class="small">← All cars</NuxtLink>
+    <a href="/" class="small" @click.prevent="back">← All cars</a>
     <div v-if="err" class="err" style="margin-top: 10px">{{ err }}</div>
     <div v-if="loading" class="muted" style="margin-top: 14px">Loading ...</div>
     <div v-else-if="!car" class="card muted" style="margin-top: 14px">This car is no longer available.</div>
@@ -21,9 +21,43 @@
         <div class="card">
           <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
-          <div class="price">{{ rm(car.start_price_jpy) }}</div>
-          <div class="muted small">Starting price {{ yen(car.start_price_jpy) }} at ¥1 = RM {{ rate }}</div>
+          <div class="row wrap" style="gap: 10px; justify-content: space-between; align-items: center">
+            <div class="price">{{ money(car.start_price_jpy) }}</div>
+            <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
+          </div>
+          <div v-if="car.start_price_jpy > 0" class="muted small">Starting price {{ yen(car.start_price_jpy) }} at ¥1 = RM {{ rate }}</div>
+          <div class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? '★ On your watchlist' : '☆ Watch this car' }}</button></div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px"><span class="chip" :class="soon ? 'warn' : 'ac'">closes in {{ left(car.bid_deadline, now) }}</span><span class="chip">{{ fmtMyt(car.bid_deadline) }} MYT</span></div>
+        </div>
+
+        <div v-if="recBid" class="card">
+          <h2>Suggested bid</h2>
+          <div class="price">{{ money2(recBid.price_jpy) }}</div>
+          <div class="muted small">What cars like this usually sell for: the average of {{ recBid.sales }} recent sale{{ recBid.sales === 1 ? '' : 's' }} of the same model and grade ({{ recBid.basis }}), rounded up to the next ¥5,000. A guide, not a promise.</div>
+          <button v-if="!open || open.status === 'pending'" class="btn ghost sm" style="margin-top: 8px" @click="useSuggested">Use it as my bid</button>
+        </div>
+
+        <div v-if="costDone" class="card">
+          <h2>Import price breakdown</h2>
+          <div v-if="!bd" class="muted small" style="margin-top: 6px">The import cost of this car is not worked out yet. Our team is checking its customs docket.</div>
+          <template v-else>
+            <label class="fld">Car price (RM)<input v-model.number="bodyRm" type="number" min="0" step="1000" /></label>
+            <div class="muted small">{{ priceBasis }}</div>
+            <table v-if="pricing.importMyr != null" class="spec">
+              <tr><td>Car price</td><td class="r">{{ rmf(pricing.bodyMyr) }}</td></tr>
+              <tr><td>Agent fee &amp; shipping</td><td class="r">{{ rmf(pricing.agentMyr) }}</td></tr>
+              <tr><td>Customs duty</td><td class="r">{{ rmf(Number(bd.duty_myr)) }}</td></tr>
+              <tr><td>Port clearance + inland</td><td class="r">{{ rmf(Number(bd.port_myr) + Number(bd.inland_myr)) }}</td></tr>
+              <tr><td>AP fee</td><td class="r">{{ rmf(Number(bd.ap_fee_myr)) }}</td></tr>
+              <tr class="sum"><td><b>Import price</b></td><td class="r"><b>{{ rmf(pricing.importMyr) }}</b></td></tr>
+            </table>
+            <div v-if="docket" class="dk">
+              <div class="muted small">Docket used (Customs price guide)</div>
+              <div><b>{{ docket.model }}</b> <span class="muted small">{{ docket.cc ? docket.cc + ' cc' : '' }} · edition {{ docket.year }}</span></div>
+              <div v-if="dline?.jpy != null" class="muted small">Customs value ¥{{ dline.jpy.toLocaleString('en-US') }} for this age of car</div>
+            </div>
+            <p class="muted small" style="margin-top: 8px">An estimate at ¥1 = RM {{ rate }}. It does not include your own prep or margin.</p>
+          </template>
         </div>
 
         <div class="card">
@@ -65,12 +99,37 @@
 </template>
 
 <script setup lang="ts">
-import { fmtMyt } from '@aim/core'
+import { fmtMyt, offerPricing, docketLine, type Docket } from '@aim/core'
 
 const db = useDb()
 const route = useRoute()
 const now = useNow()
-const { rate, loadRate, rm, yen, rmToBidJpy, left } = useLite()
+const router = useRouter()
+const { rate, loadRate, rm, yen, rmToBidJpy, left, cur, loadCur, setCur, money } = useLite()
+/** Back to the list as it was (filters and all); a car opened from a link goes to the plain list. */
+function back() { if (import.meta.client && (window.history.state as any)?.back) router.back(); else navigateTo('/') }
+const watch = useWatch()
+const watching = computed(() => !!car.value && watch.has(car.value.id))
+async function star() { try { await watch.toggle(car.value.id) } catch (e: any) { err.value = e.message } }
+// suggested bid and import price breakdown
+const recBid = ref<{ price_jpy: number; sales: number; basis: string } | null>(null), bd = ref<any>(null), costDone = ref(false)
+const bodyRm = ref(0), priceBasis = ref('')
+const money2 = (jpy: number) => (cur.value === 'JPY' ? yen(jpy) : rm(jpy) + ' · ' + yen(jpy))
+const rmf = (n: number | null | undefined) => (n == null ? '–' : 'RM ' + Math.round(n).toLocaleString('en-US'))
+const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
+const docket = computed<Docket | null>(() => (bd.value?.docket ? { ...bd.value.docket, amt_12m_24m: num(bd.value.docket.amt_12m_24m), amt_24m_36m: num(bd.value.docket.amt_24m_36m), amt_36m_48m: num(bd.value.docket.amt_36m_48m), amt_48m_60m: num(bd.value.docket.amt_48m_60m), amt_60m_plus: num(bd.value.docket.amt_60m_plus) } : null))
+const dline = computed(() => (docket.value && car.value ? docketLine(docket.value, car.value.mfg_year, car.value.mfg_month || car.value.first_reg_month) : null))
+const pricing = computed(() => offerPricing({ historyJpy: rate.value > 0 && bodyRm.value > 0 ? Math.round(bodyRm.value / rate.value) : null, rate: rate.value, dutyMyr: bd.value ? Number(bd.value.duty_myr) : null, portMyr: Number(bd.value?.port_myr || 0), inlandMyr: Number(bd.value?.inland_myr || 0), apFeeMyr: Number(bd.value?.ap_fee_myr || 0) }))
+function useSuggested() { if (recBid.value) bidRm.value = Math.round((recBid.value.price_jpy * rate.value) / 1000) * 1000 }
+async function loadCost(lot: any) {
+  const [r, b] = await Promise.all([db.rpc('recommended_bid', { p_lot_id: lot.id }), db.rpc('ap_lot_breakdown', { p_lot_id: lot.id })])
+  if (!r.error && r.data) recBid.value = r.data
+  if (!b.error && b.data) bd.value = b.data
+  costDone.value = true
+  const base = recBid.value?.price_jpy || (lot.start_price_jpy > 0 ? lot.start_price_jpy : 0)
+  bodyRm.value = base ? Math.round((base * rate.value) / 1000) * 1000 : 0
+  priceBasis.value = recBid.value ? '(the suggested bid; change it to try another price)' : lot.start_price_jpy > 0 ? '(the starting price; change it to try another price)' : '(type the price you expect)'
+}
 const car = ref<any>(null), open = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
 const bidRm = ref<number | null>(null), note = ref(''), busy = ref(false), msg = ref(''), msgOk = ref(false)
 
@@ -109,10 +168,12 @@ async function cancel() {
 
 onMounted(async () => {
   try {
+    loadCur(); watch.load().catch(() => {})
     await loadRate()
     const { data, error } = await db.from('lots').select('*').eq('id', route.params.id as string).eq('my_eligible', true).maybeSingle()
     if (error) throw error
     car.value = data
+    if (data) loadCost(data).catch(() => { costDone.value = true })
     if (data) { await loadOpen(); if (open.value) bidRm.value = Math.round(open.value.max_bid_jpy * rate.value) }
   } catch (e: any) { err.value = e.message } finally { loading.value = false }
 })
@@ -125,6 +186,12 @@ onMounted(async () => {
 .thumbs { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
 .thumbs img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; flex: none; }
 .thumbs img.on { border-color: var(--ac); }
+.starred { color: var(--ac); border-color: var(--ac); }
+.cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; }
+.cur button.on { background: var(--ac); color: #fff; }
+.r { text-align: right; } .sum td { border-top: 2px solid var(--line); color: inherit !important; }
+.dk { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .sheet { width: 100%; border-radius: 8px; margin-top: 10px; }
 .price { font-size: 28px; font-weight: 800; margin-top: 4px; }
 .fld { display: grid; gap: 5px; color: var(--mu); font-size: 13px; margin-top: 10px; } .fld input { width: 100%; }

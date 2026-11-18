@@ -19,5 +19,11 @@ export function useLite() {
     if (m <= 0) return 'closed'
     return m >= 1440 ? Math.floor(m / 1440) + 'd ' + Math.floor((m % 1440) / 60) + 'h' : Math.floor(m / 60) + 'h ' + (m % 60) + 'm'
   }
-  return { rate, loadRate, rm, yen, rmToBidJpy, left }
+  /** The currency the cars are shown in (RM or yen), remembered in this browser. */
+  const cur = useState<'RM' | 'JPY'>('lite-cur', () => 'RM')
+  function loadCur() { try { const c = localStorage.getItem('cars-currency'); if (c === 'RM' || c === 'JPY') cur.value = c } catch { /* private mode */ } }
+  function setCur(c: 'RM' | 'JPY') { cur.value = c; try { localStorage.setItem('cars-currency', c) } catch { /* private mode */ } }
+  /** A car's starting price in the chosen currency; a car with no starting price says so. */
+  const money = (jpy: number | null | undefined) => (!(jpy && jpy > 0) ? 'Price at auction' : cur.value === 'JPY' ? yen(jpy) : rm(jpy))
+  return { rate, loadRate, rm, yen, rmToBidJpy, left, cur, loadCur, setCur, money }
 }

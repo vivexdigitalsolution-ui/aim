@@ -66,7 +66,7 @@ async function loadPrefs() {
   if (isCustomer.value) return
   const { data } = await db.from('saved_preferences').select('*').order('created_at')
   prefs.value = data || []
-  const want = route.query.pref as string | undefined
+  const want = prefId.value
   if (want) activePref.value = prefs.value.find((p) => p.id === want) || null
 }
 const board = useMarginBoard()
@@ -89,6 +89,8 @@ const marginMap = computed(() => {
 })
 const marginOf = (id: string) => marginMap.value.get(id) ?? null
 const q = ref(''), brand = ref(''), yearFrom = ref(0), maxRm = ref<number | null>(null), sort = ref('closing')
+const prefId = ref('')
+const url = useUrlFilters('cars', { q, brand, yearFrom, maxRm, sort, pref: prefId }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
@@ -118,11 +120,12 @@ async function fetchPage(from: number) {
   total.value = count || 0
   return data || []
 }
-async function reload() { loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
+async function reload() { prefId.value = activePref.value?.id || ''; url.save(); loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
 async function more() { loading.value = true; try { cars.value = [...cars.value, ...(await fetchPage(cars.value.length))] } catch (e: any) { err.value = e.message } finally { loading.value = false } }
 
 onMounted(async () => {
   try { const c = localStorage.getItem('cars-currency'); if (c === 'RM' || c === 'JPY') cur.value = c } catch { /* private mode */ }
+  url.restore()
   watch.load().catch(() => {})
   recs.load().catch(() => {})
   if (hasTier('member')) board.load().catch(() => {})

@@ -1,7 +1,7 @@
 
 <template>
   <div>
-    <NuxtLink to="/cars" class="small ac">← All cars</NuxtLink>
+    <a href="/cars" class="small ac" @click.prevent="back">← All cars</a>
     <div v-if="err" class="err" style="margin-top: 10px">{{ err }}</div>
     <div v-if="loading" class="muted" style="margin-top: 14px">Loading ...</div>
     <div v-else-if="!car" class="card muted" style="margin-top: 14px">This car is no longer available.</div>
@@ -104,6 +104,9 @@ import { fmtMytDateTime, timeLeft, offerPricing, sellFromRow, docketLine, docket
 
 const db = useDb()
 const route = useRoute()
+const router = useRouter()
+/** Back to the list as it was (filters and all); a car opened from a link goes to the plain list. */
+function back() { if (import.meta.client && (window.history.state as any)?.back) router.back(); else navigateTo('/cars') }
 const now = useNow()
 const { hasTier, isStaff, user } = useAuth()
 const { rate, loadRate, rm } = useRate()
