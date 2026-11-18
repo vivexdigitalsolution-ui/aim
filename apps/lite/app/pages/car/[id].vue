@@ -34,14 +34,14 @@
           <h2>Suggested bid</h2>
           <div class="price">{{ money2(recBid.price_jpy) }}</div>
           <div class="muted small">What cars like this usually sell for: the average of {{ recBid.sales }} recent sale{{ recBid.sales === 1 ? '' : 's' }} of the same model and grade ({{ recBid.basis }}), rounded up to the next ¥5,000. A guide, not a promise.</div>
-          <button v-if="!open || open.status === 'pending'" class="btn ghost sm" style="margin-top: 8px" @click="useSuggested">Use it as my bid</button>
+          <button v-if="!isStaff && (!open || open.status === 'pending')" class="btn ghost sm" style="margin-top: 8px" @click="useSuggested">Use it as my bid</button>
         </div>
 
         <div v-if="costDone" class="card">
           <h2>Import price breakdown</h2>
           <div v-if="!bd" class="muted small" style="margin-top: 6px">The import cost of this car is not worked out yet. Our team is checking its customs docket.</div>
           <template v-else>
-            <label class="fld">Car price (RM)<input v-model.number="bodyRm" type="number" min="0" step="1000" /></label>
+            <label class="fld">Car price ({{ unit }})<NumInput v-model="bodyInput" /></label>
             <div class="muted small">{{ priceBasis }}</div>
             <table v-if="pricing.importMyr != null" class="spec">
               <tr><td>Car price</td><td class="r">{{ rmf(pricing.bodyMyr) }}</td></tr>
@@ -60,19 +60,20 @@
           </template>
         </div>
 
-        <div class="card">
+        <div v-if="isStaff" class="card muted small">Bid orders from dealers are placed and tracked in the <NuxtLink to="/bids">Bid queue</NuxtLink>.</div>
+        <div v-else class="card">
           <h2>Your bid order</h2>
           <div v-if="open" class="okmsg" style="margin: 10px 0">
             You have an order of <b>{{ rm(open.max_bid_jpy) }}</b> ({{ yen(open.max_bid_jpy) }}) —
             {{ open.status === 'placed' ? 'placed by our team, it can no longer be changed.' : 'waiting for our team. You can change or cancel it until it is placed.' }}
           </div>
           <template v-if="!open || open.status === 'pending'">
-            <label class="fld">Your highest bid (RM)
-              <input v-model.number="bidRm" type="number" min="0" step="1000" :placeholder="'e.g. ' + Math.round((car.start_price_jpy || 0) * rate / 1000) * 1000" />
+            <label class="fld">Your highest bid ({{ unit }})
+              <NumInput v-model="bidInput" :placeholder="'e.g. ' + examples" />
             </label>
             <div class="muted small" style="margin: 6px 0 10px">
               <template v-if="bidJpy > 0">We bid in yen steps of ¥5,000: your order will be <b>{{ yen(bidJpy) }}</b> (about {{ rm(bidJpy) }}). It is the most we will bid; the car is bought for the lowest price that wins.</template>
-              <template v-else>Type the most you want to pay, in RM.</template>
+              <template v-else>Type the most you want to pay, in {{ unit }}.</template>
             </div>
             <textarea v-model="note" rows="2" placeholder="Note for our team (optional)" style="width: 100%"></textarea>
             <div v-if="msg" :class="msgOk ? 'okmsg' : 'err'" style="margin-top: 10px">{{ msg }}</div>
@@ -99,13 +100,15 @@
 </template>
 
 <script setup lang="ts">
-import { fmtMyt, offerPricing, docketLine, type Docket } from '@aim/core'
+import { watch as vueWatch } from 'vue'
+import { fmtMyt, offerPricing, docketLine, BID_STEP, type Docket } from '@aim/core'
 
 const db = useDb()
 const route = useRoute()
 const now = useNow()
 const router = useRouter()
 const { rate, loadRate, rm, yen, rmToBidJpy, left, cur, loadCur, setCur, money } = useLite()
+const { isStaff } = useAuth()
 /** Back to the list as it was (filters and all); a car opened from a link goes to the plain list. */
 function back() { if (import.meta.client && (window.history.state as any)?.back) router.back(); else navigateTo('/cars') }
 const watch = useWatch()
@@ -113,30 +116,43 @@ const watching = computed(() => !!car.value && watch.has(car.value.id))
 async function star() { try { await watch.toggle(car.value.id) } catch (e: any) { err.value = e.message } }
 // suggested bid and import price breakdown
 const recBid = ref<{ price_jpy: number; sales: number; basis: string } | null>(null), bd = ref<any>(null), costDone = ref(false)
-const bodyRm = ref(0), priceBasis = ref('')
+const bodyInput = ref(0), priceBasis = ref('')
 const money2 = (jpy: number) => (cur.value === 'JPY' ? yen(jpy) : rm(jpy) + ' · ' + yen(jpy))
-const rmf = (n: number | null | undefined) => (n == null ? '–' : 'RM ' + Math.round(n).toLocaleString('en-US'))
+const rmf = (n: number | null | undefined) => fmtMoney(n)
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
 const docket = computed<Docket | null>(() => (bd.value?.docket ? { ...bd.value.docket, amt_12m_24m: num(bd.value.docket.amt_12m_24m), amt_24m_36m: num(bd.value.docket.amt_24m_36m), amt_36m_48m: num(bd.value.docket.amt_36m_48m), amt_48m_60m: num(bd.value.docket.amt_48m_60m), amt_60m_plus: num(bd.value.docket.amt_60m_plus) } : null))
 const dline = computed(() => (docket.value && car.value ? docketLine(docket.value, car.value.mfg_year, car.value.mfg_month || car.value.first_reg_month) : null))
-const pricing = computed(() => offerPricing({ historyJpy: rate.value > 0 && bodyRm.value > 0 ? Math.round(bodyRm.value / rate.value) : null, rate: rate.value, dutyMyr: bd.value ? Number(bd.value.duty_myr) : null, portMyr: Number(bd.value?.port_myr || 0), inlandMyr: Number(bd.value?.inland_myr || 0), apFeeMyr: Number(bd.value?.ap_fee_myr || 0) }))
-function useSuggested() { if (recBid.value) bidRm.value = Math.round((recBid.value.price_jpy * rate.value) / 1000) * 1000 }
+const pricing = computed(() => offerPricing({ historyJpy: bodyInput.value > 0 && (cur.value === 'JPY' || rate.value > 0) ? (cur.value === 'JPY' ? Math.round(bodyInput.value) : Math.round(bodyInput.value / rate.value)) : null, rate: rate.value, dutyMyr: bd.value ? Number(bd.value.duty_myr) : null, portMyr: Number(bd.value?.port_myr || 0), inlandMyr: Number(bd.value?.inland_myr || 0), apFeeMyr: Number(bd.value?.ap_fee_myr || 0) }))
+function useSuggested() { if (recBid.value) bidInput.value = fromJpy(recBid.value.price_jpy) }
+// switching RM / yen converts what is already typed, so the same bid and price stay the same
+vueWatch(cur, (now, was) => {
+  const toJpy = (v: number) => (was === 'JPY' ? v : rate.value > 0 ? v / rate.value : 0)
+  const conv = (v: number | null, step: number) => { if (!v) return v; const jpy = toJpy(v); return now === 'JPY' ? Math.round(jpy / step) * step : Math.round((jpy * rate.value) / 1000) * 1000 }
+  bidInput.value = conv(bidInput.value, BID_STEP)
+  bodyInput.value = conv(bodyInput.value, 1000) || 0
+})
 async function loadCost(lot: any) {
   const [r, b] = await Promise.all([db.rpc('recommended_bid', { p_lot_id: lot.id }), db.rpc('ap_lot_breakdown', { p_lot_id: lot.id })])
   if (!r.error && r.data) recBid.value = r.data
   if (!b.error && b.data) bd.value = b.data
   costDone.value = true
   const base = recBid.value?.price_jpy || (lot.start_price_jpy > 0 ? lot.start_price_jpy : 0)
-  bodyRm.value = base ? Math.round((base * rate.value) / 1000) * 1000 : 0
+  bodyInput.value = base ? fromJpy(base) : 0
   priceBasis.value = recBid.value ? '(the suggested bid; change it to try another price)' : lot.start_price_jpy > 0 ? '(the starting price; change it to try another price)' : '(type the price you expect)'
 }
 const car = ref<any>(null), open = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
-const bidRm = ref<number | null>(null), note = ref(''), busy = ref(false), msg = ref(''), msgOk = ref(false)
+const bidInput = ref<number | null>(null), note = ref(''), busy = ref(false), msg = ref(''), msgOk = ref(false)
 
 const photos = computed<string[]>(() => (Array.isArray(car.value?.photos) ? car.value.photos : []))
 const closed = computed(() => !car.value || new Date(car.value.bid_deadline).getTime() <= now.value)
 const soon = computed(() => !!car.value && new Date(car.value.bid_deadline).getTime() - now.value < 6 * 3600_000)
-const bidJpy = computed(() => rmToBidJpy(Number(bidRm.value) || 0))
+const unit = computed(() => (cur.value === 'JPY' ? '¥' : 'RM'))
+// the bid and the car price are typed in the chosen currency; the order itself is always in yen steps of 5,000
+const bidJpy = computed(() => (cur.value === 'JPY' ? Math.floor((Number(bidInput.value) || 0) / BID_STEP) * BID_STEP : rmToBidJpy(Number(bidInput.value) || 0)))
+const fromJpy = (jpy: number) => (cur.value === 'JPY' ? Math.round(jpy) : Math.round((jpy * rate.value) / 1000) * 1000)
+const examples = computed(() => (fromJpy(car.value?.start_price_jpy || 0)).toLocaleString('en-US'))
+// the money lines of the breakdown, in the chosen currency
+const fmtMoney = (myr: number | null | undefined) => (myr == null ? '–' : cur.value === 'JPY' ? '¥' + Math.round(rate.value > 0 ? myr / rate.value : 0).toLocaleString('en-US') : 'RM ' + Math.round(myr).toLocaleString('en-US'))
 const specs = computed(() => {
   const c = car.value
   if (!c) return []
@@ -162,7 +178,7 @@ async function submit() {
 async function cancel() {
   if (!open.value || !confirm('Cancel this bid order?')) return
   busy.value = true; msg.value = ''
-  try { const { error } = await db.rpc('cancel_bid', { p_bid: open.value.id }); if (error) throw error; open.value = null; bidRm.value = null; msgOk.value = true; msg.value = 'Order cancelled.' }
+  try { const { error } = await db.rpc('cancel_bid', { p_bid: open.value.id }); if (error) throw error; open.value = null; bidInput.value = null; msgOk.value = true; msg.value = 'Order cancelled.' }
   catch (e: any) { msgOk.value = false; msg.value = e.message } finally { busy.value = false }
 }
 
@@ -174,7 +190,7 @@ onMounted(async () => {
     if (error) throw error
     car.value = data
     if (data) loadCost(data).catch(() => { costDone.value = true })
-    if (data) { await loadOpen(); if (open.value) bidRm.value = Math.round(open.value.max_bid_jpy * rate.value) }
+    if (data) { await loadOpen(); if (open.value) bidInput.value = fromJpy(open.value.max_bid_jpy) }
   } catch (e: any) { err.value = e.message } finally { loading.value = false }
 })
 </script>

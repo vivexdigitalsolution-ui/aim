@@ -7,7 +7,7 @@
       <input v-model="q" placeholder="Search make or model" style="flex: 1; min-width: 180px" @keyup.enter="reload" />
       <select v-model="brand" @change="reload"><option value="">All makes</option><option v-for="b in brands" :key="b" :value="b">{{ b }}</option></select>
       <select v-model="yearFrom" @change="reload"><option :value="0">Any year</option><option v-for="y in years" :key="y" :value="y">{{ y }} +</option></select>
-      <input v-model.number="maxRm" type="number" min="0" step="10000" placeholder="Max price RM" style="width: 150px" @keyup.enter="reload" />
+      <NumInput v-model="maxRm" placeholder="Max price RM" style="width: 150px" @keyup.enter="reload" />
       <select v-model="sort" @change="reload">
         <option value="closing">Closing soonest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option>
         <option value="year_desc">Newest year</option><option value="km_asc">Lowest mileage</option>

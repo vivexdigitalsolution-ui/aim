@@ -34,21 +34,21 @@
 
         <h2 style="margin-top: 16px">2. What do you know?</h2>
         <div class="seg"><button :class="{ on: mode === 'landed' }" @click="mode = 'landed'; result = null">I know the car price</button><button :class="{ on: mode === 'maxbid' }" @click="mode = 'maxbid'; result = null">I know the selling price</button></div>
-        <label v-if="mode === 'landed'" class="f">Car price at auction (¥)<input v-model.number="bodyJpy" type="number" step="10000" min="0" /></label>
+        <label v-if="mode === 'landed'" class="f">Car price at auction (¥)<NumInput v-model="bodyJpy" /></label>
         <template v-else>
-          <label class="f">Selling price in Malaysia (RM)<input v-model.number="sellMyr" type="number" step="1000" min="0" /></label>
-          <label class="f">Margin you want (%)<input v-model.number="targetPct" type="number" min="0" max="60" /></label>
+          <label class="f">Selling price in Malaysia (RM)<NumInput v-model="sellMyr" /></label>
+          <label class="f">Margin you want (%)<NumInput v-model="targetPct" decimal /></label>
         </template>
-        <label v-if="mode === 'landed'" class="f">Selling price in Malaysia (RM, optional, to see your margin)<input v-model.number="sellMyr" type="number" step="1000" min="0" /></label>
+        <label v-if="mode === 'landed'" class="f">Selling price in Malaysia (RM, optional, to see your margin)<NumInput v-model="sellMyr" /></label>
 
         <details style="margin-top: 10px">
           <summary class="small ac" style="cursor: pointer">Rate and fees (change if yours differ)</summary>
           <div class="two2">
-            <label class="f">¥1 = RM<input v-model.number="rate" type="number" step="0.0001" min="0" /></label>
-            <label class="f">AP fee (RM)<input v-model.number="apFee" type="number" step="500" min="0" /></label>
-            <label class="f">Port clearance (RM)<input v-model.number="port" type="number" step="100" min="0" /></label>
-            <label class="f">Inland transfer (RM)<input v-model.number="inland" type="number" step="50" min="0" /></label>
-            <label class="f">Recon / prep (RM)<input v-model.number="recon" type="number" step="500" min="0" /></label>
+            <label class="f">¥1 = RM<NumInput v-model="rate" decimal /></label>
+            <label class="f">AP fee (RM)<NumInput v-model="apFee" /></label>
+            <label class="f">Port clearance (RM)<NumInput v-model="port" /></label>
+            <label class="f">Inland transfer (RM)<NumInput v-model="inland" /></label>
+            <label class="f">Recon / prep (RM)<NumInput v-model="recon" /></label>
           </div>
         </details>
 

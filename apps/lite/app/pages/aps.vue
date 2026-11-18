@@ -87,7 +87,7 @@
           <thead><tr><th>From this many won cars in a month</th><th>Discount on the agent fee</th><th /></tr></thead>
           <tr v-for="r in rebates" :key="r.min_units"><td><b>{{ r.min_units }}</b> cars</td><td>{{ r.rebate_pct }}%</td><td class="r"><button v-if="isAdmin" class="btn ghost sm down" @click="removeRebate(r)">Delete</button></td></tr>
           <tr v-if="!rebates.length"><td colspan="3" class="muted" style="padding: 18px 4px">No rebate steps yet.</td></tr>
-          <tr v-if="isAdmin"><td><input v-model.number="rb.min_units" type="number" min="2" placeholder="e.g. 3" style="width: 110px" /></td><td><input v-model.number="rb.rebate_pct" type="number" min="1" max="100" step="0.5" placeholder="e.g. 10" style="width: 110px" /> %</td><td class="r"><button class="btn sm" :disabled="!rb.min_units || !rb.rebate_pct" @click="addRebate">Add step</button></td></tr>
+          <tr v-if="isAdmin"><td><NumInput v-model="rb.min_units" placeholder="e.g. 3" style="width: 110px" /></td><td><NumInput v-model="rb.rebate_pct" decimal placeholder="e.g. 10" style="width: 110px" /> %</td><td class="r"><button class="btn sm" :disabled="!rb.min_units || !rb.rebate_pct" @click="addRebate">Add step</button></td></tr>
         </table>
       </div>
     </template>
@@ -98,8 +98,8 @@
         <h2>Rules</h2>
         <div class="grid2">
           <label class="f">Car age limit (years)<input v-model.number="settings.max_car_age_years" type="number" min="0" :disabled="!isAdmin" /></label>
-          <label class="f">Suspend dealers with no order for (days)<input v-model.number="settings.inactive_suspend_days" type="number" min="1" :disabled="!isAdmin" /></label>
-          <label class="f">History price period (weeks)<input v-model.number="settings.history_weeks" type="number" min="1" :disabled="!isAdmin" /></label>
+          <label class="f">Suspend dealers with no order for (days)<NumInput v-model="settings.inactive_suspend_days" :disabled="!isAdmin" /></label>
+          <label class="f">History price period (weeks)<NumInput v-model="settings.history_weeks" :disabled="!isAdmin" /></label>
         </div>
         <p class="small muted" style="margin: 0">The car age limit is applied when a car is loaded; changing it does not re-check cars already loaded.</p>
         <div v-if="msg" class="okmsg">{{ msg }}</div>
@@ -111,7 +111,7 @@
         <div v-for="l in calcLimits" :key="l.tier" class="row wrap" style="gap: 10px; justify-content: flex-start">
           <b style="width: 90px; text-transform: capitalize">{{ l.tier }}</b>
           <select v-model="l.period" :disabled="!isAdmin"><option value="once">in total (once)</option><option value="day">per day</option><option value="month">per month</option><option value="unlimited">unlimited</option></select>
-          <label v-if="l.period !== 'unlimited'" class="small">up to <input v-model.number="l.uses" type="number" min="0" style="width: 70px" :disabled="!isAdmin" /> calculation(s)</label>
+          <label v-if="l.period !== 'unlimited'" class="small">up to <NumInput v-model="l.uses" style="width: 70px" :disabled="!isAdmin" /> calculation(s)</label>
         </div>
         <div v-if="isAdmin"><button class="btn" :disabled="busy" @click="saveCalcLimits">Save calculator limits</button></div>
       </div>
@@ -139,7 +139,7 @@
           <label class="f">WhatsApp<input v-model="nu.whatsapp" /></label>
           <template v-if="nu.role === 'ap_holder'">
             <label class="f">Plan<select v-model="nu.tier"><option value="free">Free</option><option value="member">Member</option><option value="partner">Partner</option></select></label>
-            <label class="f">Bid limit per car (¥, 0 = cannot bid yet)<input v-model.number="nu.bid_limit_jpy" type="number" step="100000" min="0" /></label>
+            <label class="f">Bid limit per car (¥, 0 = cannot bid yet)<NumInput v-model="nu.bid_limit_jpy" /></label>
             <label class="f" style="grid-column: 1 / -1">Agent fee rule<select v-model="nu.fee_rule_id"><option value="">None yet</option><option v-for="r in rules" :key="r.id" :value="r.id">{{ r.name }}</option></select></label>
           </template>
         </div>
@@ -167,8 +167,8 @@
             <select v-model="edit.tier"><option value="free">Free</option><option value="member">Member</option><option value="partner">Partner</option></select>
           </label>
           <label class="f">History price until<input v-model="edit.history_until" type="date" /></label>
-          <label class="f">Highest bid per car (¥)<input v-model.number="edit.bid_limit_jpy" type="number" inputmode="numeric" step="100000" /></label>
-          <label class="f">Total open orders cap (¥, empty = none)<input v-model.number="edit.open_limit_jpy" type="number" inputmode="numeric" step="100000" /></label>
+          <label class="f">Highest bid per car (¥)<NumInput v-model="edit.bid_limit_jpy" /></label>
+          <label class="f">Total open orders cap (¥, empty = none)<NumInput v-model="edit.open_limit_jpy" /></label>
           <label class="f" style="grid-column: 1 / -1">Service level
             <select v-model="edit.service_level_id"><option :value="null">None</option><option v-for="l in levels.filter((x) => x.active)" :key="l.id" :value="l.id">{{ l.name }} ({{ l.fee_type === 'percent' ? l.fee_value + '%' : yen(l.fee_value) }})</option></select>
           </label>
@@ -204,7 +204,7 @@
         <label class="f">What is included<textarea v-model="lvForm.description" rows="2" placeholder="e.g. pre-bid check, sheet translation, priority bidding" /></label>
         <div class="grid2">
           <label class="f">Fee type<select v-model="lvForm.fee_type"><option value="flat_jpy">Flat amount (¥)</option><option value="percent">Percent of winning price</option></select></label>
-          <label class="f">{{ lvForm.fee_type === 'percent' ? 'Percent (%)' : 'Amount (¥)' }}<input v-model.number="lvForm.fee_value" type="number" step="any" /></label>
+          <label class="f">{{ lvForm.fee_type === 'percent' ? 'Percent (%)' : 'Amount (¥)' }}<NumInput v-model="lvForm.fee_value" decimal /></label>
         </div>
         <label class="row small" style="justify-content: flex-start"><input v-model="lvForm.active" type="checkbox" style="width: auto; height: auto" /> Active</label>
         <div v-if="lvErr" class="err">{{ lvErr }}</div>
@@ -219,9 +219,9 @@
         <label class="f">Name<input v-model="form.name" /></label>
         <div class="grid2">
           <label class="f">Type<select v-model="form.fee_type"><option value="flat_jpy">Flat amount (¥)</option><option value="percent">Percent of winning price</option></select></label>
-          <label class="f">{{ form.fee_type === 'percent' ? 'Percent (%)' : 'Amount (¥)' }}<input v-model.number="form.fee_value" type="number" step="any" /></label>
-          <label class="f">Winning price from (¥)<input v-model.number="form.min_price_jpy" type="number" /></label>
-          <label class="f">Winning price below (¥, empty = no limit)<input v-model.number="form.max_price_jpy" type="number" /></label>
+          <label class="f">{{ form.fee_type === 'percent' ? 'Percent (%)' : 'Amount (¥)' }}<NumInput v-model="form.fee_value" decimal /></label>
+          <label class="f">Winning price from (¥)<NumInput v-model="form.min_price_jpy" /></label>
+          <label class="f">Winning price below (¥, empty = no limit)<NumInput v-model="form.max_price_jpy" /></label>
         </div>
         <label class="row small" style="justify-content: flex-start"><input v-model="form.is_default" type="checkbox" style="width: auto; height: auto" /> Default rule (used when the dealer has none of their own)</label>
         <label class="row small" style="justify-content: flex-start"><input v-model="form.active" type="checkbox" style="width: auto; height: auto" /> Active</label>
