@@ -94,7 +94,7 @@ onMounted(async () => {
     const [b, a, l, e] = await Promise.all([
       db.from('bids').select('ap_id,status,max_bid_jpy,final_price_jpy,agent_fee_jpy,created_at').order('created_at', { ascending: false }).limit(20000),
       db.from('profiles').select('id,company_name,contact_name,email,tier').eq('role', 'ap_holder').eq('status', 'active'),
-      db.from('dealer_lists').select('id,created_at').limit(5000),
+      db.from('dealer_lists').select('id,created_at').eq('draft', false).limit(5000),
       db.from('dealer_list_events').select('list_id,event').limit(50000),
     ])
     const bad = [b, a, l, e].find((x) => x.error)

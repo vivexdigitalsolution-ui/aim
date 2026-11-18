@@ -1,5 +1,12 @@
 <template>
   <div class="bl">
+    <div v-if="segments.length" class="f" style="margin-bottom: 12px">
+      Kinds of car you buy (pick any; empty = no preference)
+      <div class="row wrap" style="gap: 6px; justify-content: flex-start">
+        <span v-for="s in segments" :key="s.key" class="chip tag" :class="{ on: chosen.includes(s.key) }" @click="toggle(s.key)">{{ s.label }}</span>
+      </div>
+      <span class="small muted">A car fits if it is one of these kinds, or if it matches the makes and models you type below.</span>
+    </div>
     <div class="grid2">
       <label class="f">Makes you buy (comma separated, empty = any)<input v-model="brands" placeholder="Toyota, Lexus" /></label>
       <label class="f">Models (comma separated, empty = any)<input v-model="models" placeholder="Alphard, Vellfire, Harrier" /></label>
@@ -26,6 +33,9 @@ const emit = defineEmits<{ (e: 'saved', bl: BuyList): void }>()
 const db = useDb()
 const f = reactive<any>({ year_from: null, budget_myr: null, min_margin_pct: 10, aps_left: null, speed: 'any', notes: '' })
 const brands = ref(''), models = ref(''), busy = ref(false), msg = ref(''), err = ref('')
+const { segments, load: loadSegments } = useSegments()
+const chosen = ref<string[]>([])
+const toggle = (k: string) => { chosen.value = chosen.value.includes(k) ? chosen.value.filter((x) => x !== k) : [...chosen.value, k] }
 const split = (s: string) => s.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean)
 
 async function load() {
@@ -33,9 +43,11 @@ async function load() {
   const { data } = await db.from('buy_lists').select('*').eq('ap_id', props.apId).maybeSingle()
   Object.assign(f, { year_from: data?.year_from ?? null, budget_myr: data?.budget_myr != null ? Number(data.budget_myr) : null, min_margin_pct: data ? Number(data.min_margin_pct) : 10, aps_left: data?.aps_left ?? null, speed: data?.speed || 'any', notes: data?.notes || '' })
   brands.value = (data?.brands || []).join(', '); models.value = (data?.models || []).join(', ')
+  chosen.value = data?.segments || []
+  await loadSegments().catch(() => {})
   emit('saved', current())
 }
-const current = (): BuyList => ({ brands: split(brands.value), models: split(models.value), year_from: f.year_from || null, budget_myr: f.budget_myr || null, min_margin_pct: Number(f.min_margin_pct) || 0, aps_left: f.aps_left ?? null, speed: f.speed, notes: f.notes || null })
+const current = (): BuyList => ({ brands: split(brands.value), models: split(models.value), segments: chosen.value, year_from: f.year_from || null, budget_myr: f.budget_myr || null, min_margin_pct: Number(f.min_margin_pct) || 0, aps_left: f.aps_left ?? null, speed: f.speed, notes: f.notes || null })
 async function save() {
   busy.value = true; msg.value = ''; err.value = ''
   const c = current()

@@ -25,6 +25,10 @@
           <div class="price">{{ rm(car.start_price_jpy) || '—' }}</div>
           <div class="muted small">Starting price ¥{{ (car.start_price_jpy || 0).toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">closes in {{ left(car.bid_deadline) }}</span><span class="chip">{{ fmtMytDateTime(car.bid_deadline) }} MYT</span></div>
+          <div class="row wrap" style="gap: 8px; margin-top: 12px; justify-content: flex-start">
+            <button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? '★ On your watchlist' : '☆ Watch this car' }}</button>
+            <NuxtLink v-if="hasTier('member')" :to="`/history?brand=${encodeURIComponent(car.brand)}&model=${encodeURIComponent(String(car.model).split(' ')[0])}`" class="btn ghost sm" style="display: inline-flex; align-items: center; text-decoration: none">What it sold for</NuxtLink>
+          </div>
           <div style="margin-top: 14px">
             <NuxtLink v-if="hasTier('member')" :to="`/margin?lot=${car.id}`" class="btn" style="display: inline-flex; align-items: center; text-decoration: none">See the margin and bid</NuxtLink>
             <div v-else class="muted small">Margin, the Malaysian market price and bidding are part of the Member plan. <NuxtLink to="/upgrade" class="ac">See the plans</NuxtLink></div>
@@ -58,6 +62,9 @@ const route = useRoute()
 const now = useNow()
 const { hasTier } = useAuth()
 const { rate, loadRate, rm } = useRate()
+const watch = useWatch()
+const watching = computed(() => !!car.value && watch.has(car.value.id))
+async function star() { try { await watch.toggle(car.value.id) } catch (e: any) { err.value = e.message } }
 const car = ref<any>(null), features = ref<any[]>([]), loading = ref(true), err = ref(''), pi = ref(0)
 const left = (iso: string) => timeLeft(iso, now.value).label
 const photos = computed<string[]>(() => (Array.isArray(car.value?.photos) ? car.value.photos : []))
@@ -72,7 +79,7 @@ const specs = computed(() => {
 })
 onMounted(async () => {
   try {
-    await loadRate().catch(() => {})
+    await Promise.all([loadRate().catch(() => {}), watch.load().catch(() => {})])
     const { data, error } = await db.from('lots').select('*').eq('id', route.params.id as string).eq('my_eligible', true).maybeSingle()
     if (error) throw error
     car.value = data
@@ -88,6 +95,7 @@ onMounted(async () => {
 .thumbs { display: flex; gap: 6px; overflow-x: auto; margin-top: 8px; padding-bottom: 2px; }
 .thumbs img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; flex: none; }
 .thumbs img.on { border-color: var(--ac); }
+.starred { color: var(--ac); border-color: var(--ac); }
 .sheet { width: 100%; border-radius: 8px; margin-top: 10px; }
 .price { font-size: 28px; font-weight: 800; margin-top: 4px; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 8px; } .spec td { padding: 6px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); width: 42%; }

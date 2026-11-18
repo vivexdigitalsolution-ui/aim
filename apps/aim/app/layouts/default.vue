@@ -29,11 +29,12 @@ const db = useDb()
 const { level: sysLevel, label: sysLabel, load: loadStatus } = useSystemStatus()
 const items = computed<NavItem[]>(() => [
   { to: '/cars', label: 'Cars', short: 'Cars', icon: 'cars' },
-  ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }, { to: '/explorer', label: 'Market explorer', short: 'Explorer', icon: 'chart' }, ...(isStaff.value ? [{ to: '/market', label: 'Market prices', short: 'Prices', icon: 'tag' }] : [])] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'today' }]),
-  ...(isStaff.value ? [{ to: '/bids', label: 'Bid pipeline', short: 'Bids', icon: 'bids', badge: bidCount.value || null }, { to: '/lists', label: 'Dealer lists', short: 'Lists', icon: 'lists' }, { to: '/kpi', label: 'KPIs', short: 'KPIs', icon: 'chart' }] : []),
+  ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }, { to: '/explorer', label: 'Market explorer', short: 'Explorer', icon: 'chart' }, { to: '/history', label: 'History price', short: 'History', icon: 'tag' }, ...(isStaff.value ? [{ to: '/market', label: 'Market prices', short: 'Prices', icon: 'tag' }] : [])] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'today' }]),
+  ...(isStaff.value ? [{ to: '/bids', label: 'Bid pipeline', short: 'Bids', icon: 'bids', badge: bidCount.value || null }, { to: '/lists', label: 'Dealer lists', short: 'Lists', icon: 'lists' }, { to: '/kpi', label: 'KPIs', short: 'KPIs', icon: 'chart' }, { to: '/segments', label: 'Segments', short: 'Segments', icon: 'tag' }] : []),
   ...(!isStaff.value && hasTier('member') ? [{ to: '/buylist', label: 'My buy list', short: 'Buy list', icon: 'lists' }] : []),
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
   { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },
+  { to: '/watchlist', label: 'Watchlist', short: 'Watch', icon: 'today' },
   ...(!isStaff.value && hasTier('member') ? [{ to: '/orders', label: 'My bid orders', short: 'Orders', icon: 'bids' }] : []),
   { to: '/alerts', label: 'Alerts', short: 'Alerts', icon: 'bell', badge: alertCount.value || null },
   ...(isStaff.value ? [{ to: '/aps', label: 'AP holders', short: 'APs', icon: 'users', badge: pendingAps.value || null }] : []),

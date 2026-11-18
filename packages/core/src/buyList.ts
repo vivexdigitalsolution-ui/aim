@@ -4,17 +4,33 @@
 export interface BuyList {
   brands: string[]; models: string[]; year_from: number | null; budget_myr: number | null; min_margin_pct: number
   aps_left?: number | null; speed?: string | null; notes?: string | null
+  segments?: string[]          // segment keys (suv, mpv ...): a car fits when it is in one of them OR it fits the makes/models the dealer typed
 }
 export interface CarFigures { brand: string; model: string; year: number | null; landedMyr: number | null; marginPct: number | null }
+/** Which cars belong to each segment: segment key -> entries. model '' = every model of that make. Staff keep this list. */
+export type SegmentMap = Record<string, { brand: string; model: string }[]>
 
 const up = (s: string) => String(s || '').toUpperCase().trim()
+const brandKey = (s: string) => up(s).replace(/[^A-Z0-9]/g, '')      // MERCEDES-BENZ = MERCEDES BENZ
+
+/** Is this car in one of the segments? */
+export function inSegments(segments: string[], map: SegmentMap, car: { brand: string; model: string }): boolean {
+  return segments.some((k) => (map[k] || []).some((e) => brandKey(e.brand) === brandKey(car.brand) && (!e.model.trim() || up(car.model).includes(up(e.model)))))
+}
 
 /** Does this car fit the buy list? `why` lists every reason it does not (shown to staff). A car with no margin figure never fits: nothing is promised without a number. */
-export function matchesBuyList(bl: BuyList, car: CarFigures): { ok: boolean; why: string[] } {
+export function matchesBuyList(bl: BuyList, car: CarFigures, segmentMap: SegmentMap = {}): { ok: boolean; why: string[] } {
   const why: string[] = []
   const brands = bl.brands.map(up).filter(Boolean), models = bl.models.map(up).filter(Boolean)
-  if (brands.length && !brands.some((b) => up(car.brand) === b)) why.push('other make')
-  if (models.length && !models.some((m) => up(car.model).includes(m))) why.push('other model')
+  const segs = (bl.segments || []).filter(Boolean)
+  const nameOk = (!brands.length || brands.some((b) => up(car.brand) === b)) && (!models.length || models.some((m) => up(car.model).includes(m)))
+  if (segs.length) {
+    // chosen segments: the car fits a segment, or it fits the makes/models typed (when any were typed)
+    if (!(inSegments(segs, segmentMap, car) || ((brands.length || models.length) && nameOk))) why.push('outside your segments')
+  } else {
+    if (brands.length && !brands.some((b) => up(car.brand) === b)) why.push('other make')
+    if (models.length && !models.some((m) => up(car.model).includes(m))) why.push('other model')
+  }
   if (bl.year_from && (!car.year || car.year < bl.year_from)) why.push('older than ' + bl.year_from)
   if (bl.budget_myr && (car.landedMyr == null || car.landedMyr > bl.budget_myr)) why.push(car.landedMyr == null ? 'cost unknown' : 'over budget')
   if (car.marginPct == null) why.push('no margin figure')

@@ -18,15 +18,16 @@ import { matchesBuyList, type BuyList } from '@aim/core'
 
 const { user } = useAuth()
 const { load, lots, evaluate, fees } = useMarginBoard()
+const { map: segMap, load: loadSegments } = useSegments()
 const bl = ref<BuyList | null>(null), count = ref<number | null>(null)
 const RECON = 3000
 
 async function recount() {
   if (!bl.value) return
   try {
-    await load()
-    const s = { targetPct: bl.value.min_margin_pct, reconMyr: RECON, apFeeMyr: fees.value.apFeeMyr }
-    count.value = lots.value.map((l) => evaluate(l, s)).filter((c) => c.atHistory && matchesBuyList(bl.value!, { brand: c.brand, model: c.model, year: c.mfg_year, landedMyr: c.atHistory.landedMyr + RECON, marginPct: c.atHistory.marginPct }).ok).length
+    await Promise.all([load(), loadSegments()])
+    const s ={ targetPct: bl.value.min_margin_pct, reconMyr: RECON, apFeeMyr: fees.value.apFeeMyr }
+    count.value = lots.value.map((l) => evaluate(l, s)).filter((c) => c.atHistory && matchesBuyList(bl.value!, { brand: c.brand, model: c.model, year: c.mfg_year, landedMyr: c.atHistory.landedMyr + RECON, marginPct: c.atHistory.marginPct }, segMap.value).ok).length
   } catch { count.value = null }
 }
 watch(bl, recount)

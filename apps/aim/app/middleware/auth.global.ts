@@ -11,7 +11,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!profile.value || profile.value.status !== 'active') return to.path === '/pending' ? undefined : navigateTo('/pending')
   if (to.path === '/pending') return navigateTo('/')
 
-  if (['/review', '/bids', '/aps', '/status', '/market', '/lists', '/kpi'].some((p) => to.path.startsWith(p)) && !isStaff.value) return navigateTo('/')
+  if (['/review', '/bids', '/aps', '/status', '/market', '/lists', '/kpi', '/segments'].some((p) => to.path.startsWith(p)) && !isStaff.value) return navigateTo('/')
   // margin screens: member tier and up (the server enforces it too: ap_lot_costs, market_stats and lot_catalog need the tier)
-  if (['/today', '/margin', '/explorer'].some((p) => to.path.startsWith(p)) && !hasTier('member')) return navigateTo('/upgrade')
+  if (['/today', '/margin', '/explorer', '/history'].some((p) => to.path.startsWith(p)) && !hasTier('member')) return navigateTo('/upgrade')
 })

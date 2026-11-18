@@ -54,3 +54,9 @@ Cost: a Utility message in Malaysia is about USD 0.01 to 0.03, and Meta gives 1,
 - Only alerts from the last 24 hours are sent, so switching a channel on never floods anyone with old news.
 - A failed send is logged and retried on the next run.
 - An alert is never raised twice for the same order (the job remembers it).
+
+## Added with migration 30: watchlist alerts and draft personal lists
+
+- **Watchlist alert**: `node alerts.js --only watch` tells a dealer when a car they starred closes within 6 hours (change with ALERT_WATCH_HOURS in .env). `run-alerts.bat` already runs it every 15 minutes with `close` and `send`. Re-save the Task Scheduler job only if it still points to an old copy of the .bat file.
+- **Draft personal lists**: `node alerts.js --only top5` is part of the daily job. For each dealer with a buy list it makes a DRAFT of up to 5 cars (best margin first, never a car already sent in the last 7 days, one draft at a time per dealer). Nothing is sent: staff open Dealer lists, check the draft and press Send, which creates the working link. Discard deletes the draft.
+- Try it without writing anything: `node alerts.js --only top5 --dry`.
