@@ -14,21 +14,21 @@
       <div class="row wrap" style="gap: 8px; margin-bottom: 12px">
         <span v-for="s in statuses" :key="s.key" class="chip tag" :class="{ on: filter === s.key }" @click="filter = s.key">{{ s.label }} <small>{{ countOf(s.key) }}</small></span>
         <span class="grow" />
-        <input v-model="search" placeholder="Search company, name, phone, email" style="width: 280px; max-width: 100%" />
-        <button class="btn" @click="openAdd">+ Add user</button>
+        <input v-model="search" class="sinput" placeholder="Search company, name, phone, email" />
+        <button class="btn addbtn" @click="openAdd">+ Add user</button>
       </div>
-      <div class="card" style="overflow-x: auto; padding: 4px 14px">
+      <div class="card tcard">
         <table class="t">
           <thead><tr><th>Company</th><th>Contact</th><th>Status</th><th>Plan</th><th class="r">Bid limit</th><th class="r">Open orders</th><th>Won</th><th>Last order</th></tr></thead>
           <tr v-for="a in shown" :key="a.id" class="click" @click="select(a)">
-            <td><b>{{ a.company_name || '—' }}</b></td>
-            <td>{{ a.contact_name }}<div class="small muted">{{ a.phone || a.email }}</div></td>
-            <td><span class="chip" :class="a.status === 'active' ? 'ok' : a.status === 'pending' ? 'warn' : 'bad'">{{ a.status === 'pending' ? 'waiting approval' : a.status }}</span></td>
-            <td><span class="chip" :class="a.tier === 'partner' ? 'ac' : a.tier === 'member' ? 'ok' : ''">{{ a.tier }}</span></td>
-            <td class="r">{{ yen(a.bid_limit_jpy) }}</td>
-            <td class="r">{{ stat(a).open ? stat(a).open + ' · ' + yen(stat(a).openJpy) : '—' }}</td>
-            <td>{{ stat(a).won || '—' }}</td>
-            <td class="small">{{ a.last_order_at ? fmtMytDateTime(a.last_order_at) : 'never' }}</td>
+            <td class="ttl"><b>{{ a.company_name || a.contact_name || a.email || '—' }}</b></td>
+            <td data-label="Contact"><span class="stack">{{ a.contact_name }}<span class="small muted">{{ a.phone || a.email }}</span></span></td>
+            <td data-label="Status"><span class="chip" :class="a.status === 'active' ? 'ok' : a.status === 'pending' ? 'warn' : 'bad'">{{ a.status === 'pending' ? 'waiting approval' : a.status }}</span></td>
+            <td data-label="Plan"><span class="chip" :class="a.tier === 'partner' ? 'ac' : a.tier === 'member' ? 'ok' : ''">{{ a.tier }}</span></td>
+            <td class="r" data-label="Bid limit">{{ yen(a.bid_limit_jpy) }}</td>
+            <td class="r" data-label="Open orders">{{ stat(a).open ? stat(a).open + ' · ' + yen(stat(a).openJpy) : '—' }}</td>
+            <td data-label="Won">{{ stat(a).won || '—' }}</td>
+            <td class="small" data-label="Last order">{{ a.last_order_at ? fmtMytDateTime(a.last_order_at) : 'never' }}</td>
           </tr>
           <tr v-if="!shown.length"><td colspan="8" class="muted" style="padding: 18px 4px">No one here.</td></tr>
         </table>
@@ -37,21 +37,21 @@
 
     <!-- ── AGENT FEES ── -->
     <template v-if="tab === 'fees'">
-      <div class="row" style="margin-bottom: 10px">
+      <div class="row hdr" style="margin-bottom: 10px">
         <p class="muted small" style="margin: 0; max-width: 720px">The fee is charged when a bid is <b>won</b> and saved on that bid, so changing a rule never changes old bids. A dealer with their own rule uses it; everyone else uses the default rule whose price band matches the winning price.</p>
         <button v-if="isAdmin" class="btn" @click="newRule">Add fee rule</button>
       </div>
       <div v-if="!isAdmin" class="chip warn" style="margin-bottom: 10px">Read only: only an admin can change fee rules</div>
-      <div class="card" style="overflow-x: auto; padding: 4px 14px">
+      <div class="card tcard">
         <table class="t">
           <thead><tr><th>Name</th><th>Fee</th><th>Winning price band</th><th>Default</th><th>Active</th><th /></tr></thead>
           <tr v-for="r in rules" :key="r.id">
-            <td><b>{{ r.name }}</b></td>
-            <td>{{ r.fee_type === 'percent' ? r.fee_value + '% of price' : yen(r.fee_value) + ' flat' }}</td>
-            <td>{{ yen(r.min_price_jpy) }} – {{ r.max_price_jpy ? yen(r.max_price_jpy) : 'no limit' }}</td>
-            <td><span class="chip" :class="r.is_default ? 'ok' : ''">{{ r.is_default ? 'yes' : 'no' }}</span></td>
-            <td><span class="chip" :class="r.active ? 'ok' : ''">{{ r.active ? 'yes' : 'no' }}</span></td>
-            <td class="r nowrap"><template v-if="isAdmin"><button class="btn ghost sm" @click="editRule(r)">Edit</button> <button class="btn ghost sm down" @click="removeRule(r)">Delete</button></template></td>
+            <td class="ttl"><b>{{ r.name }}</b></td>
+            <td data-label="Fee">{{ r.fee_type === 'percent' ? r.fee_value + '% of price' : yen(r.fee_value) + ' flat' }}</td>
+            <td data-label="Winning price band">{{ yen(r.min_price_jpy) }} – {{ r.max_price_jpy ? yen(r.max_price_jpy) : 'no limit' }}</td>
+            <td data-label="Default"><span class="chip" :class="r.is_default ? 'ok' : ''">{{ r.is_default ? 'yes' : 'no' }}</span></td>
+            <td data-label="Active"><span class="chip" :class="r.active ? 'ok' : ''">{{ r.active ? 'yes' : 'no' }}</span></td>
+            <td class="r nowrap acts"><template v-if="isAdmin"><button class="btn ghost sm" @click="editRule(r)">Edit</button> <button class="btn ghost sm down" @click="removeRule(r)">Delete</button></template></td>
           </tr>
           <tr v-if="!rules.length"><td colspan="6" class="muted" style="padding: 18px 4px">No fee rules yet.</td></tr>
         </table>
@@ -60,18 +60,18 @@
 
     <!-- SERVICE LEVELS -->
     <template v-if="tab === 'levels'">
-      <div class="row" style="margin-bottom: 10px">
+      <div class="row hdr" style="margin-bottom: 10px">
         <p class="muted small" style="margin: 0; max-width: 720px">A service level is a named package with its own agent fee, for example Basic, Professional or Premium. Give a dealer a level on their page. A fee rule pinned to a dealer beats their level; a dealer with no level uses the default fee rules.</p>
         <button v-if="isAdmin" class="btn" @click="lvForm = { name: '', description: '', fee_type: 'flat_jpy', fee_value: 0, active: true, sort_order: levels.length }; lvErr = ''">Add service level</button>
       </div>
       <div v-if="!isAdmin" class="chip warn" style="margin-bottom: 10px">Read only: only an admin can change service levels</div>
-      <div class="card" style="overflow-x: auto; padding: 4px 14px">
+      <div class="card tcard">
         <table class="t">
           <thead><tr><th>Name</th><th>Agent fee</th><th>What is included</th><th>Dealers</th><th>Active</th><th /></tr></thead>
           <tr v-for="l in levels" :key="l.id">
-            <td><b>{{ l.name }}</b></td><td>{{ l.fee_type === 'percent' ? l.fee_value + '% of price' : yen(l.fee_value) + ' flat' }}</td><td class="small muted">{{ l.description }}</td>
-            <td>{{ aps.filter((a) => a.service_level_id === l.id).length }}</td><td><span class="chip" :class="l.active ? 'ok' : ''">{{ l.active ? 'yes' : 'no' }}</span></td>
-            <td class="r nowrap"><template v-if="isAdmin"><button class="btn ghost sm" @click="lvForm = { ...l }; lvErr = ''">Edit</button> <button class="btn ghost sm down" @click="removeLevel(l)">Delete</button></template></td>
+            <td class="ttl"><b>{{ l.name }}</b></td><td data-label="Agent fee">{{ l.fee_type === 'percent' ? l.fee_value + '% of price' : yen(l.fee_value) + ' flat' }}</td><td class="small muted" data-label="Included">{{ l.description }}</td>
+            <td data-label="Dealers">{{ aps.filter((a) => a.service_level_id === l.id).length }}</td><td data-label="Active"><span class="chip" :class="l.active ? 'ok' : ''">{{ l.active ? 'yes' : 'no' }}</span></td>
+            <td class="r nowrap acts"><template v-if="isAdmin"><button class="btn ghost sm" @click="lvForm = { ...l }; lvErr = ''">Edit</button> <button class="btn ghost sm down" @click="removeLevel(l)">Delete</button></template></td>
           </tr>
           <tr v-if="!levels.length"><td colspan="6" class="muted" style="padding: 18px 4px">No service levels yet. Fees work as before until you add some.</td></tr>
         </table>
@@ -82,12 +82,12 @@
     <template v-if="tab === 'rebates'">
       <p class="muted small" style="margin: 0 0 10px; max-width: 720px">The more cars a dealer wins in one calendar month (Malaysia time), the bigger the discount on the agent fee of that win. Example: from 3 cars, 10% off. The car being recorded counts. No steps means no rebate.</p>
       <div v-if="!isAdmin" class="chip warn" style="margin-bottom: 10px">Read only: only an admin can change the rebate steps</div>
-      <div class="card" style="overflow-x: auto; padding: 4px 14px">
+      <div class="card tcard">
         <table class="t">
           <thead><tr><th>From this many won cars in a month</th><th>Discount on the agent fee</th><th /></tr></thead>
-          <tr v-for="r in rebates" :key="r.min_units"><td><b>{{ r.min_units }}</b> cars</td><td>{{ r.rebate_pct }}%</td><td class="r"><button v-if="isAdmin" class="btn ghost sm down" @click="removeRebate(r)">Delete</button></td></tr>
+          <tr v-for="r in rebates" :key="r.min_units"><td class="ttl"><b>{{ r.min_units }}</b> won cars in a month</td><td data-label="Discount on the agent fee">{{ r.rebate_pct }}%</td><td class="r acts"><button v-if="isAdmin" class="btn ghost sm down" @click="removeRebate(r)">Delete</button></td></tr>
           <tr v-if="!rebates.length"><td colspan="3" class="muted" style="padding: 18px 4px">No rebate steps yet.</td></tr>
-          <tr v-if="isAdmin"><td><NumInput v-model="rb.min_units" placeholder="e.g. 3" style="width: 110px" /></td><td><NumInput v-model="rb.rebate_pct" decimal placeholder="e.g. 10" style="width: 110px" /> %</td><td class="r"><button class="btn sm" :disabled="!rb.min_units || !rb.rebate_pct" @click="addRebate">Add step</button></td></tr>
+          <tr v-if="isAdmin" class="addrow"><td data-label="From won cars"><NumInput v-model="rb.min_units" placeholder="e.g. 3" /></td><td data-label="Discount %"><span class="pct"><NumInput v-model="rb.rebate_pct" decimal placeholder="e.g. 10" /> %</span></td><td class="r acts"><button class="btn sm" :disabled="!rb.min_units || !rb.rebate_pct" @click="addRebate">Add step</button></td></tr>
         </table>
       </div>
     </template>
@@ -409,5 +409,23 @@ textarea { background: var(--s2); border: 1px solid var(--line); border-radius: 
 .dialog { background: var(--s1); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; width: 100%; max-width: 640px; display: grid; gap: 14px; max-height: calc(100vh - 32px); overflow: auto; }
 .contacts { border-top: 1px solid var(--line); padding-top: 12px; }
 .down { color: var(--bad); }
+.tcard { overflow-x: auto; padding: 4px 14px; }
+.stack { display: grid; gap: 1px; justify-items: end; text-align: right; }
+.addrow input { width: 110px; } .pct { display: inline-flex; align-items: center; gap: 6px; }
+.sinput { width: 280px; max-width: 100%; }
 @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  /* a table is too wide for a phone: every row becomes a card with its labels */
+  .tcard { background: none; border: 0; box-shadow: none; padding: 0; overflow: visible; }
+  .t thead { display: none; }
+  .t, .t tbody, .t tr { display: block; width: 100%; }
+  .t tr { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 14px; margin: 0 0 10px; }
+  .t td { display: flex; justify-content: space-between; align-items: center; gap: 14px; border: 0 !important; padding: 5px 0 !important; text-align: right !important; background: none !important; }
+  .t td[data-label]::before { content: attr(data-label); color: var(--mu); font-size: 12.5px; text-align: left; flex: none; }
+  .t td.ttl { justify-content: flex-start; font-size: 16px; text-align: left !important; padding: 4px 0 8px !important; margin-bottom: 4px; border-bottom: 1px solid var(--line) !important; }
+  .t td.acts { justify-content: flex-end; padding-top: 10px !important; }
+  .addrow input { width: 150px; } .addrow .pct { justify-content: flex-end; }
+  .hdr { flex-direction: column; align-items: stretch; gap: 10px; } .hdr .btn { width: 100%; }
+  .sinput { width: 100% !important; flex: 1 1 100%; } .addbtn { width: 100%; }
+}
 </style>

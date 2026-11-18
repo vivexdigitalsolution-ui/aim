@@ -61,14 +61,14 @@
         <thead><tr><th>On</th><th>Source</th><th>Type</th><th>Make / model</th><th>Years</th><th>Scores</th><th>Model codes</th><th>Last run</th><th></th></tr></thead>
         <tbody>
           <tr v-for="t in rows" :key="t.id" :class="{ off: !t.enabled }">
-            <td><input type="checkbox" :checked="t.enabled" @change="patch(t, { enabled: ($event.target as HTMLInputElement).checked })" /></td>
-            <td>{{ t.source.toUpperCase() }}</td><td>{{ t.lot_type === 'bid' ? 'Cars' : 'History' }}</td>
-            <td><b>{{ t.brand_name }}</b> {{ t.model_name }}</td>
-            <td>{{ t.year_from || '?' }}–{{ t.year_to || 'now' }}</td>
-            <td>{{ t.scores?.length ? t.scores.join(' ') : (t.score_min != null ? t.score_min + '+' : 'default') }}</td>
-            <td>{{ t.model_codes?.length ? t.model_codes.join(', ') : 'all' }}</td>
-            <td class="muted small">{{ t.last_run_at ? new Date(t.last_run_at).toLocaleDateString('en-GB') : 'never' }}</td>
-            <td class="nw"><button class="btn ghost sm" @click="startEdit(t)">Edit</button> <button class="btn ghost sm" :disabled="busy" @click="remove(t)">Delete</button></td>
+            <td data-label="On"><input type="checkbox" :checked="t.enabled" @change="patch(t, { enabled: ($event.target as HTMLInputElement).checked })" /></td>
+            <td data-label="Source">{{ t.source.toUpperCase() }}</td><td data-label="Type">{{ t.lot_type === 'bid' ? 'Cars' : 'History' }}</td>
+            <td class="ttl"><b>{{ t.brand_name }}</b> {{ t.model_name }}</td>
+            <td data-label="Years">{{ t.year_from || '?' }}–{{ t.year_to || 'now' }}</td>
+            <td data-label="Scores">{{ t.scores?.length ? t.scores.join(' ') : (t.score_min != null ? t.score_min + '+' : 'default') }}</td>
+            <td data-label="Model codes">{{ t.model_codes?.length ? t.model_codes.join(', ') : 'all' }}</td>
+            <td class="muted small" data-label="Last run">{{ t.last_run_at ? new Date(t.last_run_at).toLocaleDateString('en-GB') : 'never' }}</td>
+            <td class="nw acts"><button class="btn ghost sm" @click="startEdit(t)">Edit</button> <button class="btn ghost sm" :disabled="busy" @click="remove(t)">Delete</button></td>
           </tr>
         </tbody>
       </table></div>
@@ -192,4 +192,14 @@ onMounted(async () => {
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: grid; place-items: center; z-index: 50; padding: 16px; }
 .box { width: min(520px, 100%); }
 @media (max-width: 640px) { .two { grid-template-columns: 1fr; } }
+@media (max-width: 760px) {
+  .scroll { overflow: visible; }
+  .tbl thead { display: none; }
+  .tbl, .tbl tbody, .tbl tr { display: block; width: 100%; }
+  .tbl tr { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin: 0 0 10px; background: var(--card); }
+  .tbl td { display: flex; justify-content: space-between; align-items: center; gap: 14px; border: 0 !important; padding: 5px 0 !important; text-align: right; }
+  .tbl td[data-label]::before { content: attr(data-label); color: var(--mu); font-size: 12.5px; flex: none; text-align: left; }
+  .tbl td.ttl { justify-content: flex-start; font-size: 15px; text-align: left; border-bottom: 1px solid var(--line) !important; padding-bottom: 8px !important; margin-bottom: 4px; }
+  .tbl td.acts { justify-content: flex-end; padding-top: 10px !important; }
+}
 </style>
