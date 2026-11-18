@@ -1,6 +1,13 @@
 <template>
-  <div class="authbox card">
-    <div class="logo" style="font-size: 20px">Dealer <b>PublicGo</b></div>
+  <div class="loginpage">
+    <div class="loginhero">
+      <div class="logo">Dealer <b>PublicGo</b></div>
+      <div><h2>Japan auction cars, priced in RM</h2><p>See the import price, a suggested bid and the closing time of every car. Place your bid order in a minute.</p></div>
+      <div />
+    </div>
+    <div class="loginform">
+  <div class="authbox">
+    <h1>{{ register ? 'Create your account' : 'Welcome back' }}</h1>
     <p class="muted" style="margin: 0">{{ register ? 'Create your dealer account. We activate it after checking your details.' : 'Sign in to see the cars and place bid orders.' }}</p>
     <template v-if="register">
       <label>Company name<input v-model="company" autocomplete="organization" /></label>
@@ -14,6 +21,8 @@
     <button class="btn" :disabled="busy" @click="submit">{{ register ? 'Create account' : 'Sign in' }}</button>
     <a v-if="!register" href="#" class="small" @click.prevent="forgot">Forgot your password?</a>
     <a href="#" class="small" @click.prevent="register = !register; error = ''; done = ''">{{ register ? 'I already have an account' : 'New dealer? Create an account' }}</a>
+  </div>
+    </div>
   </div>
 </template>
 

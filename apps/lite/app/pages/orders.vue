@@ -4,7 +4,7 @@
     <p class="muted" style="margin: 0 0 16px">Your orders and what happened to them. Won cars show the price paid at the auction.</p>
     <div v-if="err" class="err">{{ err }}</div>
     <div v-if="loading" class="muted">Loading ...</div>
-    <div v-else-if="!orders.length" class="card muted">No bid orders yet. <NuxtLink to="/">Browse the cars</NuxtLink>.</div>
+    <div v-else-if="!orders.length" class="card muted">No bid orders yet. <NuxtLink to="/cars">Browse the cars</NuxtLink>.</div>
 
     <div class="grid">
       <div v-for="o in orders" :key="o.id" class="card order">

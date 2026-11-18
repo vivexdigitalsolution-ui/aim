@@ -1,6 +1,6 @@
 <template>
   <div>
-    <a href="/" class="small" @click.prevent="back">← All cars</a>
+    <a href="/cars" class="small" @click.prevent="back">← All cars</a>
     <div v-if="err" class="err" style="margin-top: 10px">{{ err }}</div>
     <div v-if="loading" class="muted" style="margin-top: 14px">Loading ...</div>
     <div v-else-if="!car" class="card muted" style="margin-top: 14px">This car is no longer available.</div>
@@ -107,7 +107,7 @@ const now = useNow()
 const router = useRouter()
 const { rate, loadRate, rm, yen, rmToBidJpy, left, cur, loadCur, setCur, money } = useLite()
 /** Back to the list as it was (filters and all); a car opened from a link goes to the plain list. */
-function back() { if (import.meta.client && (window.history.state as any)?.back) router.back(); else navigateTo('/') }
+function back() { if (import.meta.client && (window.history.state as any)?.back) router.back(); else navigateTo('/cars') }
 const watch = useWatch()
 const watching = computed(() => !!car.value && watch.has(car.value.id))
 async function star() { try { await watch.toggle(car.value.id) } catch (e: any) { err.value = e.message } }

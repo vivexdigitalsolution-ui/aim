@@ -4,7 +4,7 @@
     <p class="muted" style="margin: 0 0 16px">Cars you starred. We send you an alert when one of them is about to close. Press the star on a car to add or remove it.</p>
     <div v-if="err" class="err" style="margin-bottom: 12px">{{ err }}</div>
     <div v-if="loading" class="muted">Loading ...</div>
-    <div v-else-if="!cars.length" class="card muted">Nothing starred yet. <NuxtLink to="/">Browse the cars</NuxtLink> and press the star on the ones you like.</div>
+    <div v-else-if="!cars.length" class="card muted">Nothing starred yet. <NuxtLink to="/cars">Browse the cars</NuxtLink> and press the star on the ones you like.</div>
     <div v-else class="grid cars">
       <NuxtLink v-for="c in cars" :key="c.id" :to="`/car/${c.id}`" class="card car">
         <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /></div>
