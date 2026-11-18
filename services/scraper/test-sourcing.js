@@ -59,9 +59,24 @@ async function main() {
     for (let i = 0; i < 4; i++) { const r = await req(mem, 'AIM TEST CAR ' + i); if (r.error) allOk = false; else m.push(r.data.id) }
     ok(allOk, 'a Member sends 4 requests')
 
+    console.log('\n-- Partner: priority and pre-sold (needs migration 32) --')
+    const par = await makeUser('partner', { role: 'ap_holder', status: 'active', tier: 'partner' }); made.push(par.id)
+    const p1 = await req(par, 'AIM TEST PARTNER CAR', { presold: true, needed_by: '2030-01-31' })
+    ok(!p1.error, 'a Partner sends a pre-sold request' + (p1.error ? ': ' + p1.error.message : ''))
+    const pRow = (await admin.from('sourcing_requests').select('priority,presold,needed_by').eq('id', p1.data?.id).single()).data
+    ok(pRow?.priority === true && pRow.presold === true && pRow.needed_by === '2030-01-31', 'it is marked priority and pre-sold, with the date')
+    const mPre = await req(mem, 'AIM TEST MEMBER PRESOLD', { presold: true })
+    ok(!!mPre.error && /Partner/.test(mPre.error.message), 'a Member CANNOT send a pre-sold request')
+    const selfPrio = await mem.c.from('sourcing_requests').insert({ ap_id: mem.id, model: 'AIM TEST SELF PRIORITY', priority: true })
+    ok(!!selfPrio.error, 'a dealer CANNOT set priority themselves')
+    const mReg = await req(mem, 'AIM TEST MEMBER REGULAR')
+    ok(!mReg.error && (await admin.from('sourcing_requests').select('priority').eq('id', mReg.data.id).single()).data.priority === false, 'a Member request is not priority')
+    const sPre = await staff.c.from('notifications').select('title').eq('kind', 'sourcing_new').like('title', 'PRE-SOLD%')
+    ok((sPre.data || []).length >= 1, 'staff alert says PRE-SOLD')
+
     console.log('\n-- who can do what --')
     ok(((await free.c.from('sourcing_requests').select('id')).data || []).length === 2, 'a dealer sees only their own requests')
-    ok(((await staff.c.from('sourcing_requests').select('id').like('model', 'AIM TEST%')).data || []).length === 6, 'staff see everyone\'s')
+    ok(((await staff.c.from('sourcing_requests').select('id').like('model', 'AIM TEST%')).data || []).length === 8, 'staff see everyone\'s')
     const forged = await free.c.from('sourcing_requests').insert({ ap_id: mem.id, model: 'AIM TEST FORGED' })
     ok(!!forged.error, 'a dealer CANNOT send a request in another dealer\'s name')
     const preset = await mem.c.from('sourcing_requests').insert({ ap_id: mem.id, model: 'AIM TEST X', status: 'found' })

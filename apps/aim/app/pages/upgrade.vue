@@ -19,7 +19,7 @@ const { profile } = useAuth()
 const tiers = [
   { key: 'free', name: 'Free', features: ['Find by feature: search every open car by what is on it', 'Auction listings and photos'] },
   { key: 'member', name: 'Member', features: ['Everything in Free', 'Today for you: cars ranked by room to bid', 'Margin analysis: max bid and profit for your target margin', 'Malaysian market price range by catalog variant'] },
-  { key: 'partner', name: 'Partner', features: ['Everything in Member', 'Bid orders and bid tracking', 'Your own buy list and alerts', 'Pre-sold sourcing requests'] },
+  { key: 'partner', name: 'Partner', features: ['Everything in Member', 'Bid orders and bid tracking', 'Your own buy list and alerts', 'Priority sourcing: your requests are answered first', 'Pre-sold sourcing requests for a customer who is waiting', 'A lower agent fee for committed monthly volume (agreed with us)'] },
 ]
 </script>
 
