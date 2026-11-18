@@ -25,6 +25,7 @@ const reviewCount = useState<number | null>('review-count', () => null)
 const bidCount = useState<number | null>('bid-count', () => null)
 const alertCount = useState<number | null>('alert-count', () => null)
 const pendingAps = useState<number | null>('pending-aps', () => null)
+const openRequests = useState<number | null>('open-requests', () => null)
 const db = useDb()
 const { level: sysLevel, label: sysLabel, load: loadStatus } = useSystemStatus()
 const items = computed<NavItem[]>(() => [
@@ -35,6 +36,7 @@ const items = computed<NavItem[]>(() => [
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
   { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },
   { to: '/watchlist', label: 'Watchlist', short: 'Watch', icon: 'today' },
+  { to: '/requests', label: isStaff.value ? 'Sourcing requests' : 'Find me a car', short: isStaff.value ? 'Requests' : 'Request', icon: 'search', badge: isStaff.value ? openRequests.value || null : null },
   ...(!isStaff.value && hasTier('member') ? [{ to: '/orders', label: 'My bid orders', short: 'Orders', icon: 'bids' }] : []),
   { to: '/alerts', label: 'Alerts', short: 'Alerts', icon: 'bell', badge: alertCount.value || null },
   ...(isStaff.value ? [{ to: '/aps', label: 'AP holders', short: 'APs', icon: 'users', badge: pendingAps.value || null }] : []),
@@ -44,11 +46,13 @@ async function loadCounts() {
   const a = await db.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null)
   if (a.count != null) alertCount.value = a.count
   if (!isStaff.value) return
-  const [b, r, p] = await Promise.all([
+  const [b, r, p, q] = await Promise.all([
     db.from('bids').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     db.from('lot_docket_decisions').select('lot_id', { count: 'exact', head: true }).eq('status', 'review'),
     db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'ap_holder').eq('status', 'pending'),
+    db.from('sourcing_requests').select('id', { count: 'exact', head: true }).eq('status', 'open'),
   ])
+  if (q.count != null) openRequests.value = q.count
   if (b.count != null) bidCount.value = b.count
   if (r.count != null) reviewCount.value = r.count
   if (p.count != null) pendingAps.value = p.count
