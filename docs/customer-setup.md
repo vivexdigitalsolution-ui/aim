@@ -23,3 +23,6 @@ Also add your app address to Authentication > URL Configuration > Redirect URLs 
 - Pick a make, model, year, mileage and features, check the **Preview**, set the hours, **Send the invitation**.
 - Not opened yet: **Send the invitation again**. Extend with **+24 h / +48 h**, or **End access now**.
 - The customer sees photos, features and specs only: no price, venue, lot number or auction sheet. A heart on a car alerts staff.
+
+## No command line? Deploy from the Supabase dashboard
+The Supabase CLI is not installed on this PC. Instead: Supabase dashboard > Edge Functions > **Deploy a new function** > Via Editor, name it `invite-customer`, paste the whole content of `supabase/functions/invite-customer/index.ts`, and Deploy. Leave "Verify JWT" on.
