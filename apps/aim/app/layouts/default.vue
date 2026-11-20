@@ -12,7 +12,19 @@
       </div>
     </aside>
     <main class="main"><slot /></main>
-    <nav class="tabbar"><NavPill :items="items" mobile /></nav>
+    <nav class="tabbar">
+      <NavPill :items="barItems" mobile />
+      <button v-if="moreItems.length" type="button" class="morebtn" :class="{ on: moreOpen }" @click="moreOpen = !moreOpen">
+        <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg><span>More</span>
+      </button>
+    </nav>
+    <div v-if="moreOpen" class="moreback" @click="moreOpen = false">
+      <div class="moresheet" @click.stop>
+        <NuxtLink v-for="it in moreItems" :key="it.to" :to="it.to" class="moreitem" @click="moreOpen = false"><span class="mi" v-html="NAV_ICONS[it.icon]" /><span class="ml">{{ it.short || it.label }}</span><span v-if="it.badge" class="n">{{ it.badge }}</span></NuxtLink>
+        <NuxtLink to="/account" class="moreitem" @click="moreOpen = false"><span class="mi" v-html="NAV_ICONS.account" /><span class="ml">Account</span></NuxtLink>
+        <button type="button" class="moreitem out" @click="moreOpen = false; logout()"><span class="mi" v-html="NAV_ICONS.signout" /><span class="ml">Sign out</span></button>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -28,22 +40,28 @@ const pendingAps = useState<number | null>('pending-aps', () => null)
 const openRequests = useState<number | null>('open-requests', () => null)
 const db = useDb()
 const { level: sysLevel, label: sysLabel, load: loadStatus } = useSystemStatus()
-const items = computed<NavItem[]>(() => profile.value?.role === 'customer' ? [{ to: '/', label: 'Home', short: 'Home', icon: 'today' }, { to: '/for-you', label: 'Cars for you', short: 'Cars', icon: 'cars' }] : [
-  { to: '/', label: 'Dashboard', short: 'Home', icon: 'today' },
+const items = computed<NavItem[]>(() => profile.value?.role === 'customer' ? [{ to: '/', label: 'Home', short: 'Home', icon: 'home' }, { to: '/for-you', label: 'Cars for you', short: 'Cars', icon: 'cars' }] : [
+  { to: '/', label: 'Dashboard', short: 'Home', icon: 'home' },
   { to: '/cars', label: 'Cars', short: 'Cars', icon: 'cars' },
-  ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }, { to: '/explorer', label: 'Market explorer', short: 'Explorer', icon: 'chart' }, { to: '/history', label: 'History price', short: 'History', icon: 'tag' }, ...(isStaff.value ? [{ to: '/market', label: 'Market prices', short: 'Prices', icon: 'tag' }] : [])] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'today' }]),
-  ...(isStaff.value ? [{ to: '/bids', label: 'Bid pipeline', short: 'Bids', icon: 'bids', badge: bidCount.value || null }, { to: '/lists', label: 'Dealer lists', short: 'Lists', icon: 'lists' }, { to: '/kpi', label: 'KPIs', short: 'KPIs', icon: 'chart' }, { to: '/segments', label: 'Segments', short: 'Segments', icon: 'tag' }, { to: '/customers', label: 'Walk-in customers', short: 'Customers', icon: 'users' }, { to: '/costing', label: 'Order costing', short: 'Costing', icon: 'tag' }, { to: '/offer', label: 'Offer report', short: 'Offer', icon: 'lists' }, { to: '/targets', label: 'Scrape targets', short: 'Targets', icon: 'search' }] : []),
-  { to: '/calculator', label: 'Import calculator', short: 'Calc', icon: 'chart' },
-  ...(!isStaff.value && hasTier('member') ? [{ to: '/buylist', label: 'My buy list', short: 'Buy list', icon: 'lists' }] : []),
+  ...(hasTier('member') ? [{ to: '/today', label: 'Today for you', short: 'Today', icon: 'today' }, { to: '/margin', label: 'Margin analysis', short: 'Margin', icon: 'margin' }, { to: '/explorer', label: 'Market explorer', short: 'Explorer', icon: 'explorer' }, { to: '/history', label: 'History price', short: 'History', icon: 'history' }, ...(isStaff.value ? [{ to: '/market', label: 'Market prices', short: 'Prices', icon: 'prices' }] : [])] : [{ to: '/upgrade', label: 'Upgrade', short: 'Upgrade', icon: 'upgrade' }]),
+  ...(isStaff.value ? [{ to: '/bids', label: 'Bid pipeline', short: 'Bids', icon: 'bids', badge: bidCount.value || null }, { to: '/lists', label: 'Dealer lists', short: 'Lists', icon: 'lists' }, { to: '/kpi', label: 'KPIs', short: 'KPIs', icon: 'chart' }, { to: '/segments', label: 'Segments', short: 'Segments', icon: 'segments' }, { to: '/customers', label: 'Walk-in customers', short: 'Customers', icon: 'customers' }, { to: '/costing', label: 'Order costing', short: 'Costing', icon: 'costing' }, { to: '/offer', label: 'Offer report', short: 'Offer', icon: 'offer' }, { to: '/targets', label: 'Scrape targets', short: 'Targets', icon: 'targets' }] : []),
+  { to: '/calculator', label: 'Import calculator', short: 'Calc', icon: 'calc' },
+  ...(!isStaff.value && hasTier('member') ? [{ to: '/buylist', label: 'My buy list', short: 'Buy list', icon: 'buylist' }] : []),
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
   { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },
   { to: '/watchlist', label: 'Watchlist', short: 'Watch', icon: 'star' },
-  { to: '/preferences', label: 'My preferences', short: 'Prefs', icon: 'tag' },
-  { to: '/requests', label: isStaff.value ? 'Sourcing requests' : 'Find me a car', short: isStaff.value ? 'Requests' : 'Request', icon: 'search', badge: isStaff.value ? openRequests.value || null : null },
-  ...(!isStaff.value && hasTier('member') ? [{ to: '/orders', label: 'My bid orders', short: 'Orders', icon: 'bids' }] : []),
+  { to: '/preferences', label: 'My preferences', short: 'Prefs', icon: 'prefs' },
+  { to: '/requests', label: isStaff.value ? 'Sourcing requests' : 'Find me a car', short: isStaff.value ? 'Requests' : 'Request', icon: 'request', badge: isStaff.value ? openRequests.value || null : null },
+  ...(!isStaff.value && hasTier('member') ? [{ to: '/orders', label: 'My bid orders', short: 'Orders', icon: 'orders' }] : []),
   { to: '/alerts', label: 'Alerts', short: 'Alerts', icon: 'bell', badge: alertCount.value || null },
   ...(isStaff.value ? [{ to: '/aps', label: 'AP holders', short: 'APs', icon: 'users', badge: pendingAps.value || null }] : []),
 ])
+// phone bottom bar: 4 main pages + a More button that opens the rest
+const moreOpen = ref(false)
+watch(() => route.path, () => { moreOpen.value = false })
+const mainTo = computed(() => profile.value?.role === 'customer' ? ['/', '/for-you'] : isStaff.value ? ['/', '/cars', '/bids', '/review'] : ['/', '/cars', '/watchlist', hasTier('member') ? '/orders' : '/calculator'])
+const barItems = computed(() => mainTo.value.map((t) => items.value.find((i) => i.to === t)).filter(Boolean) as NavItem[])
+const moreItems = computed(() => (profile.value?.role === 'customer' ? [] : items.value.filter((i) => !mainTo.value.includes(i.to))))
 // badge counts for staff: bid orders waiting to be placed, dockets waiting for a decision (refreshed every minute)
 async function loadCounts() {
   if (profile.value?.role === 'customer') return
@@ -68,6 +86,21 @@ async function logout() { await signOut(); await navigateTo('/login') }
 </script>
 
 <style scoped>
+.morebtn { display: none; }
+.moreback { display: none; }
+@media (max-width: 760px) {
+  .tabbar :deep(.navwrap) { flex: 4 1 0; min-width: 0; width: auto; }
+  .morebtn { display: flex; flex: 1 1 0; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 48px; border: 0; background: none; color: var(--mu); font-size: 10px; border-radius: 10px; cursor: pointer; min-width: 0; }
+  .morebtn svg { width: 18px; height: 18px; } .morebtn.on { color: var(--ac); }
+  .moreback { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, .55); z-index: 20; }
+  .moresheet { position: absolute; left: 10px; right: 10px; bottom: calc(76px + env(safe-area-inset-bottom)); max-height: 70vh; overflow-y: auto; background: var(--s2); border: 1px solid var(--line); border-radius: 16px; padding: 6px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+  .moreitem { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 84px; padding: 8px 4px; border: 0; background: none; color: inherit; text-decoration: none; text-align: center; border-radius: 12px; cursor: pointer; }
+  .moreitem:active { background: var(--s3); } .moreitem.out { color: var(--bad); }
+  .moreitem .mi { width: 44px; height: 44px; border-radius: 14px; background: var(--s3); display: grid; place-items: center; color: var(--ac); } .moreitem.out .mi { color: var(--bad); }
+  .moreitem .mi :deep(svg) { width: 22px; height: 22px; }
+  .moreitem .ml { font-size: 11.5px; line-height: 1.2; color: var(--tx); overflow-wrap: anywhere; }
+  .moreitem .n { position: absolute; top: 4px; right: 14px; font-size: 10px; background: var(--ac); color: #1a0b05; border-radius: 20px; padding: 1px 6px; font-weight: 700; }
+}
 .acctlink { display: block; text-decoration: none; color: inherit; }
 .acctlink small { display: block; color: var(--mu); font-size: 11px; }
 .sysline { display: flex; align-items: center; gap: 7px; margin-top: 8px; color: var(--mu); font-size: 12px; text-decoration: none; }
