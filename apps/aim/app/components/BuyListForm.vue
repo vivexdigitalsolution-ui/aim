@@ -11,7 +11,7 @@
       <label class="f">Makes you buy (comma separated, empty = any)<input v-model="brands" placeholder="Toyota, Lexus" /></label>
       <label class="f">Models (comma separated, empty = any)<input v-model="models" placeholder="Alphard, Vellfire, Harrier" /></label>
       <label class="f">Not older than (build year)<input v-model.number="f.year_from" type="number" min="2000" :max="new Date().getFullYear() + 1" placeholder="e.g. 2021" /></label>
-      <label class="f">Budget per car (RM, all in: landed cost + prep + AP fee)<input v-model.number="f.budget_myr" type="number" step="10000" placeholder="empty = no limit" /></label>
+      <label class="f">Budget per car (RM, all in: landed cost + prep + AP fee)<NumInput v-model="f.budget_myr" placeholder="empty = no limit" /></label>
       <label class="f">Minimum margin (% on cost)<input v-model.number="f.min_margin_pct" type="number" min="0" max="60" step="1" /></label>
       <label class="f">APs you still have this year<input v-model.number="f.aps_left" type="number" min="0" /></label>
       <label class="f">How fast you sell on

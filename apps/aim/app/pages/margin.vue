@@ -6,7 +6,8 @@
 
     <!-- ONE CAR: what a bid earns -->
     <template v-else-if="car">
-      <p class="sub"><NuxtLink to="/today" class="ac">← Today for you</NuxtLink> · {{ car.brand }} {{ car.model }} · {{ [car.grade, car.mfg_year, car.mileage_km != null ? car.mileage_km.toLocaleString('en-US') + ' km' : null].filter(Boolean).join(' · ') }}</p>
+      <BackLink to="/today">Today for you</BackLink>
+      <p class="sub">{{ car.brand }} {{ car.model }} · {{ [car.grade, car.mfg_year, car.mileage_km != null ? car.mileage_km.toLocaleString('en-US') + ' km' : null].filter(Boolean).join(' · ') }}</p>
 
       <div v-if="!ev.market" class="card muted">No market price yet for this car ({{ car.level === 'none' ? 'it is not linked to the catalog' : 'CarzNexus has no linked listing for it' }}). Nothing to compare against, so no margin is shown.</div>
       <div v-else-if="car.dutyMyr == null" class="card muted">No docket is used for this car yet (see Docket review), so the duty and the margin are unknown.</div>
@@ -61,8 +62,8 @@
           </div>
           <div class="row wrap" style="gap: 14px; margin-top: 12px">
             <label class="fld">Target margin %<input v-model.number="targetPct" type="number" min="0" max="60" /></label>
-            <label class="fld">Recon (RM)<input v-model.number="reconMyr" type="number" min="0" step="500" /></label>
-            <label class="fld">AP fee (RM)<input v-model.number="apFeeMyr" type="number" min="0" step="500" /></label>
+            <label class="fld">Recon (RM)<NumInput v-model="reconMyr" /></label>
+            <label class="fld">AP fee (RM)<NumInput v-model="apFeeMyr" /></label>
           </div>
         </div>
 

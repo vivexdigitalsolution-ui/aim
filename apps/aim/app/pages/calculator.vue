@@ -34,21 +34,21 @@
 
         <h2 style="margin-top: 16px">2. What do you know?</h2>
         <div class="seg"><button :class="{ on: mode === 'landed' }" @click="mode = 'landed'; result = null">I know the car price</button><button :class="{ on: mode === 'maxbid' }" @click="mode = 'maxbid'; result = null">I know the selling price</button></div>
-        <label v-if="mode === 'landed'" class="f">Car price at auction (¥)<input v-model.number="bodyJpy" type="number" step="10000" min="0" /></label>
+        <label v-if="mode === 'landed'" class="f">Car price at auction (¥)<NumInput v-model="bodyJpy" /></label>
         <template v-else>
-          <label class="f">Selling price in Malaysia (RM)<input v-model.number="sellMyr" type="number" step="1000" min="0" /></label>
+          <label class="f">Selling price in Malaysia (RM)<NumInput v-model="sellMyr" /></label>
           <label class="f">Margin you want (%)<input v-model.number="targetPct" type="number" min="0" max="60" /></label>
         </template>
-        <label v-if="mode === 'landed'" class="f">Selling price in Malaysia (RM, optional, to see your margin)<input v-model.number="sellMyr" type="number" step="1000" min="0" /></label>
+        <label v-if="mode === 'landed'" class="f">Selling price in Malaysia (RM, optional, to see your margin)<NumInput v-model="sellMyr" /></label>
 
         <details style="margin-top: 10px">
           <summary class="small ac" style="cursor: pointer">Rate and fees (change if yours differ)</summary>
           <div class="two2">
-            <label class="f">¥1 = RM<input v-model.number="rate" type="number" step="0.0001" min="0" /></label>
-            <label class="f">AP fee (RM)<input v-model.number="apFee" type="number" step="500" min="0" /></label>
-            <label class="f">Port clearance (RM)<input v-model.number="port" type="number" step="100" min="0" /></label>
-            <label class="f">Inland transfer (RM)<input v-model.number="inland" type="number" step="50" min="0" /></label>
-            <label class="f">Recon / prep (RM)<input v-model.number="recon" type="number" step="500" min="0" /></label>
+            <label class="f">¥1 = RM<NumInput v-model="rate" decimal /></label>
+            <label class="f">AP fee (RM)<NumInput v-model="apFee" /></label>
+            <label class="f">Port clearance (RM)<NumInput v-model="port" /></label>
+            <label class="f">Inland transfer (RM)<NumInput v-model="inland" /></label>
+            <label class="f">Recon / prep (RM)<NumInput v-model="recon" /></label>
           </div>
         </details>
 
@@ -145,17 +145,19 @@ async function calculate() {
 
 <style scoped>
 .two { grid-template-columns: 1fr 1fr; align-items: start; }
-.two2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.two2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; } .two2 .f { margin-top: 0; }
+.two > .card { min-width: 0; }
 .list { display: grid; gap: 6px; max-height: 260px; overflow: auto; margin: 8px 0; }
 .opt { display: flex; justify-content: space-between; gap: 10px; background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; cursor: pointer; text-align: left; color: inherit; }
 .opt:hover { border-color: var(--ac); }
 .picked { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--s2); border: 1px solid var(--ac); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 8px 0; }
-.seg button { background: transparent; border: 0; color: inherit; padding: 8px 14px; cursor: pointer; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 10px 0 2px; }
+.seg button { flex: 1; background: transparent; border: 0; color: inherit; padding: 9px 10px; cursor: pointer; }
 .seg button.on { background: var(--ac); color: #000; font-weight: 700; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 10px; } .spec td { padding: 7px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); }
-.r { text-align: right; } .sum td { border-top: 2px solid var(--line); color: inherit !important; } .up { color: #3ecf8e; } .down { color: #ff6b6b; }
+.r { text-align: right; white-space: nowrap; padding-left: 10px; } .sum td { border-top: 2px solid var(--line); color: inherit !important; } .up { color: #3ecf8e; } .down { color: #ff6b6b; }
 .big { font-size: 18px; margin-bottom: 6px; }
 .warnbox { background: rgba(255, 170, 0, .12); border: 1px solid rgba(255, 170, 0, .4); border-radius: 8px; padding: 8px 10px; }
 @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .two2 { grid-template-columns: 1fr 1fr; } .seg button { padding: 8px 6px; font-size: 13px; } .spec td { font-size: 13px; } .spec td:first-child { padding-right: 10px; } .card { padding: 14px; } }
 </style>

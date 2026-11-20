@@ -21,9 +21,9 @@
       <h2>{{ isStaff ? 'Import costs: default for every AP holder' : 'My import costs' }}</h2>
       <p class="muted small">{{ isStaff ? 'Port clearance, inland transfer and AP fee added to the import price of every car. AP holders start from these and can set their own.' : 'Added to the import price of every car and in the calculator. Change them here, or directly in the import price breakdown of any car. Leave a box empty to use the team default (shown inside the box).' }}</p>
       <div class="grid3">
-        <label class="f">Port clearance (RM)<input v-model="fees.port" type="number" min="0" step="50" inputmode="numeric" :placeholder="isStaff ? '' : String(shared.port_myr)" /></label>
-        <label class="f">Inland transfer (RM)<input v-model="fees.inland" type="number" min="0" step="50" inputmode="numeric" :placeholder="isStaff ? '' : String(shared.inland_myr)" /></label>
-        <label class="f">AP fee (RM)<input v-model="fees.apFee" type="number" min="0" step="500" inputmode="numeric" :placeholder="isStaff ? '' : String(shared.ap_fee_myr)" /></label>
+        <label class="f">Port clearance (RM)<NumInput v-model="fees.port" :placeholder="isStaff ? '' : String(shared.port_myr)" /></label>
+        <label class="f">Inland transfer (RM)<NumInput v-model="fees.inland" :placeholder="isStaff ? '' : String(shared.inland_myr)" /></label>
+        <label class="f">AP fee (RM)<NumInput v-model="fees.apFee" :placeholder="isStaff ? '' : String(shared.ap_fee_myr)" /></label>
       </div>
       <div v-if="msgF" :class="okF ? 'okmsg' : 'err'" style="margin-top: 10px">{{ msgF }}</div>
       <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap"><button class="btn" :disabled="busyF" @click="saveFees">Save</button><button v-if="!isStaff" class="btn ghost" :disabled="busyF" @click="useTeam">Use the team defaults</button></div>

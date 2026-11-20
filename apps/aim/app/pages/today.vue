@@ -7,8 +7,8 @@
 
     <div class="card row wrap" style="gap: 18px; margin-bottom: 14px">
       <label class="fld">Target margin %<input v-model.number="targetPct" type="number" min="0" max="60" step="1" /></label>
-      <label class="fld">Recon / prep (RM)<input v-model.number="reconMyr" type="number" min="0" step="500" /></label>
-      <label class="fld">Your AP fee (RM)<input v-model.number="apFeeMyr" type="number" min="0" step="500" /></label>
+      <label class="fld">Recon / prep (RM)<NumInput v-model="reconMyr" /></label>
+      <label class="fld">Your AP fee (RM)<NumInput v-model="apFeeMyr" /></label>
       <div class="muted small">Margin is on cost: RM 12 back for every RM 100 put in. Price source: CarzNexus asking prices{{ marketAsOf ? ', ' + marketAsOf : '' }}. These are estimates, not sold prices.</div>
     </div>
 

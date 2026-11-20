@@ -44,7 +44,10 @@
 
         <div v-if="costDone" class="card">
           <h2>Import price breakdown</h2>
-          <div v-if="!bd" class="muted small" style="margin-top: 6px">The import cost of this car is not worked out yet. Our team is checking its customs docket.</div>
+          <div v-if="!bd || selfCalc">
+            <ImportCalc :car="car" :price-jpy="recBid?.price_jpy || (car.start_price_jpy > 0 ? car.start_price_jpy : 0)" :docket-id="docket?.id || null" :price-note="recBid ? '(the suggested bid; change it to try another price)' : '(the starting price; change it to try another price)'" />
+            <button v-if="selfCalc" class="btn ghost sm" style="margin-top: 8px" @click="selfCalc = false">Back to the standard breakdown</button>
+          </div>
           <template v-else>
             <label class="fld">Car price ({{ unit }})<NumInput v-model="bodyInput" /></label>
             <div class="muted small">{{ priceBasis }}</div>
@@ -67,6 +70,7 @@
             <div v-if="feeMsg" :class="feeOk ? 'okmsg' : 'err'" style="margin-top: 6px">{{ feeMsg }}</div>
             <div v-if="docket" class="dk">
               <div class="muted small">Docket used (Customs price guide)</div>
+              <button v-if="!isStaff" class="btn ghost sm" style="float: right" @click="selfCalc = true">Try another docket</button>
               <div><b>{{ docket.model }}</b> <span class="muted small">{{ docket.cc ? docket.cc + ' cc' : '' }} · edition {{ docket.year }}</span></div>
               <div v-if="dline?.jpy != null" class="muted small">Customs value ¥{{ dline.jpy.toLocaleString('en-US') }} for this age of car</div>
             </div>
@@ -130,6 +134,7 @@ const watching = computed(() => !!car.value && watch.has(car.value.id))
 async function star() { try { await watch.toggle(car.value.id) } catch (e: any) { err.value = e.message } }
 // suggested bid and import price breakdown
 const recBid = ref<{ price_jpy: number; sales: number; basis: string } | null>(null), bd = ref<any>(null), costDone = ref(false)
+const selfCalc = ref(false)
 const bodyInput = ref(0), priceBasis = ref('')
 const money2 = (jpy: number) => (cur.value === 'JPY' ? yen(jpy) : rm(jpy) + ' · ' + yen(jpy))
 const rmf = (n: number | null | undefined) => fmtMoney(n)

@@ -1,7 +1,7 @@
 
 <template>
   <div>
-    <NuxtLink to="/for-you" class="small ac">← All cars for you</NuxtLink>
+    <BackLink to="/for-you">All cars for you</BackLink>
     <div v-if="err" class="err" style="margin-top: 10px">{{ err }}</div>
     <div v-if="loading" class="muted" style="margin-top: 14px">Loading ...</div>
     <div v-else-if="!car" class="card muted" style="margin-top: 14px">This car is no longer available.</div>

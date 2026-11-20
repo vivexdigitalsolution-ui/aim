@@ -13,7 +13,7 @@
         <label class="f">Make<input v-model="form.brand" placeholder="Toyota" /></label>
         <label class="f">Model *<input v-model="form.model" placeholder="Alphard 2.5 Z" /></label>
         <label class="f">Not older than (year)<input v-model.number="form.year_from" type="number" placeholder="e.g. 2021" /></label>
-        <label class="f">Budget (RM, all in)<input v-model.number="form.budget_myr" type="number" step="10000" placeholder="optional" /></label>
+        <label class="f">Budget (RM, all in)<NumInput v-model="form.budget_myr" placeholder="optional" /></label>
         <div v-if="isPartner" class="f" style="grid-column: 1 / -1; border: 1px solid var(--line); border-radius: 10px; padding: 10px">
           <label class="row" style="justify-content: flex-start; gap: 8px; color: var(--tx)"><input v-model="form.presold" type="checkbox" style="width: auto; height: auto" /> <b>Pre-sold: I have a customer waiting and I will buy a matching car</b></label>
           <label v-if="form.presold" class="f" style="margin-top: 8px">Customer needs it by<input v-model="form.needed_by" type="date" style="max-width: 200px" /></label>

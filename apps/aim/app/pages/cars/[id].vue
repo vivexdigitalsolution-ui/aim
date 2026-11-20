@@ -1,7 +1,7 @@
 
 <template>
   <div>
-    <a href="/cars" class="small ac" @click.prevent="back">← All cars</a>
+    <BackLink to="/cars">All cars</BackLink>
     <div v-if="err" class="err" style="margin-top: 10px">{{ err }}</div>
     <div v-if="loading" class="muted" style="margin-top: 14px">Loading ...</div>
     <div v-else-if="!car" class="card muted" style="margin-top: 14px">This car is no longer available.</div>
@@ -26,8 +26,11 @@
         <div class="card">
           <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
-          <div class="price">{{ car.start_price_jpy > 0 ? rm(car.start_price_jpy) : 'Price at auction' }}</div>
-          <div v-if="car.start_price_jpy > 0" class="muted small">Starting price ¥{{ car.start_price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
+          <div class="row wrap" style="gap: 10px; justify-content: space-between; align-items: center">
+            <div><div class="muted small">Start price</div><div class="price" style="margin-top: 0">{{ car.start_price_jpy > 0 ? shown(car.start_price_jpy) : 'Price at auction' }}</div></div>
+            <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
+          </div>
+          <div v-if="car.start_price_jpy > 0" class="muted small">{{ cur === 'JPY' ? rm(car.start_price_jpy) : '¥' + car.start_price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template>. The final price is set at the auction.</div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">closes in {{ left(car.bid_deadline) }}</span><span class="chip">{{ fmtMytDateTime(car.bid_deadline) }} MYT</span></div>
           <div class="row wrap" style="gap: 8px; margin-top: 12px; justify-content: flex-start">
             <button class="btn ghost sm" :class="{ starred: watching }" @click="star"><StarIcon :filled="watching" />{{ watching ? 'On your watchlist' : 'Watch this car' }}</button>
@@ -42,25 +45,29 @@
 
         <div v-if="recBid" class="card">
           <h2>Recommended bid</h2>
-          <div class="price">¥{{ recBid.price_jpy.toLocaleString('en-US') }}<small v-if="rate > 0" class="muted" style="font-size: 14px; font-weight: 500"> · {{ rm(recBid.price_jpy) }}</small></div>
+          <div class="price">{{ shown(recBid.price_jpy) }}<small v-if="rate > 0" class="muted" style="font-size: 14px; font-weight: 500"> · {{ cur === 'JPY' ? rm(recBid.price_jpy) : '¥' + recBid.price_jpy.toLocaleString('en-US') }}</small></div>
           <div class="muted small">What cars like this usually sell for: the average of {{ recBid.sales }} recent sale{{ recBid.sales === 1 ? '' : 's' }} of the same model and grade ({{ recBid.basis }}), rounded up to the next ¥5,000. A guide, not a promise.</div>
           <NuxtLink v-if="!hasTier('member')" to="/upgrade" class="small ac" style="display: inline-block; margin-top: 6px">See the import cost and margin with the Member plan</NuxtLink>
         </div>
 
         <div v-if="hasTier('member')" class="card">
           <h2>Import price breakdown</h2>
-          <div v-if="costMsg" class="muted small" style="margin-top: 6px">{{ costMsg }}</div>
+          <div v-if="costMsg || selfCalc">
+            <ImportCalc :car="car" :price-jpy="recBid?.price_jpy || (car.start_price_jpy > 0 ? car.start_price_jpy : 0)" :docket-id="docket?.id || null" :price-note="recBid ? '(the recommended bid; change it to try another price)' : '(the starting price; change it to try another price)'" />
+            <button v-if="selfCalc" class="btn ghost sm" style="margin-top: 8px" @click="selfCalc = false">Back to the standard breakdown</button>
+          </div>
           <template v-else>
-            <label class="f" style="margin-top: 8px">Car price (¥) <small class="muted">{{ priceBasis }}</small>
-              <input v-model.number="bodyJpy" type="number" step="10000" min="0" />
+            <label class="f" style="margin-top: 8px">Car price (¥)
+              <NumInput v-model="bodyJpy" />
             </label>
+            <div class="muted small" style="margin-top: 4px">{{ priceBasis }}</div>
             <table v-if="pricing.importMyr != null" class="spec">
               <tr><td>Car price</td><td class="r">{{ rmf(pricing.bodyMyr) }}</td></tr>
               <tr><td>Agent fee &amp; shipping</td><td class="r">{{ rmf(pricing.agentMyr) }}</td></tr>
               <tr><td>Customs duty</td><td class="r">{{ rmf(dutyMyr) }}</td></tr>
-              <tr><td>Port clearance</td><td class="r feecell"><span>RM</span><input v-model.number="portIn" class="fee" type="number" min="0" step="50" aria-label="Port clearance in RM" /></td></tr>
-              <tr><td>Inland transfer</td><td class="r feecell"><span>RM</span><input v-model.number="inlandIn" class="fee" type="number" min="0" step="50" aria-label="Inland transfer in RM" /></td></tr>
-              <tr><td>AP fee</td><td class="r feecell"><span>RM</span><input v-model.number="apFeeIn" class="fee" type="number" min="0" step="500" aria-label="AP fee in RM" /></td></tr>
+              <tr><td>Port clearance</td><td class="r feecell"><span>RM</span><NumInput v-model="portIn" class="fee" aria-label="Port clearance in RM" /></td></tr>
+              <tr><td>Inland transfer</td><td class="r feecell"><span>RM</span><NumInput v-model="inlandIn" class="fee" aria-label="Inland transfer in RM" /></td></tr>
+              <tr><td>AP fee</td><td class="r feecell"><span>RM</span><NumInput v-model="apFeeIn" class="fee" aria-label="AP fee in RM" /></td></tr>
               <tr class="sum"><td><b>Import price</b></td><td class="r"><b>{{ rmf(pricing.importMyr) }}</b></td></tr>
               <tr v-if="marketMyr"><td>Malaysian market price (typical)</td><td class="r">{{ rmf(marketMyr) }}</td></tr>
               <tr v-if="marketMyr"><td><b>Margin</b></td><td class="r" :class="marketMyr - pricing.importMyr >= 0 ? 'up' : 'down'"><b>{{ rmf(marketMyr - pricing.importMyr) }}</b></td></tr>
@@ -84,6 +91,7 @@
             </template>
             <div v-else class="warnbox">No docket yet, so no duty. Choose one below.</div>
             <button v-if="isStaff" class="btn ghost sm" style="margin-top: 8px" @click="pickOpen = !pickOpen">{{ pickOpen ? 'Close' : docket ? 'Change docket' : 'Choose docket' }}</button>
+            <button v-if="!isStaff && docket" class="btn ghost sm" style="margin-top: 8px" @click="selfCalc = true">Try another docket</button>
             <div v-if="isStaff && pickOpen" class="panel">
               <input v-model="pickSearch" placeholder="Search this make's dockets (name or code)" />
               <button v-for="d in candidates" :key="d.id" class="opt" :disabled="busy" @click="useDocket(d)"><b>{{ d.model }}</b><span class="muted small">{{ d.cc ? d.cc + ' cc' : '' }}</span></button>
@@ -128,6 +136,10 @@ const watching = computed(() => !!car.value && watch.has(car.value.id))
 const recs = useRecommend()
 async function recommend() { try { await recs.toggle(car.value.id) } catch (e: any) { err.value = e.message } }
 async function star() { try { await watch.toggle(car.value.id) } catch (e: any) { err.value = e.message } }
+const selfCalc = ref(false)
+const cur = ref<'RM' | 'JPY'>('RM')
+function setCur(c: 'RM' | 'JPY') { cur.value = c; try { localStorage.setItem('cars-currency', c) } catch { /* private mode */ } }
+const shown = (jpy: number) => (cur.value === 'JPY' ? '¥' + Math.round(jpy).toLocaleString('en-US') : rm(jpy))
 const car = ref<any>(null), features = ref<any[]>([]), loading = ref(true), err = ref(''), pi = ref(0)
 const left = (iso: string) => timeLeft(iso, now.value).label
 const photos = computed<string[]>(() => (Array.isArray(car.value?.photos) ? car.value.photos : []))
@@ -186,9 +198,9 @@ async function loadCost(lot: any) {
       if (!bd.error && bd.data) { dutyMyr.value = Number(bd.data.duty_myr); apPort.value = Number(bd.data.port_myr); apInland.value = Number(bd.data.inland_myr); apFeeRpc.value = Number(bd.data.ap_fee_myr); if (bd.data.docket) docket.value = { ...bd.data.docket, amt_12m_24m: num(bd.data.docket.amt_12m_24m), amt_24m_36m: num(bd.data.docket.amt_24m_36m), amt_36m_48m: num(bd.data.docket.amt_36m_48m), amt_48m_60m: num(bd.data.docket.amt_48m_60m), amt_60m_plus: num(bd.data.docket.amt_60m_plus) }; decisionNote.value = '' }
     }
     marketMyr.value = l?.market ? (sellFromRow(l.market.row, l.market.wider).sellMyr || null) : null
-    const hist = l?.history?.price
-    bodyJpy.value = hist || (lot.start_price_jpy > 0 ? lot.start_price_jpy : 0)
-    priceBasis.value = hist ? '(usual winning price of this car)' : lot.start_price_jpy > 0 ? '(starting price)' : '(type the price you expect)'
+    const hist = l?.history?.price, rec = recBid.value?.price_jpy
+    bodyJpy.value = rec || hist || (lot.start_price_jpy > 0 ? lot.start_price_jpy : 0)
+    priceBasis.value = rec ? '(the recommended bid; change it to try another price)' : hist ? '(usual winning price of this car)' : lot.start_price_jpy > 0 ? '(starting price)' : '(type the price you expect)'
     if (dutyMyr.value == null && !isStaff.value) costMsg.value = 'The import cost of this car is not worked out yet. Our team is checking its customs docket.'
     if (isStaff.value) {
       const r = await refs.load()
@@ -216,12 +228,13 @@ async function useDocket(d: Docket) {
 }
 
 onMounted(async () => {
+  try { const c = localStorage.getItem('cars-currency'); if (c === 'RM' || c === 'JPY') cur.value = c } catch { /* private mode */ }
   try {
     await Promise.all([loadRate().catch(() => {}), watch.load().catch(() => {}), recs.load().catch(() => {})])
     const { data, error } = await db.from('lots').select('*').eq('id', route.params.id as string).eq('my_eligible', true).maybeSingle()
     if (error) throw error
     car.value = data
-    if (data) loadBid(data)
+    if (data) await loadBid(data).catch(() => {})
     if (data && hasTier('member')) loadCost(data)
     if (data) { const f = await db.from('lot_features').select('key,label,source,evidence').eq('lot_id', data.id); features.value = f.data || [] }
   } catch (e: any) { err.value = e.message } finally { loading.value = false }
@@ -240,6 +253,9 @@ onMounted(async () => {
 .thumbs img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; flex: none; }
 .thumbs img.on { border-color: var(--ac); }
 .starred { color: var(--ac); border-color: var(--ac); }
+.cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; }
+.cur button.on { background: var(--ac); color: #000; }
 .btn:has(.staricon) { display: inline-flex; align-items: center; gap: 6px; }
 .r { text-align: right; } .sum td { border-top: 2px solid var(--line); } .up { color: #3ecf8e; } .down { color: #ff6b6b; }
 .dk { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }

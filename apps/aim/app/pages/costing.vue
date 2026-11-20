@@ -28,9 +28,9 @@
               <label class="f">Type
                 <select v-model="deal.basis"><option value="bid_plus_fixed">Bid amount + fixed freight and insurance</option><option value="cif">All in (CIF): freight and insurance included</option></select>
               </label>
-              <label class="f">{{ deal.basis === 'cif' ? 'Dealer all-in amount (¥)' : 'Dealer bid amount (¥)' }}<input v-model.number="deal.offer" type="number" step="5000" /></label>
-              <label v-if="deal.basis === 'bid_plus_fixed'" class="f">Fixed freight + insurance (¥)<input v-model.number="deal.fixed" type="number" step="1000" :placeholder="b.agent_fee_jpy ? 'agent fee on file: ' + b.agent_fee_jpy : ''" /></label>
-              <label class="f">Give back to the dealer (¥)<input v-model.number="deal.giveback" type="number" step="1000" /></label>
+              <label class="f">{{ deal.basis === 'cif' ? 'Dealer all-in amount (¥)' : 'Dealer bid amount (¥)' }}<NumInput v-model="deal.offer" /></label>
+              <label v-if="deal.basis === 'bid_plus_fixed'" class="f">Fixed freight + insurance (¥)<NumInput v-model="deal.fixed" :placeholder="b.agent_fee_jpy ? 'agent fee on file: ' + b.agent_fee_jpy : ''" /></label>
+              <label class="f">Give back to the dealer (¥)<NumInput v-model="deal.giveback" /></label>
               <label class="f" style="grid-column: 1 / -1"><span class="row" style="justify-content: flex-start; gap: 8px; color: var(--tx)"><input v-model="deal.show" type="checkbox" style="width: auto; height: auto" /> The dealer asked to see the winning price (unticked: we invoice their amount, even if we won lower)</span></label>
             </div>
 
@@ -39,8 +39,8 @@
               <thead><tr><th>Line</th><th class="r">Amount ¥</th><th class="r">Comes back ¥</th><th>Status</th><th>Party</th><th></th></tr></thead>
               <tr v-for="(l, i) in lines" :key="l.uid">
                 <td><input v-model="l.label" /></td>
-                <td class="r"><input v-model.number="l.amount" type="number" class="num" /></td>
-                <td class="r"><input v-model.number="l.refundable" type="number" class="num" /></td>
+                <td class="r"><NumInput v-model="l.amount" negative class="num" /></td>
+                <td class="r"><NumInput v-model="l.refundable" negative class="num" /></td>
                 <td><select v-model="l.status"><option value="estimate">estimate</option><option value="confirmed">confirmed</option></select></td>
                 <td><input v-model="l.party" placeholder="who" /></td>
                 <td><a class="x" title="Remove" @click="lines.splice(i, 1)">×</a></td>
@@ -56,7 +56,7 @@
               <div class="card kpi"><small>Net actual cost</small><b>{{ yen(money.cost) }}</b><span class="muted small">cash out {{ yen(money.cash) }}</span></div>
               <div class="card kpi"><small>Profit</small><b :class="money.profit == null ? '' : money.profit >= 0 ? 'up' : 'down'">{{ yen(money.profit) }}</b><span class="muted small">{{ rmOf(money.profit) }}{{ money.margin != null ? ' · ' + money.margin + '% of the invoice' : '' }}</span></div>
               <div class="card kpi"><small>Most to bid</small><b>{{ yen(ceiling) }}</b>
-                <span class="muted small">profit wanted ¥ <input v-model.number="target" type="number" step="10000" style="width: 90px" /></span></div>
+                <span class="muted small">profit wanted ¥ <NumInput v-model="target" style="width: 90px" /></span></div>
             </div>
             <div class="row wrap" style="gap: 8px; margin-top: 12px; justify-content: flex-start">
               <button class="btn" :disabled="busy" @click="save(b)">Save</button>
@@ -74,7 +74,7 @@
         <p class="muted small" style="margin: 4px 0 10px">A new rate is a new line: the newest line that has started is used for estimates, and old lines stay as history. A line with a venue beats a line for every venue.</p>
         <div class="grid2">
           <label class="f">Cost line<select v-model="nr.item_key"><option v-for="i in items" :key="i.key" :value="i.key">{{ i.label }}</option></select></label>
-          <label class="f">Amount (¥)<input v-model.number="nr.amount_jpy" type="number" step="100" /></label>
+          <label class="f">Amount (¥)<NumInput v-model="nr.amount_jpy" negative /></label>
           <label class="f">Party (forwarder, transport company ...)<input v-model="nr.party" /></label>
           <label class="f">Venue (empty = every venue)<input v-model="nr.venue" placeholder="Yokohama" /></label>
           <label class="f">Valid from<input v-model="nr.valid_from" type="date" /></label>

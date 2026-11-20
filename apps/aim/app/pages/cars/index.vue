@@ -13,10 +13,11 @@
 
     <div class="card filters">
       <input v-model="q" placeholder="Search make or model" style="flex: 1; min-width: 180px" @keyup.enter="reload" />
+      <select v-model="kind" aria-label="Type of sale" @change="reload"><option value="bidding">Bidding</option><option value="one_price">One price</option></select>
       <select v-model="brand" @change="reload"><option value="">All makes</option><option v-for="b in brands" :key="b" :value="b">{{ b }}</option></select>
       <select v-model.number="yearFrom" aria-label="Year from" @change="reload"><option :value="0">Year from</option><option v-for="y in years" :key="y" :value="y">{{ y }}</option></select>
       <select v-model.number="yearTo" aria-label="Year to" @change="reload"><option :value="0">Year to</option><option v-for="y in years" :key="y" :value="y">{{ y }}</option></select>
-      <input v-model.number="maxRm" type="number" min="0" step="10000" placeholder="Max price RM" style="width: 150px" @keyup.enter="reload" />
+      <NumInput v-model="maxRm" placeholder="Max price RM" style="width: 150px" @keyup.enter="reload" />
       <select v-model="sort" @change="reload">
         <option value="closing">Closing soonest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option>
         <option value="year_desc">Newest year</option><option value="km_asc">Lowest mileage</option>
@@ -30,15 +31,16 @@
     <div class="muted small" style="margin: 12px 2px">{{ loading ? 'Loading ...' : total + ' car' + (total === 1 ? '' : 's') }}</div>
 
     <div class="grid cars">
-      <NuxtLink v-for="c in cars" :key="c.id" :to="`/cars/${c.id}`" class="card car">
+      <NuxtLink v-for="c in cars" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/cars/${c.id}`" class="card car">
         <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span>
-          <button v-if="isStaff" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
-          <button class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id)"><StarIcon :filled="watch.has(c.id)" /></button></div>
+          <button v-if="isStaff && !c.op" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
+          <button v-if="!c.op" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id)"><StarIcon :filled="watch.has(c.id)" /></button></div>
         <div class="body">
-          <div class="price">{{ money(c.start_price_jpy) }}</div>
-          <div v-if="marginOf(c.id) != null" class="mg" :class="marginOf(c.id)! >= 0 ? 'up' : 'down'">Margin {{ money(marginOf(c.id)!, 'myr') }}</div>
-          <div class="namerow"><div class="name">{{ c.brand }} {{ c.model }}</div><CarFlags :docket="flags.docket(c.id)" :review="flags.review(c.id)" /></div>
-          <div class="muted small">{{ [c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
+          <div class="plabel">{{ c.op ? 'One price' : 'Start price' }}</div>
+          <div class="price">{{ c.op && !(c.start_price_jpy > 0) ? 'Not open yet' : money(c.start_price_jpy) }}</div>
+          <div v-if="!c.op && marginOf(c.id) != null" class="mg" :class="marginOf(c.id)! >= 0 ? 'up' : 'down'">Margin {{ money(marginOf(c.id)!, 'myr') }}</div>
+          <div class="namerow"><div class="name">{{ c.brand }} {{ c.model }}</div><CarFlags :docket="c.op ? !!c.docket_id : flags.docket(c.id)" :review="c.op ? !!c.needs_review : flags.review(c.id)" /></div>
+          <div class="muted small">{{ [c.mfg_month && c.mfg_year ? c.mfg_year + '/' + String(c.mfg_month).padStart(2, '0') : c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
           <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="soon(c.bid_deadline) ? 'warn' : 'ac'">closes in {{ left(c.bid_deadline) }}</span></div>
         </div>
       </NuxtLink>
@@ -89,18 +91,35 @@ const marginMap = computed(() => {
   return m
 })
 const marginOf = (id: string) => marginMap.value.get(id) ?? null
-const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), maxRm = ref<number | null>(null), sort = ref('closing')
+const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), kind = ref('bidding'), maxRm = ref<number | null>(null), sort = ref('closing')
 const prefId = ref('')
 const flags = useCarFlags()
-const url = useUrlFilters('cars', { q, brand, yearFrom, yearTo, maxRm, sort, pref: prefId }, { sort: 'closing' })
+const url = useUrlFilters('cars', { q, brand, kind, yearFrom, yearTo, maxRm, sort, pref: prefId }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
 const left = (iso: string) => timeLeft(iso, now.value).label
 const soon = (iso: string) => new Date(iso).getTime() - now.value < 6 * 3600_000
 
+/** One price cars (a fixed price, no bidding): same card shape as a bidding car */
+async function fetchOnePrice(from: number) {
+  let query = db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id', { count: 'exact' }).gt('deadline', new Date().toISOString())
+  if (brand.value) query = query.eq('brand', brand.value)
+  const t = q.value.trim().replace(/[,()%]/g, ' ')
+  if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)
+  if (yearFrom.value) query = query.gte('mfg_year', yearFrom.value)
+  if (yearTo.value) query = query.lte('mfg_year', yearTo.value)
+  if (maxRm.value && rate.value > 0) query = query.lte('price_jpy', Math.round(maxRm.value / rate.value))
+  const order: Record<string, [string, boolean]> = { closing: ['deadline', true], price_asc: ['price_jpy', true], price_desc: ['price_jpy', false], year_desc: ['mfg_year', false], km_asc: ['mileage_km', true] }
+  const [col, asc] = order[sort.value] || order.closing!
+  const { data, error, count } = await query.order(col, { ascending: asc, nullsFirst: false }).range(from, from + PAGE - 1)
+  if (error) throw error
+  total.value = count || 0
+  return (data || []).map((r: any) => ({ ...r, op: true, grade: r.auction_grade, start_price_jpy: r.price_jpy, bid_deadline: r.deadline }))
+}
 async function fetchPage(from: number) {
-  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mileage_km,venue,start_price_jpy,photos,bid_deadline', { count: 'exact' }).gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true)
+  if (kind.value === 'one_price') return fetchOnePrice(from)
+  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mfg_month,mileage_km,venue,start_price_jpy,photos,bid_deadline', { count: 'exact' }).gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true)
   const ap = activePref.value
   if (ap) {
     if (ap.brands?.length) query = query.in('brand', ap.brands.map((b: string) => b.toUpperCase()))
@@ -164,6 +183,7 @@ onMounted(async () => {
 .cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; }
 .cur button.on { background: var(--ac); color: #000; }
+.plabel { font-size: 11.5px; color: var(--mu); line-height: 1.2; }
 .mg { font-size: 13px; font-weight: 700; margin: 2px 0; }
 @media (max-width: 760px) { .cars { grid-template-columns: 1fr 1fr; gap: 10px; } .filters input, .filters select { flex: 1 1 140px; } }
 @media (max-width: 460px) { .cars { grid-template-columns: 1fr; } }

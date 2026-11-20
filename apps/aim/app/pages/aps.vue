@@ -138,7 +138,7 @@
           <label class="f">WhatsApp<input v-model="nu.whatsapp" /></label>
           <template v-if="nu.role === 'ap_holder'">
             <label class="f">Plan<select v-model="nu.tier"><option value="free">Free</option><option value="member">Member</option><option value="partner">Partner</option></select></label>
-            <label class="f">Bid limit per car (¥, 0 = cannot bid yet)<input v-model.number="nu.bid_limit_jpy" type="number" step="100000" min="0" /></label>
+            <label class="f">Bid limit per car (¥, 0 = cannot bid yet)<NumInput v-model="nu.bid_limit_jpy" /></label>
             <label class="f" style="grid-column: 1 / -1">Agent fee rule<select v-model="nu.fee_rule_id"><option value="">None yet</option><option v-for="r in rules" :key="r.id" :value="r.id">{{ r.name }}</option></select></label>
           </template>
         </div>
@@ -166,8 +166,8 @@
             <select v-model="edit.tier"><option value="free">Free</option><option value="member">Member</option><option value="partner">Partner</option></select>
           </label>
           <label class="f">History price until<input v-model="edit.history_until" type="date" /></label>
-          <label class="f">Highest bid per car (¥)<input v-model.number="edit.bid_limit_jpy" type="number" inputmode="numeric" step="100000" /></label>
-          <label class="f">Total open orders cap (¥, empty = none)<input v-model.number="edit.open_limit_jpy" type="number" inputmode="numeric" step="100000" /></label>
+          <label class="f">Highest bid per car (¥)<NumInput v-model="edit.bid_limit_jpy" /></label>
+          <label class="f">Total open orders cap (¥, empty = none)<NumInput v-model="edit.open_limit_jpy" /></label>
           <label class="f" style="grid-column: 1 / -1">Service level
             <select v-model="edit.service_level_id"><option :value="null">None</option><option v-for="l in levels.filter((x) => x.active)" :key="l.id" :value="l.id">{{ l.name }} ({{ l.fee_type === 'percent' ? l.fee_value + '%' : yen(l.fee_value) }})</option></select>
           </label>
@@ -219,8 +219,8 @@
         <div class="grid2">
           <label class="f">Type<select v-model="form.fee_type"><option value="flat_jpy">Flat amount (¥)</option><option value="percent">Percent of winning price</option></select></label>
           <label class="f">{{ form.fee_type === 'percent' ? 'Percent (%)' : 'Amount (¥)' }}<input v-model.number="form.fee_value" type="number" step="any" /></label>
-          <label class="f">Winning price from (¥)<input v-model.number="form.min_price_jpy" type="number" /></label>
-          <label class="f">Winning price below (¥, empty = no limit)<input v-model.number="form.max_price_jpy" type="number" /></label>
+          <label class="f">Winning price from (¥)<NumInput v-model="form.min_price_jpy" /></label>
+          <label class="f">Winning price below (¥, empty = no limit)<NumInput v-model="form.max_price_jpy" /></label>
         </div>
         <label class="row small" style="justify-content: flex-start"><input v-model="form.is_default" type="checkbox" style="width: auto; height: auto" /> Default rule (used when the dealer has none of their own)</label>
         <label class="row small" style="justify-content: flex-start"><input v-model="form.active" type="checkbox" style="width: auto; height: auto" /> Active</label>

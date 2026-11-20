@@ -15,7 +15,7 @@
         <label class="f">Model (comma separated, empty = any)<input v-model="f.models" placeholder="Vellfire, Alphard" /></label>
         <label class="f">Year from<input v-model.number="f.year_from" type="number" placeholder="2020" /></label>
         <label class="f">Year to<input v-model.number="f.year_to" type="number" placeholder="optional" /></label>
-        <label class="f">Mileage up to (km)<input v-model.number="f.max_mileage" type="number" step="5000" placeholder="optional" /></label>
+        <label class="f">Mileage up to (km)<NumInput v-model="f.max_mileage" placeholder="optional" /></label>
         <label class="f">Access time (hours)
           <div class="row wrap" style="gap: 6px; justify-content: flex-start">
             <input v-model.number="f.hours" type="number" min="1" max="720" style="width: 90px" />

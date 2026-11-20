@@ -9,13 +9,13 @@
     <div class="card" style="margin-bottom: 16px">
       <h2>{{ f.id ? 'Edit preference' : 'New preference' }}</h2>
       <div class="grid form">
-        <label class="f">Name<input v-model="f.name" placeholder="e.g. Alphard / Vellfire 2021+" /></label>
-        <label class="f">Makes (comma separated, empty = any)<input v-model="f.brands" placeholder="Toyota, Lexus" list="brandlist" /></label>
-        <label class="f">Models (comma separated, empty = any)<input v-model="f.models" placeholder="Alphard, Vellfire" /></label>
+        <label class="f wide">Name<input v-model="f.name" placeholder="e.g. Alphard / Vellfire 2021+" /></label>
+        <label class="f wide">Makes (comma separated, empty = any)<input v-model="f.brands" placeholder="Toyota, Lexus" list="brandlist" /></label>
+        <label class="f wide">Models (comma separated, empty = any)<input v-model="f.models" placeholder="Alphard, Vellfire" /></label>
         <label class="f">Year from<input v-model.number="f.year_from" type="number" min="2000" :max="thisYear + 1" placeholder="2021" /></label>
         <label class="f">Year to<input v-model.number="f.year_to" type="number" min="2000" :max="thisYear + 1" placeholder="optional" /></label>
-        <label class="f">Highest start price (RM)<input v-model.number="f.max_price_myr" type="number" step="10000" placeholder="empty = no limit" /></label>
-        <label class="f">Lowest auction score
+        <label class="f">Highest start price (RM)<NumInput v-model="f.max_price_myr" placeholder="empty = no limit" /></label>
+        <label class="f wide">Lowest auction score
           <select v-model="f.min_score"><option :value="null">Any</option><option v-for="s in SCORES" :key="s" :value="s">{{ s }} and better</option></select>
         </label>
       </div>
@@ -90,6 +90,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.form { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.form { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px 14px; align-items: start; }
+@media (max-width: 560px) { .form { grid-template-columns: 1fr 1fr; } .form .wide { grid-column: 1 / -1; } }
 .chk { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 </style>

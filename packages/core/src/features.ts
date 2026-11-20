@@ -35,7 +35,7 @@ export const CATALOG: Def[] = [
   D('heated_seats', 'Heated seats', 'Interior', /HEATED\s*SEAT|SEAT\s*HEATER|シートヒーター/i),
   D('ventilated_seats', 'Ventilated seats', 'Interior', /VENTILATED|COOLED\s*SEAT|ベンチレーション|シートエアコン/i),
   D('captain_seats', 'Captain seats', 'Interior', /CAPTAIN|キャプテンシート|エグゼクティブラウンジ/i),
-  D('power_sliding_doors', 'Power sliding doors', 'Convenience', /POWER\s*SLID|ELECTRIC\s*SLID|両側(電動|パワー)スライド|パワースライド/i),
+  D('power_sliding_doors', 'Power sliding doors', 'Convenience', /POWER\s*SLID|ELECTRIC\s*SLID|(両側|左側|右側)?(電動|パワー|P)スライド|パワスラ|(?<![A-Z])PSD(?![A-Z])|(両側|左側|右側)PSD/i),
   D('power_tailgate', 'Power tailgate', 'Convenience', /POWER\s*(BACK|TAIL|LIFT)\s*(DOOR|GATE)|電動(バック|テール)ゲート|パワーバックドア/i),
   D('surround_camera', '360° camera', 'Safety', /(360|SURROUND|AROUND\s*VIEW|PANORAMIC\s*VIEW)\s*(°|DEGREE)?\s*(CAMERA|MONITOR|VIEW)|全方位|パノラミックビュー/i),
   D('adaptive_cruise', 'Adaptive cruise control', 'Safety', /ADAPTIVE\s*CRUISE|ACC\b|レーダークルーズ|全車速/i),
@@ -69,9 +69,9 @@ export const FEATURE_SCHEMA = {
   },
 } as const
 
-export const FEATURE_SYSTEM = `You list the features of ONE used Japanese car from its auction sheet and listing text, so a buyer can search for them (for example JBL audio, a GR body kit, a sunroof).
+export const FEATURE_SYSTEM = `You list the features of ONE used Japanese car from its auction sheet and listing text, so a buyer can search for them (for example an audio brand, a body kit, a sunroof).
 Rules:
-- Only features that are shown on the sheet or in the text. Never add a feature because the model "usually has it".
+- Only features that are shown on the sheet or in the text. If it is not printed there, the car does not have it: never add a feature because the model "usually has it", and never guess an audio or kit brand that is not printed. A feature without its printed words (evidence) is discarded.
 - source: aftermarket for non-maker parts (社外, "aftermarket", a named tuner brand); factory for equipment standard on the grade or a maker option; dealer_option for dealer-fit items; unknown when the sheet does not say.
 - Keep the evidence words exactly as printed. English names only. Do not mention any company, auction house or website name.`
 
@@ -81,9 +81,10 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(
 export function normalizeFeatures(list: { name: string; source?: FeatureSource; evidence?: string }[]): Feature[] {
   const out = new Map<string, Feature>()
   for (const f of list || []) {
-    const hay = `${f.name || ''} ${f.evidence || ''}`
-    const hits = CATALOG.filter((d) => d.re.test(hay))
-    const source = f.source || 'unknown'
+    // The sheet is the truth: a feature counts only when the words printed on the sheet (the evidence) show it. A name with no printed proof is dropped.
+    const ev = String(f.evidence || '').normalize('NFKC').trim(), source = f.source || 'unknown'
+    const hits = CATALOG.filter((d) => d.re.test(ev))
+    if (!hits.length && (!ev || CATALOG.some((d) => d.re.test(String(f.name || '').normalize('NFKC'))))) continue      // no proof, or it names a known feature the printed words do not show (a JBL guess)
     if (hits.length) hits.forEach((h) => { if (!out.has(h.key)) out.set(h.key, { key: h.key, label: h.label, group: h.group, source, evidence: f.evidence }) })
     else if (f.name && slug(f.name)) { const k = 'x:' + slug(f.name); if (!out.has(k)) out.set(k, { key: k, label: f.name, group: 'Other', source, evidence: f.evidence }) }
   }

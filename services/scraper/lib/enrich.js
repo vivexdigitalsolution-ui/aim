@@ -38,7 +38,7 @@ const READ_SCHEMA = {
 }
 
 const FEATURE_RULE = `
-- features: list every notable feature, option, package or modification shown on the sheet or in the text (audio brand such as JBL, sunroof, leather, a body kit such as GR or Modellista, 4WD, safety packages, aftermarket parts). Only what is shown, never what the model usually has. source: aftermarket for non-maker parts (社外), factory for standard or maker options, dealer_option for dealer-fit items, unknown when the sheet does not say. evidence = the exact words printed.`
+- features: list every notable feature, option, package or modification shown on the sheet or in the text (an audio brand only when its name is printed, sunroof, leather, a body kit such as GR or Modellista, 4WD, safety packages, aftermarket parts). Only what is printed, never what the model usually has: if the sheet and text do not show it, the car does not have it. evidence is required and must be the exact printed words. source: aftermarket for non-maker parts (社外), factory for standard or maker options, dealer_option for dealer-fit items, unknown when the sheet does not say. evidence = the exact words printed.`
 
 const READ_SYSTEM = `You read one used Japanese auction car for a Malaysian importer. You get the auction sheet image(s) and the scraped listing text.
 Rules:

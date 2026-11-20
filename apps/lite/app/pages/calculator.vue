@@ -145,17 +145,19 @@ async function calculate() {
 
 <style scoped>
 .two { grid-template-columns: 1fr 1fr; align-items: start; }
-.two2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.two2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; } .two2 .f { margin-top: 0; }
+.two > .card { min-width: 0; }
 .list { display: grid; gap: 6px; max-height: 260px; overflow: auto; margin: 8px 0; }
 .opt { display: flex; justify-content: space-between; gap: 10px; background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; cursor: pointer; text-align: left; color: inherit; }
 .opt:hover { border-color: var(--ac); }
 .picked { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--s2); border: 1px solid var(--ac); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin: 8px 0; }
-.seg button { background: transparent; border: 0; color: inherit; padding: 8px 14px; cursor: pointer; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 10px 0 2px; }
+.seg button { flex: 1; background: transparent; border: 0; color: inherit; padding: 9px 10px; cursor: pointer; }
 .seg button.on { background: var(--ac); color: #fff; font-weight: 700; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 10px; } .spec td { padding: 7px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); }
 .r { text-align: right; white-space: nowrap; padding-left: 10px; } .yen { display: block; font-size: 12px; color: var(--mu); font-weight: 400; } .nw { white-space: nowrap; } .note2 { display: block; margin-top: 2px; font-size: 12.5px; } .sum td { border-top: 2px solid var(--line); color: inherit !important; } .up { color: #3ecf8e; } .down { color: #ff6b6b; }
 .big { font-size: 18px; margin-bottom: 6px; }
 .warnbox { background: rgba(255, 170, 0, .12); border: 1px solid rgba(255, 170, 0, .4); border-radius: 8px; padding: 8px 10px; }
 @media (max-width: 860px) { .two { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .seg button { padding: 8px 6px; font-size: 13px; } .spec td { font-size: 13px; } .card { padding: 14px; } }
 </style>

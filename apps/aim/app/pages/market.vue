@@ -30,10 +30,10 @@
           <label class="f">Variant<select v-model="f.variantId" :disabled="!f.model"><option value="">All variants of this model</option><option v-for="v in variants" :key="v.ref_id" :value="v.ref_id">{{ v.variant }}{{ v.model_code ? ' (' + v.model_code + ')' : '' }}</option></select></label>
           <label class="f">Year from<input v-model.number="f.yearFrom" type="number" min="2000" max="2035" /></label>
           <label class="f">Year to<input v-model.number="f.yearTo" type="number" min="2000" max="2035" /></label>
-          <label class="f">Comparable cars you checked<input v-model.number="f.n" type="number" min="1" /></label>
-          <label class="f">Low (RM)<input v-model.number="f.low" type="number" step="1000" /></label>
-          <label class="f">Typical (RM)<input v-model.number="f.mid" type="number" step="1000" /></label>
-          <label class="f">High (RM)<input v-model.number="f.high" type="number" step="1000" /></label>
+          <label class="f">Comparable cars you checked<NumInput v-model="f.n" /></label>
+          <label class="f">Low (RM)<NumInput v-model="f.low" /></label>
+          <label class="f">Typical (RM)<NumInput v-model="f.mid" /></label>
+          <label class="f">High (RM)<NumInput v-model="f.high" /></label>
           <label class="f" style="grid-column: 1 / -1">Note (where you checked, mileage, condition)<input v-model="f.note" placeholder="e.g. carlist.my and mudah, low mileage cars" /></label>
         </div>
         <p class="muted small" style="margin: 8px 0 0">Low and High are the usual range for a car like this, not the extremes. The cautious sell price used for margin is between Low and Typical.</p>

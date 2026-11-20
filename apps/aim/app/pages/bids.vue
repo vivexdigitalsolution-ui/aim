@@ -53,7 +53,7 @@
           </div>
           <div class="act">
             <template v-if="wonFor === b.id">
-              <input v-model.number="wonPrice" type="number" inputmode="numeric" placeholder="Winning price ¥" style="width: 150px" />
+              <NumInput v-model="wonPrice" placeholder="Winning price ¥" style="width: 150px" />
               <span class="muted small">{{ wonPrice ? rm(wonPrice) : '' }}</span>
               <button class="btn sm" :disabled="!wonPrice || busy === b.id" @click="set(b, 'won', wonPrice)">Save win</button>
               <button class="btn ghost sm" @click="wonFor = null">Cancel</button>

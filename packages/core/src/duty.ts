@@ -37,7 +37,9 @@ export function ageBand(months: number): { band: string; field: AgeField; under1
 }
 
 export function dutyRateFor(rates: DutyRate[], cc: number, type: 'car' | 'non_car'): DutyRate | null {
-  return rates.find((r) => r.vehicle_type === type && r.is_active !== false && (r.cc_min == null || cc >= r.cc_min) && (r.cc_max == null || cc < r.cc_max)) || null
+  // the bands are inclusive at both ends (2,001-2,500 then 2,501-3,000); where two bands touch (1,800) the upper one wins
+  const hit = rates.filter((r) => r.vehicle_type === type && r.is_active !== false && (r.cc_min == null || cc >= r.cc_min) && (r.cc_max == null || cc <= r.cc_max))
+  return hit.sort((a, b) => (b.cc_min ?? -1) - (a.cc_min ?? -1))[0] || null
 }
 
 export interface DutyInput {
