@@ -23,7 +23,7 @@
           <div class="small">Some details of this car could not be read clearly from the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you bid.</div>
         </div>
         <div class="card">
-          <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>
+          <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }} · {{ closingTimeText(car.bid_deadline) }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
           <div class="row wrap" style="gap: 10px; justify-content: space-between; align-items: center">
             <div><div class="muted small">Start price</div><div class="price" style="margin-top: 0">{{ money(car.start_price_jpy) }}</div></div>
@@ -31,7 +31,7 @@
           </div>
           <div v-if="car.start_price_jpy > 0" class="muted small">{{ yen(car.start_price_jpy) }} at ¥1 = RM {{ rate }}. The final price is set at the auction.</div>
           <div class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button v-if="!isStaff" class="btn ghost sm fav" :class="{ starred: watching }" @click="star"><RailIcon name="heart" :filled="watching" />{{ watching ? 'In your favourites' : 'Add to favourites' }}</button></div>
-          <div class="row wrap" style="gap: 6px; margin-top: 10px"><span class="chip" :class="soon ? 'warn' : 'ac'">closes in {{ left(car.bid_deadline, now) }}</span><span class="chip">{{ fmtMyt(car.bid_deadline) }} MYT</span></div>
+          <div class="row wrap" style="gap: 6px; margin-top: 10px"><span class="chip" :class="chipCls(car.bid_deadline)">{{ closes(car.bid_deadline) }}</span><span v-if="!isPlaceholderDeadline(car.bid_deadline)" class="chip">{{ fmtMyt(car.bid_deadline) }} MYT</span></div>
         </div>
 
         <div v-if="recBid" class="card">
@@ -126,7 +126,7 @@
 
 <script setup lang="ts">
 import { watch as vueWatch } from 'vue'
-import { fmtMyt, offerPricing, docketLine, BID_STEP, type Docket } from '@aim/core'
+import { fmtMyt, offerPricing, docketLine, BID_STEP, type Docket, closesInfo, closingTimeText, isPlaceholderDeadline } from '@aim/core'
 
 const db = useDb()
 const route = useRoute()
@@ -184,7 +184,9 @@ const bidInput = ref<number | null>(null), note = ref(''), busy = ref(false), ms
 
 const photos = computed<string[]>(() => (Array.isArray(car.value?.photos) ? car.value.photos : []))
 const closed = computed(() => !car.value || new Date(car.value.bid_deadline).getTime() <= now.value)
-const soon = computed(() => !!car.value && new Date(car.value.bid_deadline).getTime() - now.value < 6 * 3600_000)
+const soon = computed(() => !!car.value && !isPlaceholderDeadline(car.value.bid_deadline) && new Date(car.value.bid_deadline).getTime() - now.value < 6 * 3600_000)
+const closes = (iso: string) => closesInfo(iso, now.value).text
+const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; return c === 'late' || c === 'soon' ? 'warn' : c === 'unknown' || c === 'closed' ? '' : 'ac' }
 const unit = computed(() => (cur.value === 'JPY' ? '¥' : 'RM'))
 // the bid and the car price are typed in the chosen currency; the order itself is always in yen steps of 5,000
 const bidJpy = computed(() => (cur.value === 'JPY' ? Math.floor((Number(bidInput.value) || 0) / BID_STEP) * BID_STEP : rmToBidJpy(Number(bidInput.value) || 0)))

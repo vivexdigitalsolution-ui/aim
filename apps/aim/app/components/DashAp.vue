@@ -38,7 +38,7 @@
           <NuxtLink v-for="c in watchCars" :key="c.id" :to="`/cars/${c.id}`" class="mini">
             <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span></div>
             <div class="mb"><b>{{ c.brand }} {{ c.model }}</b><small class="muted">{{ [c.mfg_year, c.grade, c.venue].filter(Boolean).join(' · ') }}</small>
-              <div class="row small"><span class="warnc">closes in {{ timeLeft(c.bid_deadline, now).label }}</span><b>{{ c.start_price_jpy > 0 ? yen(c.start_price_jpy) : '' }}</b></div></div>
+              <div class="row small"><span class="warnc">{{ closesInfo(c.bid_deadline, now).text }}</span><b>{{ c.start_price_jpy > 0 ? yen(c.start_price_jpy) : '' }}</b></div></div>
           </NuxtLink>
         </div>
       </div>
@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { timeLeft } from '@aim/core'
+import { timeLeft, closesInfo } from '@aim/core'
 
 const db = useDb()
 const now = useNow()

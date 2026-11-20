@@ -197,6 +197,9 @@ async function processBidTarget(page, target, counters) {
     console.log(`\n[PAGE ${pageNum}]`)
     const rawRows = await extractBiddingListingRows(page)
     console.log(`  Rows on page: ${rawRows.length}`)
+    // what the site shows as the closing time: "temp[14:28]" is a time, "[--:--]" means the site has not set one yet (we then save the 23:59 placeholder)
+    const noTime = rawRows.filter((r) => !r.schedule_time)
+    if (rawRows.length) console.log(`  Closing time on the site: ${rawRows.length - noTime.length} of ${rawRows.length} rows have one${noTime.length ? ` · none for ${noTime.length}, the site shows: ${[...new Set(noTime.map((r) => JSON.stringify(r.schedule_raw ?? null)))].slice(0, 3).join(', ')}` : ''}`)
     // this model has cars: remember it, and (first time only) switch its history scrape on
     if (!modelRecorded && rawRows.length) { await recordScrapedModel(target); modelRecorded = true }
     await recordGrades(target, rawRows.map((r) => gradeName(target.model_name, r.grade)))      // the variant pick list on the Scrape targets page

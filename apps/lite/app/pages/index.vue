@@ -64,7 +64,7 @@
               <div class="mb">
                 <b class="nm">{{ c.brand }} {{ c.model }}</b>
                 <div class="muted small ln">{{ [c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null].filter(Boolean).join(' · ') }}</div>
-                <div class="muted small ln">{{ c.venue }} · closes in {{ left(c.bid_deadline, now) }}</div>
+                <div class="muted small ln">{{ c.venue }} · {{ closes(c.bid_deadline) }}</div>
                 <div class="pw"><small>Start price</small><div class="pr">{{ money(c.start_price_jpy) }}</div></div>
               </div>
             </NuxtLink>
@@ -81,7 +81,7 @@
               <div class="mb">
                 <b class="nm">{{ c.brand }} {{ c.model }}</b>
                 <div class="muted small ln">{{ [c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null].filter(Boolean).join(' · ') }}</div>
-                <div class="muted small ln">{{ c.venue }} · closes in {{ left(c.bid_deadline, now) }}</div>
+                <div class="muted small ln">{{ c.venue }} · {{ closes(c.bid_deadline) }}</div>
                 <div class="pw"><small>Start price</small><div class="pr">{{ money(c.start_price_jpy) }}</div></div>
               </div>
             </NuxtLink>
@@ -118,7 +118,8 @@
 </template>
 
 <script setup lang="ts">
-import { fmtMyt } from '@aim/core'
+const closes = (iso: string) => closesInfo(iso, now.value).text
+import { fmtMyt, closesInfo } from '@aim/core'
 
 const db = useDb()
 const now = useNow()

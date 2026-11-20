@@ -41,7 +41,7 @@
           <div v-if="!c.op && marginOf(c.id) != null" class="mg" :class="marginOf(c.id)! >= 0 ? 'up' : 'down'">Margin {{ money(marginOf(c.id)!, 'myr') }}</div>
           <div class="namerow"><div class="name">{{ c.brand }} {{ c.model }}</div><CarFlags :docket="c.op ? !!c.docket_id : flags.docket(c.id)" :review="c.op ? !!c.needs_review : flags.review(c.id)" /></div>
           <div class="muted small">{{ [c.mfg_month && c.mfg_year ? c.mfg_year + '/' + String(c.mfg_month).padStart(2, '0') : c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
-          <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="soon(c.bid_deadline) ? 'warn' : 'ac'">closes in {{ left(c.bid_deadline) }}</span></div>
+          <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="chipCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span></div>
         </div>
       </NuxtLink>
     </div>
@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { timeLeft } from '@aim/core'
+import { timeLeft, closesInfo, closingTimeText } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -99,7 +99,8 @@ const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''),
 const PAGE = 24
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
 const left = (iso: string) => timeLeft(iso, now.value).label
-const soon = (iso: string) => new Date(iso).getTime() - now.value < 6 * 3600_000
+const closes = (iso: string) => closesInfo(iso, now.value).text
+const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; return c === 'late' || c === 'soon' ? 'warn' : c === 'unknown' || c === 'closed' ? '' : 'ac' }
 
 /** One price cars (a fixed price, no bidding): same card shape as a bidding car */
 async function fetchOnePrice(from: number) {

@@ -24,14 +24,14 @@
           <div class="small">Some details of this car could not be read clearly from the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you bid.</div>
         </div>
         <div class="card">
-          <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>
+          <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }} · {{ closingTimeText(car.bid_deadline) }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
           <div class="row wrap" style="gap: 10px; justify-content: space-between; align-items: center">
             <div><div class="muted small">Start price</div><div class="price" style="margin-top: 0">{{ car.start_price_jpy > 0 ? shown(car.start_price_jpy) : 'Price at auction' }}</div></div>
             <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
           </div>
           <div v-if="car.start_price_jpy > 0" class="muted small">{{ cur === 'JPY' ? rm(car.start_price_jpy) : '¥' + car.start_price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template>. The final price is set at the auction.</div>
-          <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">closes in {{ left(car.bid_deadline) }}</span><span class="chip">{{ fmtMytDateTime(car.bid_deadline) }} MYT</span></div>
+          <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip" :class="chipCls(car.bid_deadline)">{{ closes(car.bid_deadline) }}</span><span v-if="!isPlaceholderDeadline(car.bid_deadline)" class="chip">{{ fmtMytDateTime(car.bid_deadline) }} MYT</span></div>
           <div class="row wrap" style="gap: 8px; margin-top: 12px; justify-content: flex-start">
             <button class="btn ghost sm" :class="{ starred: watching }" @click="star"><StarIcon :filled="watching" />{{ watching ? 'On your watchlist' : 'Watch this car' }}</button>
             <button v-if="isStaff" class="btn ghost sm" :class="{ starred: recs.has(car.id) }" @click="recommend">{{ recs.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button>
@@ -121,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { fmtMytDateTime, timeLeft, offerPricing, sellFromRow, docketLine, docketPool, docketBrand, confirmKey, dutyCostRow, type Docket } from '@aim/core'
+import { fmtMytDateTime, timeLeft, offerPricing, sellFromRow, docketLine, docketPool, docketBrand, confirmKey, dutyCostRow, type Docket, closesInfo, closingTimeText, isPlaceholderDeadline } from '@aim/core'
 
 const db = useDb()
 const route = useRoute()
@@ -142,6 +142,8 @@ function setCur(c: 'RM' | 'JPY') { cur.value = c; try { localStorage.setItem('ca
 const shown = (jpy: number) => (cur.value === 'JPY' ? '¥' + Math.round(jpy).toLocaleString('en-US') : rm(jpy))
 const car = ref<any>(null), features = ref<any[]>([]), loading = ref(true), err = ref(''), pi = ref(0)
 const left = (iso: string) => timeLeft(iso, now.value).label
+const closes = (iso: string) => closesInfo(iso, now.value).text
+const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; return c === 'late' || c === 'soon' ? 'warn' : c === 'unknown' || c === 'closed' ? '' : 'ac' }
 const photos = computed<string[]>(() => (Array.isArray(car.value?.photos) ? car.value.photos : []))
 const specs = computed(() => {
   const c = car.value

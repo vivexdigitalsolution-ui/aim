@@ -12,7 +12,7 @@
         <div style="min-width: 0">
           <b>{{ c.brand }} {{ c.model }}</b>
           <div class="muted small">{{ [c.mfg_year, c.grade, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.venue].filter(Boolean).join(' · ') }}</div>
-          <div class="small" style="margin-top: 4px"><span class="chip ac">closes in {{ left(c.bid_deadline) }}</span> <span class="ac">{{ rm(c.start_price_jpy) }}</span></div>
+          <div class="small" style="margin-top: 4px"><span class="chip" :class="chipCls(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span> <span class="ac">{{ rm(c.start_price_jpy) }}</span></div>
         </div>
         <button class="btn ghost sm" title="Remove from the watchlist" @click.prevent="remove(c.id)"><StarIcon filled style="display: inline-block; vertical-align: -0.2em; margin-right: 4px" />Remove</button>
       </NuxtLink>
@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { timeLeft } from '@aim/core'
+import { timeLeft, closesInfo } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -30,6 +30,8 @@ const { ids, load, toggle } = useWatch()
 const { loadRate, rm } = useRate()
 const cars = ref<any[]>([]), loading = ref(true), err = ref(''), gone = ref(0)
 const left = (iso: string) => timeLeft(iso, now.value).label
+const closes = (iso: string) => closesInfo(iso, now.value).text
+const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; return c === 'late' || c === 'soon' ? 'warn' : c === 'unknown' || c === 'closed' ? '' : 'ac' }
 
 async function show() {
   await load(true)

@@ -72,8 +72,10 @@ async function coverIsGone(url) {
 
 /** Refresh the fields that can change after the first scrape. */
 async function updateLiveLot(id, row, target) {
+  // a row with no closing time must not wipe a real time saved earlier with the 23:59 placeholder: keep what is saved
+  const hasTime = /^\d{1,2}:\d{2}/.test(String(row.auction_time || '').trim())
   const { error } = await supabase.from('lots').update({
-    bid_deadline: toDeadline(row.auction_date, row.auction_time), start_price_jpy: row.start_price ?? null,
+    ...(hasTime ? { bid_deadline: toDeadline(row.auction_date, row.auction_time) } : {}), start_price_jpy: row.start_price ?? null,
     ...(target ? { maker_code: target.maker_code, car_code: target.car_code } : {}),
   }).eq('id', id)
   if (error) console.log(`  [DB] lot update error: ${error.message}`)

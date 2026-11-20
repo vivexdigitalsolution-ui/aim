@@ -11,7 +11,7 @@
         <div style="min-width: 0">
           <b>{{ c.brand }} {{ c.model }}</b>
           <div class="muted small">{{ [c.mfg_year, c.grade, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.venue].filter(Boolean).join(' · ') }}</div>
-          <div class="small" style="margin-top: 4px"><span class="chip ac">closes in {{ left(c.bid_deadline, now) }}</span> <span class="muted">Start price</span> <b>{{ money(c.start_price_jpy) }}</b></div>
+          <div class="small" style="margin-top: 4px"><span class="chip" :class="chipCls(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span> <span class="muted">Start price</span> <b>{{ money(c.start_price_jpy) }}</b></div>
         </div>
         <button class="btn ghost sm" title="Remove from favourites" @click.prevent="remove(c.id)"><RailIcon name="heart" filled class="hi" /> Remove</button>
       </NuxtLink>
@@ -21,10 +21,13 @@
 </template>
 
 <script setup lang="ts">
+import { closesInfo } from '@aim/core'
 const db = useDb()
 const now = useNow()
 const { ids, load, toggle } = useWatch()
 const { loadRate, loadCur, money, left } = useLite()
+const closes = (iso: string) => closesInfo(iso, now.value).text
+const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; return c === 'late' || c === 'soon' ? 'warn' : c === 'unknown' || c === 'closed' ? '' : 'ac' }
 const broken = reactive(new Set<string>())
 const cars = ref<any[]>([]), loading = ref(true), err = ref(''), gone = ref(0)
 

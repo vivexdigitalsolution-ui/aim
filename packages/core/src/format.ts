@@ -28,3 +28,24 @@ export function timeLeft(iso: string | null | undefined, nowMs: number): { label
 export const STATUS_LABEL: Record<string, string> = {
   pending: 'Waiting for us', placed: 'Bid placed', won: 'Won', lost: 'Lost', cancelled: 'Cancelled', rejected: 'Not accepted',
 }
+
+// ── closing times ──
+// The auction site gives no closing time for some cars yet (it shows it the day before or on the day). The scraper then stores 23:59 Japan time as a
+// PLACEHOLDER. A placeholder is not a real deadline: it must never be shown as a countdown.
+const jstClock = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false })
+const mytClock = new Intl.DateTimeFormat('en-GB', { timeZone: MYT, hour: '2-digit', minute: '2-digit', hour12: false })
+const jstDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', day: 'numeric', month: 'short' })
+export const isPlaceholderDeadline = (iso?: string | null) => !!iso && jstClock.format(new Date(iso)) === '23:59'
+
+/** What a card says about the closing time: its OWN countdown, or "time TBA" while the site has not published the time. */
+export function closesInfo(iso: string | null | undefined, nowMs: number): { text: string; cls: 'ok' | 'soon' | 'late' | 'closed' | 'unknown'; exact: boolean } {
+  if (!iso) return { text: '—', cls: 'unknown', exact: false }
+  if (isPlaceholderDeadline(iso)) {
+    if (new Date(iso).getTime() <= nowMs) return { text: 'Closed', cls: 'closed', exact: false }
+    return { text: `closes ${jstDay.format(new Date(iso))} · time TBA`, cls: 'unknown', exact: false }
+  }
+  const t = timeLeft(iso, nowMs)
+  return { text: t.cls === 'closed' ? 'Closed' : `closes in ${t.label}`, cls: t.cls, exact: true }
+}
+/** The closing time of a car for its page: "14:25 JST · 13:25 MYT", or a plain "not announced yet". */
+export const closingTimeText = (iso?: string | null) => (!iso ? '' : isPlaceholderDeadline(iso) ? 'closing time not announced yet' : `${jstClock.format(new Date(iso))} JST · ${mytClock.format(new Date(iso))} MYT`)
