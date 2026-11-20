@@ -12,13 +12,13 @@ const LOCK_TIMEOUT = parseInt(process.env.LOCK_TIMEOUT_MIN || '120', 10)
 const PAGE_SIZE    = 1000      // Supabase's default maximum rows per request
 
 /**
- * @param {'bid'|'history'} lotType
+ * @param {'bid'|'history'|'one_price'} lotType
  * @param {number|null} minDays  null = skip targets completed today. A number picks by LAST RUN date instead:
  *   0 = only targets that never ran; N = never ran, or last ran N or more days ago.
  * @param {Set<string>|null} skipIds  targets that already failed in this run (not offered again)
  */
 async function claimTarget(lotType, minDays = null, skipIds = null) {
-  if (lotType !== 'bid' && lotType !== 'history') throw new Error(`claimTarget: lotType must be 'bid' or 'history', got: ${lotType}`)
+  if (!['bid', 'history', 'one_price'].includes(lotType)) throw new Error(`claimTarget: lotType must be 'bid', 'history' or 'one_price', got: ${lotType}`)
 
   const now        = new Date()
   const staleTime  = new Date(now.getTime() - LOCK_TIMEOUT * 60 * 1000).toISOString()

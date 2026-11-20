@@ -181,4 +181,52 @@ async function upsertHistory(rows, target) {
   return { ok: true }
 }
 
-module.exports = { isOthersGrade, cleanVenue, mapTransmission, toDeadline, fullModel, findExistingLot, updateLiveLot, upsertLot, recordScrapedModel, findExistingHistoryKeys, upsertHistory }
+// ── variant names seen (the pick list on the Scrape targets page) ───────────────
+
+/** Remember the variant names found on one listing page, so staff can pick them as a filter. */
+async function recordGrades(target, names) {
+  const uniq = [...new Set(names.map((n) => String(n || '').trim()).filter(Boolean))]
+  if (!uniq.length) return
+  const now = new Date().toISOString()
+  const { data } = await supabase.from('scraper_grades').select('name, seen').eq('maker_code', target.maker_code).eq('car_code', target.car_code).in('name', uniq)
+  const seen = new Map((data || []).map((r) => [r.name, r.seen]))
+  const { error } = await supabase.from('scraper_grades').upsert(uniq.map((name) => ({ maker_code: target.maker_code, car_code: target.car_code, name, seen: (seen.get(name) || 0) + 1, last_seen: now })), { onConflict: 'maker_code,car_code,name' })
+  if (error) console.log(`  [DB] grades save error: ${error.message}`)
+}
+
+// ── one_price_lots ───────────────────────────────────────────────────────────
+
+async function findExistingOnePrice(exKey) {
+  const { data } = await supabase.from('one_price_lots').select('id, photos').eq('ex_key', exKey).maybeSingle()
+  return data && Array.isArray(data.photos) && data.photos.length ? data : null
+}
+
+/** A car already saved with photos only gets its price and end time refreshed. */
+async function updateOnePrice(id, row) {
+  const { error } = await supabase.from('one_price_lots').update({
+    deadline: toDeadline(row.auction_date, row.auction_time), price_jpy: row.wholesale_price ?? null,
+    price_masked: !!row.raw_extra?.price_masked, price_reveal: toDeadline(row.raw_extra?.price_reveal_date, row.raw_extra?.price_reveal_time), last_seen_at: new Date().toISOString(),
+  }).eq('id', id)
+  if (error) console.log(`  [DB] one price update error: ${error.message}`)
+  return !error
+}
+
+/** @returns {{id:string, isNew:boolean}|null} */
+async function upsertOnePrice(row, target, images) {
+  const sheet = images.find((i) => i.suffix === 'sheet')
+  const photos = images.filter((i) => i.imageType !== 'document').map((i) => i.fullUrl)
+  const { data: had } = await supabase.from('one_price_lots').select('id').eq('ex_key', row.ex_key).maybeSingle()
+  const record = {
+    ex_key: row.ex_key, venue: cleanVenue(row.venue), deadline: toDeadline(row.auction_date, row.auction_time),
+    brand: target.brand_name, model: target.model_name, maker_code: target.maker_code, car_code: target.car_code,
+    grade: row.grade || null, model_code: row.model_code || null, mfg_year: row.manufacture_year ?? null, mileage_km: row.mileage_km ?? null,
+    engine_cc: row.engine_cc ?? null, transmission: mapTransmission(row.transmission_raw), color: row.color || null, auction_grade: row.auction_grade || null,
+    price_jpy: row.wholesale_price ?? null, price_masked: !!row.raw_extra?.price_masked, price_reveal: toDeadline(row.raw_extra?.price_reveal_date, row.raw_extra?.price_reveal_time),
+    equipment: row.equipment_raw || null, photos, sheet_url: sheet?.fullUrl || null, last_seen_at: new Date().toISOString(),
+  }
+  const { data, error } = await supabase.from('one_price_lots').upsert(record, { onConflict: 'ex_key' }).select('id').single()
+  if (error) { console.log(`  [DB] one price save error: ${error.message}`); return null }
+  return { id: data.id, isNew: !had }
+}
+
+module.exports = { isOthersGrade, cleanVenue, mapTransmission, toDeadline, fullModel, findExistingLot, updateLiveLot, upsertLot, recordScrapedModel, findExistingHistoryKeys, upsertHistory, recordGrades, findExistingOnePrice, updateOnePrice, upsertOnePrice }

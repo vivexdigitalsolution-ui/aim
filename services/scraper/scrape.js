@@ -4,7 +4,12 @@
  * scrape.js — fills the Auction app.
  *
  *   node scrape.js bid [venue[,venue...]] [<N>days]   cars open for bidding  -> lots (photos go to R2)
+ *   node scrape.js one_price [venue[,venue...]]       one-price cars (fixed price) -> one_price_lots   (Japanese site, its own login)
  *   node scrape.js history                            past SOLD prices        -> lot_history
+ *
+ * Day (bid only): node scrape.js bid tuesday | today | tomorrow - the venues of that weekday come from the table scrape_venue_days
+ * (Tuesday = Yokohama only, Thursday = Tokyo only ... set in the database). A weekday with no row there falls back to the site's
+ * own day list minus SKIP_VENUES in .env.
  *
  * Venue (optional): node scrape.js bid yokohama   — none = every venue. See lib/venues.js for the names.
  * "<N>days" (optional): pick targets by their LAST RUN date instead of "not finished today":
@@ -30,12 +35,14 @@ const { login }                  = require('./lib/auth')
 const { parseVenues }            = require('./lib/venues')
 const {
   openMarketPriceFirstTime, goToMarketSearch, skipVenueStep, applyHistoryFilter, setAuctionTerm,
-  goToSearchDirect, selectAllVenues, selectWeekdayVenues, selectBrand, selectModel, applyFilter, goToListingPage, goToNextListingPage,
+  openOneClickWizardFirstTime, goToSearchDirect, selectAllVenues, selectWeekdayVenues, selectBrand, selectModel, applyFilter, goToListingPage, goToNextListingPage,
 } = require('./lib/nav')
-const { extractBiddingListingRows, extractHistoryRows } = require('./lib/extract')
+const { extractBiddingListingRows, extractHistoryRows, extractOnePriceListingRows } = require('./lib/extract')
 const { downloadAndUploadImages } = require('./lib/images')
 const { firstAuctionDate } = require('./lib/cutoff')
-const { isOthersGrade, cleanVenue, findExistingLot, updateLiveLot, upsertLot, recordScrapedModel, findExistingHistoryKeys, upsertHistory } = require('./lib/writer')
+const { isOthersGrade, cleanVenue, findExistingLot, updateLiveLot, upsertLot, recordScrapedModel, findExistingHistoryKeys, upsertHistory, recordGrades, findExistingOnePrice, updateOnePrice, upsertOnePrice } = require('./lib/writer')
+const { whyLeftOut, gradeName, codeMatches } = require('./lib/filters')
+const { jstWeekday, venuesForWeekday, NAMES: DAY_NAMES } = require('./lib/schedule')
 
 /** Year and score limits come from .env (YEAR_FROM, YEAR_TO, SCORE_MIN), not from the target row. */
 function withCriteria(target) {
@@ -46,23 +53,26 @@ function withCriteria(target) {
 
 // ── Arguments ─────────────────────────────────────────────────────────────────
 
-const ARG = (process.argv[2] || '').toLowerCase()
-if (ARG !== 'bid' && ARG !== 'history') {
-  console.log('Usage: node scrape.js bid|history [venue[,venue...]] [<N>days]')
+const ARG = (process.argv[2] || '').toLowerCase().replace(/[-\s]/g, '_')
+if (!['bid', 'history', 'one_price', 'oneprice'].includes(ARG)) {
+  console.log('Usage: node scrape.js bid|one_price|history [venue[,venue...] | monday..sunday | today | tomorrow] [<N>days]')
   process.exit(1)
 }
-const MODE     = ARG
-const LANGMODE = 'en'
+const MODE     = ARG === 'oneprice' ? 'one_price' : ARG
+const LANGMODE = MODE === 'one_price' ? 'jp' : 'en'      // the one-price site is Japanese only; bidding and history log in English
 
-const WEEKDAYS = { monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6, sunday: 7, sun: 7 }
+const WEEKDAYS = { today: 'today', tomorrow: 'tomorrow', monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6, sunday: 7, sun: 7 }
 const rest       = process.argv.slice(3).filter((a) => !a.startsWith('--'))      // --include-today is read by lib/cutoff.js
 const DAYS_TOKEN = rest.find((a) => /^\d+\s*days?$/i.test(a))
 const MIN_DAYS   = DAYS_TOKEN ? parseInt(DAYS_TOKEN, 10) : null
 const DAY_TOKEN  = rest.find((a) => WEEKDAYS[a.toLowerCase()])
-const WEEKDAY    = DAY_TOKEN ? WEEKDAYS[DAY_TOKEN.toLowerCase()] : null
+const DAYVAL     = DAY_TOKEN ? WEEKDAYS[DAY_TOKEN.toLowerCase()] : null
+const WEEKDAY    = DAYVAL === 'today' ? jstWeekday(0) : DAYVAL === 'tomorrow' ? jstWeekday(1) : DAYVAL
 let VENUES = { codes: [], names: [] }
 try { VENUES = parseVenues(rest.filter((a) => a !== DAYS_TOKEN && a !== DAY_TOKEN && a.toLowerCase() !== 'offer')) } catch (e) { console.log(e.message); process.exit(1) }
-if (MODE === 'history' && (VENUES.codes.length || WEEKDAY)) { console.log('History has no venue or day filter — run it without one.'); process.exit(1) }
+if (MODE === 'history' && (VENUES.codes.length || WEEKDAY)) { console.log('History has no venue or day filter - run it without one.'); process.exit(1) }
+if (MODE === 'one_price' && WEEKDAY) { console.log('One price has no day filter - use a venue (one_price yokohama) or none.'); process.exit(1) }
+let DAY_VENUES = null      // the venues of the chosen weekday from scrape_venue_days (loaded in main)
 if (WEEKDAY && VENUES.codes.length) { console.log('Use either a day (bid tuesday) or venues (bid tokyo), not both.'); process.exit(1) }
 
 // Venues left unticked after a day is chosen (SKIP_VENUES in .env), as the source site's venue codes
@@ -158,7 +168,8 @@ async function processHistoryTarget(page, target, counters) {
 
 async function processBidTarget(page, target, counters) {
   await goToSearchDirect(page, 'bid')
-  if (WEEKDAY) await selectWeekdayVenues(page, WEEKDAY, SKIP_CODES)
+  if (DAY_VENUES) await selectAllVenues(page, DAY_VENUES.codes)           // the venues set in the database for this weekday
+  else if (WEEKDAY) await selectWeekdayVenues(page, WEEKDAY, SKIP_CODES)  // no row for this weekday: the site's own day list minus SKIP_VENUES
   else await selectAllVenues(page, VENUES.codes)
   await selectBrand(page, target.maker_code)
   if (!(await selectModel(page, target.car_code))) { console.log(`\n[TARGET] No results at model step for: ${target.label}`); return 'No results at model step' }
@@ -177,6 +188,7 @@ async function processBidTarget(page, target, counters) {
     console.log(`  Rows on page: ${rawRows.length}`)
     // this model has cars: remember it, and (first time only) switch its history scrape on
     if (!modelRecorded && rawRows.length) { await recordScrapedModel(target); modelRecorded = true }
+    await recordGrades(target, rawRows.map((r) => gradeName(target.model_name, r.grade)))      // the variant pick list on the Scrape targets page
 
     for (let i = 0; i < rawRows.length; i++) {
       if (shutdownRequested) break
@@ -186,14 +198,11 @@ async function processBidTarget(page, target, counters) {
 
       if (row.final_price) { console.log(`${logPrefix} already sold — skip`); continue }       // nothing left to bid on
       if (isOthersGrade(row.grade)) { console.log(`${logPrefix} grade is OTHERS — skip (never scraped)`); continue }
-      // model codes chosen on the Scrape targets page: keep only cars of those chassis codes (empty list = every code)
-      if (Array.isArray(target.model_codes) && target.model_codes.length) {
-        const core = (c) => String(c || '').toUpperCase().replace(/^[0-9A-Z]{2,4}-/, '').replace(/[^A-Z0-9]/g, '')
-        const mine = core(row.model_code)
-        if (!target.model_codes.some((c) => core(c) === mine || (mine && core(c).endsWith(mine)) || (mine && mine.endsWith(core(c))))) { console.log(`${logPrefix} model code ${row.model_code || '?'} is not on the target list — skip`); continue }
-      }
+      // model codes or variants chosen on the Scrape targets page: keep only those cars (empty = every one)
+      const left = whyLeftOut(target, row)
+      if (left) { console.log(`${logPrefix} ${left} - skip`); continue }
       // safety net for the day mode: a venue on the skip list is never saved, even if the page still listed it
-      if (WEEKDAY && SKIP_VENUE_NAMES.has(norm(cleanVenue(row.venue)))) { console.log(`${logPrefix} venue ${cleanVenue(row.venue)} is skipped`); continue }
+      if (WEEKDAY && !DAY_VENUES && SKIP_VENUE_NAMES.has(norm(cleanVenue(row.venue)))) { console.log(`${logPrefix} venue ${cleanVenue(row.venue)} is skipped`); continue }
       if (!row.auction_date) { console.log(`${logPrefix} no auction date — skip`); counters.records_failed++; continue }
       // a scrape takes hours: a car of today's auction may be over before the offer goes out (--include-today turns this off)
       if (row.auction_date < firstAuctionDate()) { counters.records_skipped_today = (counters.records_skipped_today || 0) + 1; console.log(`${logPrefix} auction ${row.auction_date} is before ${firstAuctionDate()} (today / past) — skip`); continue }
@@ -234,10 +243,68 @@ async function processBidTarget(page, target, counters) {
   return null
 }
 
+// ── One price: one target ─────────────────────────────────────────────────────
+
+/** The one-price listing row in the shape lib/writer.js expects (same mapping as the CarzNexus scraper). */
+function normalizeOnePriceRow(r) {
+  return {
+    ex_key: r.ex_key, lot_number: r.ex_key, auction_date: r.deadline_date, auction_time: r.deadline_time,
+    manufacture_year: r.manufacture_year, mileage_km: r.mileage_km, color: r.color_ja, model_code: r.model_code, grade: r.grade_ja,
+    transmission_raw: r.shift_type, engine_cc: r.displacement_cc, auction_grade: r.auction_grade, equipment_raw: r.equipment_raw,
+    wholesale_price: r.price_jpy, thumb_parsed: r.thumb_parsed,
+    venue: r.venue_name_ja ? (r.counter_no != null ? `${r.venue_name_ja}-Counter-${r.counter_no}` : r.venue_name_ja) : null,
+    raw_extra: { price_masked: r.price_masked, price_reveal_date: r.price_reveal_date, price_reveal_time: r.price_reveal_time, score_letter: r.score_letter },
+  }
+}
+
+async function processOnePriceTarget(page, target, counters) {
+  await goToSearchDirect(page, 'one_price')
+  await selectAllVenues(page, VENUES.codes)
+  await selectBrand(page, target.maker_code)
+  if (!(await selectModel(page, target.car_code))) { console.log(`\n[TARGET] No results at model step for: ${target.label}`); return 'No results at model step' }
+
+  const hits = await applyFilter(page, target, 'one_price')
+  if (hits === 0) { console.log(`\n[TARGET] No results after filter for: ${target.label}`); return 'No results after filter' }
+  await goToListingPage(page)
+
+  let pageNum = 1
+  while (true) {
+    if (shutdownRequested) break
+    console.log(`\n[PAGE ${pageNum}]`)
+    const rawRows = await extractOnePriceListingRows(page)
+    console.log(`  Rows on page: ${rawRows.length}`)
+    for (let i = 0; i < rawRows.length; i++) {
+      if (shutdownRequested) break
+      const row = normalizeOnePriceRow(rawRows[i])
+      const logPrefix = `  ROW ${i + 1} [${row.ex_key}]:`
+      counters.records_scraped++
+      if (isOthersGrade(row.grade)) { console.log(`${logPrefix} grade is OTHERS - skip (never scraped)`); continue }
+      // the one-price site is Japanese: its variant names are Japanese too, so only the model codes can narrow it
+      if (!codeMatches(target, row.model_code)) { console.log(`${logPrefix} model code ${row.model_code || '?'} is not on the target list - skip`); continue }
+      try {
+        const existing = await findExistingOnePrice(row.ex_key)
+        if (existing) { await updateOnePrice(existing.id, row); counters.records_updated++; console.log(`${logPrefix} already saved - refreshed`); continue }
+        const img = await downloadAndUploadImages(page, row.thumb_parsed, row.ex_key, logPrefix)
+        if (!img.success) { console.log(`${logPrefix} images failed: ${img.error}`); counters.images_failed++; counters.records_failed++; continue }
+        counters.images_uploaded += img.images.length
+        const saved = await upsertOnePrice(row, target, img.images)
+        if (!saved) { counters.records_failed++; continue }
+        if (saved.isNew) counters.records_inserted++; else counters.records_updated++
+        console.log(`${logPrefix} saved (${img.images.length} images)`)
+      } catch (rowErr) { console.log(`${logPrefix} ROW ERROR: ${rowErr.message}`); counters.records_failed++ }
+    }
+    if (shutdownRequested) break
+    if (!(await goToNextListingPage(page, LANGMODE))) { console.log('\n[PAGE] Last page reached'); break }
+    pageNum++
+  }
+  return null
+}
+
 // ── Session ───────────────────────────────────────────────────────────────────
 
 async function enterAfterLogin(page) {
   if (MODE === 'history') await openMarketPriceFirstTime(page)
+  else if (MODE === 'one_price') await openOneClickWizardFirstTime(page)
 }
 
 async function bringUpSession() {
@@ -276,9 +343,13 @@ async function main() {
   console.log('═'.repeat(60))
   console.log(`  Scraper — mode: ${MODE}`)
   console.log(`  Instance: ${INSTANCE_ID}`)
-  if (MODE === 'bid') console.log(`  ${WEEKDAY ? `Day: ${DAY_TOKEN} (skipping ${config.skipVenues.join(', ') || 'none'})` : `Venue: ${VENUES.codes.length ? VENUES.names.join(', ') : 'ALL'}`}`)
+  if (MODE === 'bid' || MODE === 'one_price') console.log(`  ${WEEKDAY ? `Day: ${DAY_TOKEN} (skipping ${config.skipVenues.join(', ') || 'none'})` : `Venue: ${VENUES.codes.length ? VENUES.names.join(', ') : 'ALL'}`}`)
   console.log(`  Years: ${config.yearFrom || 'any'}${config.yearTo ? '–' + config.yearTo : '+'}   Score: ${config.scoreMin || 'any'}+   Skipped brands: ${config.skipBrandCodes.size}`)
   console.log('  Ctrl+C once to stop cleanly after the current car.')
+  if (MODE === 'bid' && WEEKDAY) {
+    DAY_VENUES = await venuesForWeekday(WEEKDAY)
+    console.log(DAY_VENUES ? `  ${DAY_NAMES[WEEKDAY]} venues (from the database): ${DAY_VENUES.names.join(', ')}` : `  ${DAY_NAMES[WEEKDAY]}: no venues set in the database - using the site's day list minus SKIP_VENUES`)
+  }
   console.log('═'.repeat(60))
 
   let context, page
@@ -296,7 +367,7 @@ async function main() {
     const runId = await createRun(target)
     const counters = { _startedAt: new Date(), records_scraped: 0, records_inserted: 0, records_updated: 0, records_failed: 0, images_uploaded: 0, images_failed: 0 }
     try {
-      const note = MODE === 'history' ? await processHistoryTarget(page, target, counters) : await processBidTarget(page, target, counters)
+      const note = MODE === 'history' ? await processHistoryTarget(page, target, counters) : MODE === 'one_price' ? await processOnePriceTarget(page, target, counters) : await processBidTarget(page, target, counters)
       await finalizeRun(runId, 'complete', counters, note)
       await completeTarget(target.id, runId)
       if (config.offerOnly) failedThisRun.add(target.id)      // offer mode ignores "done today", so remember what this run already did

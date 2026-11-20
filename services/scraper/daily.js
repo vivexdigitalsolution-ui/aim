@@ -11,6 +11,7 @@
  *
  * Steps (in order)         what it does
  *   scrape     node scrape.js bid         open cars from USS -> lots, photos
+ *   oneprice   node scrape.js one_price   one-price cars (fixed price) -> one_price_lots
  *   history    node scrape.js history     past sold prices -> lot_history
  *   enrich     node enrich.js --limit 300 Claude reads the sheets of new cars; docket decision and features (only if scrape worked)
  *   features   node extract-features.js --free   free feature matcher for cars still without features
@@ -37,6 +38,7 @@ const H = 3600 * 1000
 
 const STEPS = [
   { name: 'scrape', script: ['scrape.js', 'bid'], timeout: 6 * H },
+  { name: 'oneprice', script: ['scrape.js', 'one_price'], timeout: 4 * H },
   { name: 'photos', script: ['refresh-photos.js', '--open'], timeout: 3 * H, needs: 'scrape' },
   { name: 'history', script: ['scrape.js', 'history'], timeout: 3 * H },
   { name: 'enrich', script: ['enrich.js', '--limit', process.env.ENRICH_LIMIT || '1500'], timeout: 5 * H, needs: 'scrape' },

@@ -8,6 +8,7 @@
     "brand-models": "node brand-model-scraper.js en",
     "targets": "node make-targets.js",
     "scrape:bid": "node scrape.js bid",
+    "scrape:one-price": "node scrape.js one_price",
     "scrape:history": "node scrape.js history",
     "playwright:install": "playwright install chromium"
   },

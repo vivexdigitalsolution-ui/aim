@@ -24,6 +24,7 @@ const { goToSearchPage, applyFilters } = require('./lib/asnet/filters')
 const { goToNextPage, getPagingInfo } = require('./lib/asnet/page')
 const { extractRows } = require('./lib/asnet/extract')
 const { rowToLot, isDuplicate, nameKey } = require('./lib/asnet/map')
+const { codeMatches } = require('./lib/filters')
 
 const has = (n) => process.argv.includes(n)
 const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : null }
@@ -66,6 +67,13 @@ async function probe() {
     fs.mkdirSync(OUT, { recursive: true })
     const file = path.join(OUT, 'asnet-codes.json')
     fs.writeFileSync(file, JSON.stringify({ made_at: new Date().toISOString(), makers: out }, null, 2))
+    // the same list goes to the database: the Scrape targets page offers it as a pick list
+    const rows = out.flatMap((m) => m.cars.map((c) => ({ maker_code: m.maker_code, maker: m.maker, car_code: c.code, car: c.name })))
+    for (let i = 0; i < rows.length; i += 500) {
+      const { error } = await supabase.from('asnet_catalog').upsert(rows.slice(i, i + 500), { onConflict: 'maker_code,car_code' })
+      if (error) { console.log('asnet_catalog not saved (run migration 41 first): ' + error.message); break }
+    }
+    console.log(`asnet_catalog: ${rows.length} models saved`)
     console.log(`saved ${file}`)
   } finally { await browser.close() }
 }
@@ -125,6 +133,7 @@ async function scrapeTarget(page, target, counters) {
       counters.seen++
       const lot = rowToLot(row)
       if (!lot) { counters.unusable++; console.log(`  skip: row without lot number, date or name`); continue }
+      if (!codeMatches(target, lot.model_code)) { counters.unusable++; console.log(`  skip: model code ${lot.model_code || '?'} is not on the target list`); continue }
       const line = `${lot.venue} ${lot.auction_date} #${lot.lot_no} | ${lot.brand} ${lot.model} | ${lot.model_code || '-'} | ${lot.mfg_year || '?'} | ${lot.mileage_km ?? '?'} km | grade ${lot.grade || '?'} | ¥${lot.start_price_jpy ?? '?'} | ${row.auction_method || 'method ?'}`
       // the same car from another source?
       const { data: others } = await supabase.from('lots').select('ex_key,auction_date,brand,model_code,mfg_year,mileage_km').eq('auction_date', lot.auction_date).eq('brand', lot.brand).eq('mfg_year', lot.mfg_year ?? -1).neq('source', 'asnet')
@@ -160,7 +169,7 @@ async function main() {
     if (error) throw new Error('targets: ' + error.message)
     for (const r of data || []) {
       const nums = (r.scores || []).map(Number).filter((n) => Number.isFinite(n))          // the ASNET form has one minimum score, so the lowest wanted score is used
-      targets.push({ label: r.label, maker_code: r.maker_code, car_code: r.car_code, year_from: r.year_from, score_min: nums.length ? Math.min(...nums) : r.score_min })
+      targets.push({ label: r.label, maker_code: r.maker_code, car_code: r.car_code, model_codes: r.model_codes, year_from: r.year_from, score_min: nums.length ? Math.min(...nums) : r.score_min })
     }
     console.log(`${targets.length} ASNET target(s) from the database`)
   } else if (arg('--maker')) {
