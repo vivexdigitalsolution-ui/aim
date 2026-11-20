@@ -112,6 +112,13 @@
           <div v-if="car.notes" style="margin-top: 12px"><div class="muted small">Seller notes</div><div>{{ car.notes }}</div></div>
           <div v-if="car.inspector_report" style="margin-top: 12px"><div class="muted small">Inspector report</div><div>{{ car.inspector_report }}</div></div>
         </div>
+
+        <div v-if="features.length && hasTier('member')" class="card">
+          <h2>On this car</h2>
+          <div class="row wrap" style="gap: 6px; margin-top: 8px; justify-content: flex-start">
+            <span v-for="f in features" :key="f.key" class="chip" :class="f.source === 'aftermarket' ? 'warn' : f.source === 'factory' ? 'ok' : ''" :title="f.evidence || ''">{{ f.label }}<small v-if="f.source === 'aftermarket'"> · aftermarket</small></span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -126,7 +133,7 @@ const route = useRoute()
 const now = useNow()
 const router = useRouter()
 const { rate, loadRate, rm, yen, rmToBidJpy, left, cur, loadCur, setCur, money } = useLite()
-const { isStaff } = useAuth()
+const { isStaff, hasTier } = useAuth()
 /** Back to the list as it was (filters and all); a car opened from a link goes to the plain list. */
 function back() { if (import.meta.client && (window.history.state as any)?.back) router.back(); else navigateTo('/cars') }
 const watch = useWatch()
@@ -134,6 +141,7 @@ const watching = computed(() => !!car.value && watch.has(car.value.id))
 async function star() { try { await watch.toggle(car.value.id) } catch (e: any) { err.value = e.message } }
 // suggested bid and import price breakdown
 const recBid = ref<{ price_jpy: number; sales: number; basis: string } | null>(null), bd = ref<any>(null), costDone = ref(false)
+const features = ref<any[]>([])
 const selfCalc = ref(false)
 const bodyInput = ref(0), priceBasis = ref('')
 const money2 = (jpy: number) => (cur.value === 'JPY' ? yen(jpy) : rm(jpy) + ' · ' + yen(jpy))
@@ -221,6 +229,7 @@ onMounted(async () => {
     if (error) throw error
     car.value = data
     if (data) loadCost(data).catch(() => { costDone.value = true })
+    if (data) { const f = await db.from('lot_features').select('key,label,source,evidence').eq('lot_id', data.id); features.value = f.data || [] }
     if (data) { await loadOpen(); if (open.value) bidInput.value = fromJpy(open.value.max_bid_jpy) }
   } catch (e: any) { err.value = e.message } finally { loading.value = false }
 })

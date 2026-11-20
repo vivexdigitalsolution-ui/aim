@@ -101,7 +101,7 @@
           </div>
         </div>
 
-        <div v-if="features.length" class="card">
+        <div v-if="features.length && hasTier('member')" class="card">
           <h2>On this car</h2>
           <div class="row wrap" style="gap: 6px; margin-top: 8px; justify-content: flex-start">
             <span v-for="f in features" :key="f.key" class="chip" :class="f.source === 'aftermarket' ? 'warn' : f.source === 'factory' ? 'ok' : ''" :title="f.evidence || ''">{{ f.label }}<small v-if="f.source === 'aftermarket'"> · aftermarket</small></span>

@@ -13,6 +13,7 @@
  *   node enrich.js                 every car not done yet (max 100 in total)
  *   node enrich.js --limit 300     more cars in one run (bidding cars first, the rest of the limit goes to One price cars)
  *   node enrich.js --only bid      just the bidding cars      (--only oneprice: just the One price cars)
+ *   node enrich.js --features      re-read only the cars that have no features read from the sheet (text match only, or none)
  *   node enrich.js --force         redo cars that were already done (the first ones by deadline: add --limit or --model)
  *   node enrich.js --force --model "GT-R"   redo only the cars whose model name contains this text
  *   node enrich.js --dry           show what it would do, change nothing, no AI call
@@ -29,7 +30,8 @@ const { saveDecision, saveFeatures } = require('./lib/lotdecision')
 const { refreshBatchCopies } = require('./lib/batchcopy')
 
 const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : null }
-const FORCE = process.argv.includes('--force')
+const FEATURES = process.argv.includes('--features')       // re-read only the cars whose features were never read from the sheet picture
+const FORCE = process.argv.includes('--force') || FEATURES
 const DRY = process.argv.includes('--dry')
 const LIMIT = parseInt(arg('--limit') || '100', 10)
 const MODEL = arg('--model')
@@ -49,6 +51,19 @@ async function bidLots(limit) {
   let q = supabase.from('lots').select('*').eq('my_eligible', true).gt('bid_deadline', new Date().toISOString()).gte('auction_date', require('./lib/cutoff').firstAuctionDate()).order('bid_deadline').limit(limit)
   if (!FORCE) q = q.is('enriched_at', null)
   if (MODEL) q = q.ilike('model', '%' + MODEL + '%')
+  if (FEATURES) {
+    q = q.not('enriched_at', 'is', null).limit(5000)
+    const have = new Set()
+    for (let from = 0; ; from += 1000) {
+      const f = await supabase.from('lot_features').select('lot_id').neq('evidence', 'text match').range(from, from + 999)
+      if (f.error) throw f.error
+      f.data.forEach((r) => have.add(r.lot_id))
+      if (f.data.length < 1000) break
+    }
+    const { data, error } = await q
+    if (error) throw error
+    return data.filter((l) => !have.has(l.id)).slice(0, limit)
+  }
   const { data, error } = await q
   if (error) throw error
   return data
@@ -75,6 +90,11 @@ async function onePriceRows(limit) {
   let q = supabase.from('one_price_lots').select('*').gt('deadline', new Date().toISOString()).order('deadline').limit(limit)
   if (!FORCE) q = q.is('enriched_at', null)
   if (MODEL) q = q.ilike('model', '%' + MODEL + '%')
+  if (FEATURES) {
+    const { data, error } = await q.not('enriched_at', 'is', null).limit(5000)
+    if (error) throw error
+    return data.filter((o) => !(Array.isArray(o.features) && o.features.some((f) => f && f.evidence && f.evidence !== 'text match'))).slice(0, limit)
+  }
   const { data, error } = await q
   if (error) throw error
   return data

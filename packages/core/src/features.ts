@@ -18,8 +18,8 @@ export const CATALOG: Def[] = [
   D('bang_olufsen', 'Bang & Olufsen', 'Audio', /BANG\s*(&|AND)?\s*OLUFSEN|B\s*&\s*O\b/i),
   D('harman_kardon', 'Harman Kardon', 'Audio', /HARMAN\s*KARDON|ハーマンカードン/i),
   D('rear_entertainment', 'Rear entertainment', 'Audio', /REAR\s*(SEAT\s*)?(ENTERTAINMENT|MONITOR|DISPLAY)|フリップダウン|後席モニター|リアモニター/i),
-  D('sunroof', 'Sunroof', 'Roof', /SUN\s*ROOF|MOON\s*ROOF|S\/R\b|サンルーフ|ムーンルーフ/i),
-  D('panoramic_roof', 'Panoramic roof', 'Roof', /PANORAMIC|パノラマ(ルーフ|サンルーフ)|GLASS\s*ROOF/i),
+  D('sunroof', 'Sunroof', 'Roof', /SUN\s*ROOF|MOON\s*ROOF|(?<![A-Z]\/)S\/R\b|サンルーフ|ムーンルーフ/i),
+  D('panoramic_roof', 'Panoramic roof', 'Roof', /PANORAMIC\s*(SUN\s*)?(ROOF|GLASS)|パノラマ(ルーフ|サンルーフ)|GLASS\s*ROOF/i),
   D('gr_kit', 'GR body kit', 'Body kit', /\bGR\s*(AERO|KIT|BODY|PARTS|STYLE|BUMPER)|TRD\s*GR|GRパーツ|GRエアロ/i),
   D('gr_sport', 'GR Sport grade', 'Grade', /\bGR\s*SPORT\b|GRスポーツ/i),
   D('modellista', 'Modellista kit', 'Body kit', /MODELLISTA|モデリスタ/i),
@@ -36,7 +36,7 @@ export const CATALOG: Def[] = [
   D('ventilated_seats', 'Ventilated seats', 'Interior', /VENTILATED|COOLED\s*SEAT|ベンチレーション|シートエアコン/i),
   D('captain_seats', 'Captain seats', 'Interior', /CAPTAIN|キャプテンシート|エグゼクティブラウンジ/i),
   D('power_sliding_doors', 'Power sliding doors', 'Convenience', /POWER\s*SLID|ELECTRIC\s*SLID|(両側|左側|右側)?(電動|パワー|P)スライド|パワスラ|(?<![A-Z])PSD(?![A-Z])|(両側|左側|右側)PSD/i),
-  D('power_tailgate', 'Power tailgate', 'Convenience', /POWER\s*(BACK|TAIL|LIFT)\s*(DOOR|GATE)|電動(バック|テール)ゲート|パワーバックドア/i),
+  D('power_tailgate', 'Power tailgate', 'Convenience', /POWER\s*(BACK|TAIL|LIFT)\s*(DOOR|GATE)|電動(バック|テール)ゲート|パワー(バックドア|テールゲート|リフトゲート)/i),
   D('surround_camera', '360° camera', 'Safety', /(360|SURROUND|AROUND\s*VIEW|PANORAMIC\s*VIEW)\s*(°|DEGREE)?\s*(CAMERA|MONITOR|VIEW)|全方位|パノラミックビュー/i),
   D('adaptive_cruise', 'Adaptive cruise control', 'Safety', /ADAPTIVE\s*CRUISE|ACC\b|レーダークルーズ|全車速/i),
   D('head_up_display', 'Head-up display', 'Safety', /HEAD[\s-]*UP|HUD\b|ヘッドアップ/i),
@@ -47,7 +47,7 @@ export const CATALOG: Def[] = [
   D('aftermarket_wheels', 'Aftermarket wheels', 'Wheels', /AFTERMARKET\s*WHEEL|ALLOY\s*WHEELS?\s*\(?(NON|AFTER)|社外(アルミ|ホイール)|社外\s*\d+\s*(インチ|inch)/i),
   D('aftermarket_exhaust', 'Aftermarket exhaust', 'Exhaust', /AFTERMARKET\s*EXHAUST|SPORTS?\s*EXHAUST|社外(マフラー|エキゾースト)|MUFFLER/i),
   D('sport_exhaust', 'Sport exhaust', 'Exhaust', /\bAKRAPOVIC\b|\bHKS\b|\bFUJITSUBO\b|\bBLITZ\b|アクラポ/i),
-  D('large_display', 'Large display / navi', 'Infotainment', /(9|10|11|12|14)\s*(INCH|")\s*(DISPLAY|NAVI|MONITOR)|(9|10|11|12)インチ/i),
+  D('large_display', 'Large display / navi', 'Infotainment', /(?<![\d.])(9|1[0-4])(\.\d)?\s*(INCH|")\s*(DISPLAY|NAVI|MONITOR)|(?<![\d.])(9|1[0-4])(\.\d)?インチ(?!\s*(AW|アルミ|ホイール))/i),
   D('android_carplay', 'CarPlay / Android Auto', 'Infotainment', /CARPLAY|ANDROID\s*AUTO/i),
 ]
 

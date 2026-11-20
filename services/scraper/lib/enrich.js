@@ -181,7 +181,8 @@ async function enrichLot({ lot, ref, ask, imageBlock, today = new Date(), forceD
   if (D.normalizeFeatures) {
     features = D.normalizeFeatures(read.features || [])
     const have = new Set(features.map((f) => f.key))
-    D.textFeatures(lot.sales_points, lot.equipment, lot.notes, lot.inspector_report, patch.sales_points, patch.inspector_report_en)
+    // only the listing's own text (equipment codes, seller notes, inspector report): never Claude's English summary, which can say more than the sheet does
+    D.textFeatures(lot.equipment, lot.notes, lot.inspector_report)
       .filter((k) => !have.has(k)).forEach((k) => features.push({ key: k, label: D.featureLabel(k), group: D.CATALOG.find((c) => c.key === k)?.group || 'Other', source: 'unknown', evidence: 'text match' }))
   }
 

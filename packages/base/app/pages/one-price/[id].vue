@@ -46,7 +46,7 @@
           <div v-if="car.equipment" class="small" style="margin-top: 10px"><span class="muted">Equipment</span><br />{{ car.equipment }}</div>
         </div>
 
-        <div v-if="feats.length" class="card">
+        <div v-if="feats.length && hasTier('member')" class="card">
           <h2>On this car</h2>
           <div class="row wrap" style="gap: 6px; margin-top: 8px; justify-content: flex-start">
             <span v-for="f in feats" :key="f.key" class="chip" :class="f.source === 'aftermarket' ? 'warn' : f.source === 'factory' ? 'ok' : ''" :title="f.evidence || ''">{{ f.label }}<small v-if="f.source === 'aftermarket'"> · aftermarket</small></span>
@@ -63,6 +63,7 @@ import { fmtMytDateTime } from '@aim/core'
 const db = useDb()
 const route = useRoute()
 const { rate, loadRate, rm } = useRate()
+const { hasTier } = useAuth()
 const car = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
 const cur = ref<'RM' | 'JPY'>('RM')
 const shown = (jpy: number) => (cur.value === 'JPY' ? '¥' + Math.round(jpy).toLocaleString('en-US') : rm(jpy))
