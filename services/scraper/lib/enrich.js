@@ -40,14 +40,25 @@ const READ_SCHEMA = {
 const FEATURE_RULE = `
 - features: list every notable feature, option, package or modification shown on the sheet or in the text (an audio brand only when its name is printed, sunroof, leather, a body kit such as GR or Modellista, 4WD, safety packages, aftermarket parts). Only what is printed, never what the model usually has: if the sheet and text do not show it, the car does not have it. evidence is required and must be the exact printed words. source: aftermarket for non-maker parts (社外), factory for standard or maker options, dealer_option for dealer-fit items, unknown when the sheet does not say. evidence = the exact words printed.`
 
+/** Safety net for the "sheet is the truth" rule: when Claude itself says a value was assumed, guessed or blank, the value is not used (null), whatever it filled in. */
+const GUESS = /assum|guess|infer|probabl|likely|blank|not printed|not shown|not visible|missing|no month|estimat/i
+const GUESS_FIELDS = [[/first.?reg|month|初度/i, ['first_reg_month']], [/chassis/i, ['chassis_no']], [/model.?code|型式/i, ['model_code']], [/inspection|車検/i, ['inspection_until']]]
+function dropGuesses(read) {
+  for (const u of [...(read.uncertain || []), ...(read.doubts || [])].map((x) => String(x))) {
+    if (!GUESS.test(u)) continue
+    for (const [re, fields] of GUESS_FIELDS) if (re.test(u)) fields.forEach((f) => { if (read[f] != null) { read[f] = null } })
+  }
+}
+
 const READ_SYSTEM = `You read one used Japanese auction car for a Malaysian importer. You get the auction sheet image(s) and the scraped listing text.
+THE SHEET IS THE ONLY TRUTH. A value counts only when it is printed or written on the sheet (or in the scraped text). If a box is blank, not printed, cut off or cannot be read, the value is null (false or an empty list for flags). Never guess, assume, infer, estimate or fill in a value from what the model usually has, from the listing year, from a slash or a pattern, or from anything not shown. Example: the first-registration box shows "R5 / 月" with no month number: first_reg_month is null, not 5. Put the blank field in uncertain.
 Rules:
 - Only give a value you can read on the sheet or that is certain; otherwise null. Never guess a chassis code or a date.
 - model_code is the full code with its prefix (3BA-AGH40W), not the chassis number.
 - fuel: Petrol, Diesel, Hybrid (also e:HEV and mild hybrid), Plug-in hybrid or Electric. The 燃料 box says ガソリン (petrol) or 軽油 (diesel); a hybrid is printed as ガソリン, so a HYBRID / e:HEV / HEV word in the model name or on the sheet means Hybrid. null when not clear.
 - steering: LHD only when the sheet or the model name clearly shows left-hand drive (左ハンドル, 左H, LHD); RHD when it clearly shows right-hand drive; otherwise null. Do not guess from the brand.
 - chassis_no is the number printed in the 車台No. box (bottom right, above シリアルNo.), for example ZWR90-0030775 or AAHH45-0069995. Copy it exactly, letters and digits as printed; do not confuse it with the model code in the 型式 box, and null when the box is empty.
-- First registration is the month and year of first registration on the sheet (the Japanese era year must be converted: Reiwa 4 = 2022, Reiwa 5 = 2023, Heisei 30 = 2018).
+- First registration is the month and year of first registration on the sheet (the Japanese era year must be converted: Reiwa 4 = 2022, Reiwa 5 = 2023, Heisei 30 = 2018). If the month number is blank or cannot be read, first_reg_month is null and the sheet is flagged: never assume or guess a month.
 - drive: 4WD when the sheet or model shows 4WD / AWD, otherwise 2WD; null when unknown.
 - Write English only. Keep the notes short and factual; do not add opinions. Do not mention any company, auction house or website name.
 - selling_points: facts only, max 3 lines. Lead with what makes the car easy to sell: modified or custom parts, high spec, low mileage for its age, no accident, only light scratches.
@@ -129,6 +140,7 @@ async function enrichLot({ lot, ref, ask, imageBlock, today = new Date(), forceD
   // v2: the sheet read also lists the car's features (core FEATURE_SCHEMA), so every feature is searchable
   const schema = D.FEATURE_SCHEMA ? { ...READ_SCHEMA, required: [...READ_SCHEMA.required, 'features'], properties: { ...READ_SCHEMA.properties, features: D.FEATURE_SCHEMA.properties.features } } : READ_SCHEMA
   const read = (await ask({ system: READ_SYSTEM, content, schema, maxTokens: 2500 })).data
+  dropGuesses(read)
   if (!lot.sheet_url) notes.push('no auction sheet picture')
   ;(read.doubts || []).forEach((d) => notes.push(d))
 

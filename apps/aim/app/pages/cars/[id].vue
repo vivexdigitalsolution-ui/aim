@@ -21,7 +21,7 @@
       <div class="grid" style="align-content: start">
         <div v-if="car.needs_review" class="card review">
           <b>Check the auction sheet</b>
-          <div class="small">Some details of this car were read from a handwritten or unclear part of the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you bid.</div>
+          <div class="small">Some details of this car could not be read clearly from the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you bid.</div>
         </div>
         <div class="card">
           <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>

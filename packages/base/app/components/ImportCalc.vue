@@ -67,6 +67,11 @@ const candidates = computed<Docket[]>(() => {
   const words = search.value.trim().toUpperCase().split(/\s+/).filter(Boolean)
   if (!words.length) { const p = docketPool(r.dockets, props.car).pool; if (p.length) return p.slice(0, 30) }
   const brand = docketBrand(props.car.brand)
+  if (!words.length) {                                   // no docket carries the chassis code: list the same model first (NX before LS), then the rest of the make
+    const first = String(props.car.model || '').trim().split(/\s+/)[0]!.toUpperCase()
+    const same = first ? r.dockets.filter((d) => (!d.currency_code || d.currency_code === 'JPY') && docketBrand(d.brand) === brand && d.model.toUpperCase().startsWith(first)) : []
+    if (same.length) return same.slice(0, 30)
+  }
   return r.dockets.filter((d) => (!d.currency_code || d.currency_code === 'JPY') && (words.length ? words.every((w) => (docketBrand(d.brand) + ' ' + d.brand + ' ' + d.model).toUpperCase().includes(w)) : docketBrand(d.brand) === brand)).slice(0, 30)
 })
 function choose(d: Docket) { docket.value = d; picking.value = false; search.value = '' }
