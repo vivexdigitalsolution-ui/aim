@@ -6,7 +6,8 @@
     <div class="card filters">
       <div class="sbox"><input v-model="q" placeholder="Search make or model" @keyup.enter="reload" /><button v-if="q" class="clr" type="button" aria-label="Clear the search" title="Clear" @click="clearQ">×</button></div>
       <select v-model="brand" @change="reload"><option value="">All makes</option><option v-for="b in brands" :key="b" :value="b">{{ b }}</option></select>
-      <select v-model="yearFrom" @change="reload"><option :value="0">Any year</option><option v-for="y in years" :key="y" :value="y">{{ y }} +</option></select>
+      <select v-model.number="yearFrom" aria-label="Year from" @change="reload"><option :value="0">Year from</option><option v-for="y in years" :key="y" :value="y">{{ y }}</option></select>
+      <select v-model.number="yearTo" aria-label="Year to" @change="reload"><option :value="0">Year to</option><option v-for="y in years" :key="y" :value="y">{{ y }}</option></select>
       <NumInput v-model="maxRm" class="maxp" placeholder="Max price RM" @keyup.enter="reload" />
       <select v-model="sort" @change="reload">
         <option value="closing">Closing soonest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option>
@@ -27,7 +28,7 @@
         <div class="body">
           <div class="plabel">Start price</div>
           <div class="price">{{ money(c.start_price_jpy) }}</div>
-          <div class="name">{{ c.brand }} {{ c.model }}</div>
+          <div class="namerow"><div class="name">{{ c.brand }} {{ c.model }}</div><CarFlags:docket="flags.docket(c.id)" :review="flags.review(c.id)" /></div>
           <div class="muted small">{{ [c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
           <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="soon(c.bid_deadline) ? 'warn' : 'ac'">closes in {{ left(c.bid_deadline, now) }}</span></div>
         </div>
@@ -47,8 +48,9 @@ const { isStaff } = useAuth()
 const broken = reactive(new Set<string>())      // photos that no longer load: show the grey box instead of a broken-image icon
 function clearQ() { q.value = ''; reload() }
 async function star(id: string) { try { await watch.toggle(id) } catch (e: any) { err.value = e.message } }
-const q = ref(''), brand = ref(''), yearFrom = ref(0), maxRm = ref<number | null>(null), sort = ref('closing')
-const url = useUrlFilters('lite-cars', { q, brand, yearFrom, maxRm, sort }, { sort: 'closing' })
+const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), maxRm = ref<number | null>(null), sort = ref('closing')
+const flags = useCarFlags()
+const url = useUrlFilters('lite-cars', { q, brand, yearFrom, yearTo, maxRm, sort }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
@@ -61,12 +63,14 @@ async function fetchPage(from: number) {
   const t = q.value.trim().replace(/[,()%]/g, ' ')
   if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)
   if (yearFrom.value) query = query.gte('mfg_year', yearFrom.value)
+  if (yearTo.value) query = query.lte('mfg_year', yearTo.value)
   if (maxRm.value && rate.value > 0) query = query.lte('start_price_jpy', Math.round(maxRm.value / rate.value))
   const order: Record<string, [string, boolean]> = { closing: ['bid_deadline', true], price_asc: ['start_price_jpy', true], price_desc: ['start_price_jpy', false], year_desc: ['mfg_year', false], km_asc: ['mileage_km', true] }
   const [col, asc] = order[sort.value] || order.closing!
   const { data, error, count } = await query.order(col, { ascending: asc, nullsFirst: false }).range(from, from + PAGE - 1)
   if (error) throw error
   total.value = count || 0
+  flags.load((data || []).map((r: any) => r.id)).catch(() => {})
   return data || []
 }
 async function reload() { url.save(); loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
@@ -104,6 +108,7 @@ onMounted(async () => {
 .plabel { font-size: 11.5px; color: var(--mu); line-height: 1.2; }
 .price { font-size: 19px; font-weight: 800; }
 .name { font-weight: 600; margin: 2px 0; }
+.namerow { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .namerow .name { min-width: 0; }
 @media (max-width: 760px) {
   .cars { grid-template-columns: 1fr 1fr; gap: 10px; }
   /* the filters on a phone: search on its own row, then two equal halves per row */

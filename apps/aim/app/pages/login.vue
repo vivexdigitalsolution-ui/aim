@@ -27,8 +27,8 @@ async function submit() {
   busy.value = true
   try {
     await signIn(email.value.trim(), password.value)
-    if (profile.value?.role === 'customer') { await navigateTo('/for-you'); return }
-    const next = String(route.query.next || ''); await navigateTo(next.startsWith('/') && !next.startsWith('//') ? next : hasTier('member') ? '/today' : '/cars')
+    if (profile.value?.role === 'customer') { await navigateTo('/'); return }
+    const next = String(route.query.next || ''); await navigateTo(next.startsWith('/') && !next.startsWith('//') ? next : '/')
   }
   catch (e: any) { error.value = e.message || 'Something went wrong' } finally { busy.value = false }
 }

@@ -1,6 +1,10 @@
-<template><div /></template>
+<template>
+  <DashStaff v-if="isStaff" />
+  <DashCustomer v-else-if="profile?.role === 'customer'" />
+  <DashAp v-else />
+</template>
 
 <script setup lang="ts">
-const { hasTier } = useAuth()
-await navigateTo(hasTier('member') ? '/today' : '/cars', { replace: true })
+// The home page: one dashboard per kind of user (staff, AP holder, walk-in customer).
+const { isStaff, profile } = useAuth()
 </script>

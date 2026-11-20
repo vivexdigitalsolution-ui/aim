@@ -14,7 +14,7 @@
           <div class="muted small">{{ [c.mfg_year, c.grade, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.venue].filter(Boolean).join(' · ') }}</div>
           <div class="small" style="margin-top: 4px"><span class="chip ac">closes in {{ left(c.bid_deadline) }}</span> <span class="ac">{{ rm(c.start_price_jpy) }}</span></div>
         </div>
-        <button class="btn ghost sm" title="Remove from the watchlist" @click.prevent="remove(c.id)">★ Remove</button>
+        <button class="btn ghost sm" title="Remove from the watchlist" @click.prevent="remove(c.id)"><StarIcon filled style="display: inline-block; vertical-align: -0.2em; margin-right: 4px" />Remove</button>
       </NuxtLink>
     </div>
     <p v-if="gone" class="muted small" style="margin-top: 12px">{{ gone }} starred car{{ gone === 1 ? ' has' : 's have' }} already closed and left the list.</p>

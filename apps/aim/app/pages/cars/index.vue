@@ -14,7 +14,8 @@
     <div class="card filters">
       <input v-model="q" placeholder="Search make or model" style="flex: 1; min-width: 180px" @keyup.enter="reload" />
       <select v-model="brand" @change="reload"><option value="">All makes</option><option v-for="b in brands" :key="b" :value="b">{{ b }}</option></select>
-      <select v-model.number="yearFrom" @change="reload"><option :value="0">Any year</option><option v-for="y in years" :key="y" :value="y">{{ y }} +</option></select>
+      <select v-model.number="yearFrom" aria-label="Year from" @change="reload"><option :value="0">Year from</option><option v-for="y in years" :key="y" :value="y">{{ y }}</option></select>
+      <select v-model.number="yearTo" aria-label="Year to" @change="reload"><option :value="0">Year to</option><option v-for="y in years" :key="y" :value="y">{{ y }}</option></select>
       <input v-model.number="maxRm" type="number" min="0" step="10000" placeholder="Max price RM" style="width: 150px" @keyup.enter="reload" />
       <select v-model="sort" @change="reload">
         <option value="closing">Closing soonest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option>
@@ -32,11 +33,11 @@
       <NuxtLink v-for="c in cars" :key="c.id" :to="`/cars/${c.id}`" class="card car">
         <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span>
           <button v-if="isStaff" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
-          <button class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id)">{{ watch.has(c.id) ? '★' : '☆' }}</button></div>
+          <button class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id)"><StarIcon :filled="watch.has(c.id)" /></button></div>
         <div class="body">
           <div class="price">{{ money(c.start_price_jpy) }}</div>
           <div v-if="marginOf(c.id) != null" class="mg" :class="marginOf(c.id)! >= 0 ? 'up' : 'down'">Margin {{ money(marginOf(c.id)!, 'myr') }}</div>
-          <div class="name">{{ c.brand }} {{ c.model }}</div>
+          <div class="namerow"><div class="name">{{ c.brand }} {{ c.model }}</div><CarFlags :docket="flags.docket(c.id)" :review="flags.review(c.id)" /></div>
           <div class="muted small">{{ [c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
           <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="soon(c.bid_deadline) ? 'warn' : 'ac'">closes in {{ left(c.bid_deadline) }}</span></div>
         </div>
@@ -88,9 +89,10 @@ const marginMap = computed(() => {
   return m
 })
 const marginOf = (id: string) => marginMap.value.get(id) ?? null
-const q = ref(''), brand = ref(''), yearFrom = ref(0), maxRm = ref<number | null>(null), sort = ref('closing')
+const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), maxRm = ref<number | null>(null), sort = ref('closing')
 const prefId = ref('')
-const url = useUrlFilters('cars', { q, brand, yearFrom, maxRm, sort, pref: prefId }, { sort: 'closing' })
+const flags = useCarFlags()
+const url = useUrlFilters('cars', { q, brand, yearFrom, yearTo, maxRm, sort, pref: prefId }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
@@ -112,12 +114,14 @@ async function fetchPage(from: number) {
   const t = q.value.trim().replace(/[,()%]/g, ' ')
   if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)
   if (yearFrom.value) query = query.gte('mfg_year', yearFrom.value)
+  if (yearTo.value) query = query.lte('mfg_year', yearTo.value)
   if (maxRm.value && rate.value > 0) query = query.lte('start_price_jpy', Math.round(maxRm.value / rate.value))
   const order: Record<string, [string, boolean]> = { closing: ['bid_deadline', true], price_asc: ['start_price_jpy', true], price_desc: ['start_price_jpy', false], year_desc: ['mfg_year', false], km_asc: ['mileage_km', true] }
   const [col, asc] = order[sort.value] || order.closing!
   const { data, error, count } = await query.order(col, { ascending: asc, nullsFirst: false }).range(from, from + PAGE - 1)
   if (error) throw error
   total.value = count || 0
+  flags.load((data || []).map((r: any) => r.id)).catch(() => {})
   return data || []
 }
 async function reload() { prefId.value = activePref.value?.id || ''; url.save(); loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
@@ -150,8 +154,10 @@ onMounted(async () => {
 .price { font-size: 19px; font-weight: 800; }
 .name { font-weight: 600; margin: 2px 0; }
 .ph { position: relative; }
-.star { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 19px; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.star { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; padding: 0; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.star :deep(svg) { width: 19px; height: 19px; }
 .star.on { color: var(--ac); }
+.namerow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0; } .namerow .name { margin: 0; min-width: 0; }
 .prefs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .rec { position: absolute; top: 8px; left: 8px; border: 0; border-radius: 16px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; font-weight: 600; padding: 6px 10px; cursor: pointer; }
 .rec.on { background: var(--ac); color: #000; }

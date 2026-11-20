@@ -30,7 +30,7 @@
           <div v-if="car.start_price_jpy > 0" class="muted small">Starting price ¥{{ car.start_price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">closes in {{ left(car.bid_deadline) }}</span><span class="chip">{{ fmtMytDateTime(car.bid_deadline) }} MYT</span></div>
           <div class="row wrap" style="gap: 8px; margin-top: 12px; justify-content: flex-start">
-            <button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? '★ On your watchlist' : '☆ Watch this car' }}</button>
+            <button class="btn ghost sm" :class="{ starred: watching }" @click="star"><StarIcon :filled="watching" />{{ watching ? 'On your watchlist' : 'Watch this car' }}</button>
             <button v-if="isStaff" class="btn ghost sm" :class="{ starred: recs.has(car.id) }" @click="recommend">{{ recs.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button>
             <NuxtLink v-if="hasTier('member')" :to="`/history?brand=${encodeURIComponent(car.brand)}&model=${encodeURIComponent(String(car.model).split(' ')[0])}`" class="btn ghost sm" style="display: inline-flex; align-items: center; text-decoration: none">What it sold for</NuxtLink>
           </div>
@@ -240,6 +240,7 @@ onMounted(async () => {
 .thumbs img { width: 72px; height: 54px; object-fit: cover; border-radius: 8px; border: 2px solid transparent; cursor: pointer; flex: none; }
 .thumbs img.on { border-color: var(--ac); }
 .starred { color: var(--ac); border-color: var(--ac); }
+.btn:has(.staricon) { display: inline-flex; align-items: center; gap: 6px; }
 .r { text-align: right; } .sum td { border-top: 2px solid var(--line); } .up { color: #3ecf8e; } .down { color: #ff6b6b; }
 .dk { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--line); }
 .panel { display: grid; gap: 6px; margin-top: 10px; max-height: 300px; overflow: auto; }

@@ -10,9 +10,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
     // the first visit after the invitation starts the clock; the password page of the invitation link is /reset, which opens above
     if (!profile.value.expires_at) { try { await startCustomerAccess() } catch { /* shown as ended below if it did not start */ } }
     if (customerExpired() || profile.value.status !== 'active') { await signOut(); return navigateTo({ path: '/login', query: { ended: '1' } }) }
-    return to.path.startsWith('/for-you') || to.path === '/account' ? undefined : navigateTo('/for-you')
+    return to.path === '/' || to.path.startsWith('/for-you') || to.path === '/account' ? undefined : navigateTo('/')
   }
-  if (to.path === '/login') return navigateTo(hasTier('member') ? '/today' : '/cars')
+  if (to.path === '/login') return navigateTo('/')
 
   // signed in, but waiting for approval or suspended
   if (!profile.value || profile.value.status !== 'active') return to.path === '/pending' ? undefined : navigateTo('/pending')
