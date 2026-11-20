@@ -7,9 +7,9 @@
         <b>Today's bidding</b><span>ends in</span><span class="clock">{{ countdown }}</span>
         <span class="muted small det">{{ strip.openToday }} car{{ strip.openToday === 1 ? '' : 's' }} still open in {{ strip.venues }} venue{{ strip.venues === 1 ? '' : 's' }} · ends {{ strip.lastMyt }}</span>
       </template>
-      <template v-else-if="strip.mode === 'later'">
-        <b>Today's bidding is over</b><span>next bidding</span><span class="clock off">{{ countdown }}</span>
-        <span class="muted small det">{{ strip.venue }} · closes from {{ strip.nextMyt }}</span>
+      <template v-else-if="strip.mode === 'closed'">
+        <b>Today's bidding</b><span class="clock off">Closed</span>
+        <span class="muted small det">All venues are closed.<template v-if="strip.nextLabel"> Next bidding day: {{ strip.nextLabel }}. The countdown starts after 12:00 am Japan time (11:00 pm Malaysia time).</template></span>
       </template>
       <b v-else>No car is open for bidding right now</b>
       <span class="grow" /><span class="ac">Browse cars ›</span>
@@ -119,7 +119,7 @@
 
 <script setup lang="ts">
 const closes = (iso: string) => closesInfo(iso, now.value).text
-import { fmtMyt, closesInfo } from '@aim/core'
+import { fmtMyt, closesInfo, isPlaceholderDeadline } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -138,27 +138,33 @@ const si = ref(0)
 let timer: any, clock: any
 const sec = ref(Date.now())      // this page's own clock: the countdown moves every second (the shared clock only moves every 30 seconds)
 let reloading = false
-onMounted(() => { timer = setInterval(() => { si.value = (si.value + 1) % slides.length }, 6000); clock = setInterval(() => { sec.value = Date.now(); if (strip.at && sec.value >= new Date(strip.at).getTime() + 1500 && !reloading) { reloading = true; loadStrip().finally(() => { reloading = false }) } }, 1000) })
+onMounted(() => { timer = setInterval(() => { si.value = (si.value + 1) % slides.length }, 6000); let ticks = 0; clock = setInterval(() => { sec.value = Date.now(); ticks++; const ended = strip.at && sec.value >= new Date(strip.at).getTime() + 1500; if ((ended || jstToday() !== loadedFor || ticks % 60 === 0) && !reloading) { reloading = true; loadStrip().finally(() => { reloading = false }) } }, 1000) })
 onBeforeUnmount(() => { clearInterval(timer); clearInterval(clock) })
 
 // live strip
 // The strip counts down to the END OF TODAY'S BIDDING: the last closing time of any car, over all venues (auction day = the Japan date, because the auctions run on Japan time).
-// When every car of today has closed it shows the next auction day instead: its first closing time, in Malaysia time.
-const strip = reactive({ mode: 'none' as 'today' | 'later' | 'none', at: null as string | null, venue: '', openToday: 0, venues: 0, lastMyt: '', nextMyt: '' })
+// When every real closing time of today has passed it says Closed; the next day's countdown starts after 12:00 am Japan time.
+const strip = reactive({ mode: 'none' as 'today' | 'closed' | 'none', at: null as string | null, venue: '', openToday: 0, venues: 0, lastMyt: '', nextLabel: '' })
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kuala_Lumpur' }) + ' MYT'
+const jstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
+let loadedFor = ''
+// only cars with a REAL closing time count: the 23:59 Japan time placeholder (the site had no time yet) is ignored completely
 async function loadStrip() {
-  const nowIso = new Date().toISOString()
-  const todayJst = new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
-  const open = () => db.from('lots').select('bid_deadline,venue', { count: 'exact' }).gt('bid_deadline', nowIso).eq('my_eligible', true)
-  const today = await open().eq('auction_date', todayJst).order('bid_deadline', { ascending: false }).limit(1000)
-  if (today.data?.length) {
-    const rows = today.data
-    Object.assign(strip, { mode: 'today', at: rows[0]!.bid_deadline, venue: rows[0]!.venue, openToday: today.count || rows.length, venues: new Set(rows.map((r: any) => r.venue)).size, lastMyt: hhmm(rows[0]!.bid_deadline) })
+  const nowIso = new Date().toISOString(), todayJst = jstToday()
+  loadedFor = todayJst
+  const realOn = async (date: string) => (((await db.from('lots').select('bid_deadline,venue').gt('bid_deadline', nowIso).eq('my_eligible', true).eq('auction_date', date).limit(3000)).data || []) as any[]).filter((r) => !isPlaceholderDeadline(r.bid_deadline))
+  const rows = await realOn(todayJst)
+  if (rows.length) {
+    const last = rows.reduce((m, r) => (r.bid_deadline > m.bid_deadline ? r : m))
+    Object.assign(strip, { mode: 'today', at: last.bid_deadline, venue: last.venue, openToday: rows.length, venues: new Set(rows.map((r: any) => r.venue)).size, lastMyt: hhmm(last.bid_deadline), nextLabel: '' })
     return
   }
-  const later = await open().gt('auction_date', todayJst).order('auction_date').order('bid_deadline').limit(1)
-  if (later.data?.length) Object.assign(strip, { mode: 'later', at: later.data[0]!.bid_deadline, venue: later.data[0]!.venue, nextMyt: fmtMyt(later.data[0]!.bid_deadline) + ' MYT' })
-  else Object.assign(strip, { mode: 'none', at: null })
+  // nothing open today: Closed. The next day's countdown starts after 12:00 am Japan time, when it becomes "today".
+  let nextLabel = ''
+  const nxt = await db.from('lots').select('auction_date').gt('bid_deadline', nowIso).eq('my_eligible', true).gt('auction_date', todayJst).order('auction_date').limit(3000)
+  const dates = [...new Set(((nxt.data || []) as any[]).map((r) => r.auction_date as string))].slice(0, 5)
+  for (const d of dates) { if ((await realOn(d)).length) { nextLabel = new Date(d + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }); break } }
+  Object.assign(strip, { mode: 'closed', at: null, venue: '', openToday: 0, venues: 0, lastMyt: '', nextLabel })
 }
 const countdown = computed(() => {
   if (!strip.at) return ''

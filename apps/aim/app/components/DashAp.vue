@@ -14,9 +14,9 @@
       <div class="card big">
         <div class="row wrap between">
           <div>
-            <div class="muted small">{{ bd.day.mode === 'later' ? 'Next bidding day ends in' : "Today's bidding ends in" }}</div>
-            <div class="clock">{{ bd.day.at ? bd.countdown(now) : '—' }}</div>
-            <div class="muted small">{{ bd.day.mode === 'none' ? 'No open car right now.' : bd.dateLabel.value + ' · ' + bd.day.cars + ' open cars · last venue closes ' + bd.myt(bd.day.at) + ' MYT' }}</div>
+            <div class="muted small">{{ bd.day.mode === 'closed' ? 'Bidding today' : "Today's bidding ends in" }}</div>
+            <div class="clock">{{ bd.day.mode === 'today' && bd.day.at ? bd.countdown(bd.tick.value) : bd.day.mode === 'closed' ? 'Closed' : '—' }}</div>
+            <div class="muted small"><template v-if="bd.day.mode === 'today'">{{ bd.dateLabel.value }} · {{ bd.day.cars }} open cars · last venue closes {{ bd.myt(bd.day.at) }} MYT</template><template v-else-if="bd.day.mode === 'closed'">All venues are closed.<template v-if="bd.day.next"> Next bidding day: {{ bd.nextLabel.value }}. The countdown starts after 12:00 am Japan time (11:00 pm Malaysia time).</template></template><template v-else>No open car right now.</template></div>
           </div>
           <NuxtLink to="/cars" class="btn" style="display: inline-flex; align-items: center">Browse the cars</NuxtLink>
         </div>
@@ -61,7 +61,7 @@
           <div v-else-if="!best.length" class="muted small" style="margin-top: 8px">No open car has both a market price and a docket yet.</div>
           <template v-else>
             <NuxtLink v-for="c in best" :key="c.id" :to="`/margin?lot=${c.id}`" class="rowc">
-              <span class="grow"><b>{{ c.brand }} {{ c.model }}</b><small class="muted">{{ c.history ? 'Usually sells ' + yen(c.history.price) : 'no sale history' }} · closes in {{ timeLeft(c.bid_deadline, now).label }}</small></span>
+              <span class="grow"><b>{{ c.brand }} {{ c.model }}</b><small class="muted">{{ c.history ? 'Usually sells ' + yen(c.history.price) : 'no sale history' }} · {{ closesInfo(c.bid_deadline, now).text }}</small></span>
               <span class="ra"><b class="up">{{ c.headroom == null ? '—' : (c.headroom >= 0 ? '+' : '−') + yen(Math.abs(c.headroom)) }}</b><small class="muted">room to bid</small></span>
             </NuxtLink>
           </template>
@@ -89,7 +89,7 @@
 </template>
 
 <script setup lang="ts">
-import { timeLeft, closesInfo } from '@aim/core'
+import { timeLeft, closesInfo, isPlaceholderDeadline } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -148,7 +148,7 @@ async function loadCars() {
     const { data } = await db.from('lots').select('id,brand,model,grade,mfg_year,venue,photos,start_price_jpy,bid_deadline').in('id', watch.ids.value.slice(0, 200)).gt('bid_deadline', nowIso).order('bid_deadline').limit(200)
     const list = data || []
     watchCars.value = list.slice(0, 3)
-    closingWatch.value = list.filter((l: any) => new Date(l.bid_deadline).getTime() - Date.now() < 24 * 3600_000).length
+    closingWatch.value = list.filter((l: any) => !isPlaceholderDeadline(l.bid_deadline) && new Date(l.bid_deadline).getTime() - Date.now() < 24 * 3600_000).length
   }
 }
 async function loadNotes() {

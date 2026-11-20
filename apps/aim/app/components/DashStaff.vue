@@ -14,9 +14,9 @@
       <div class="card big">
         <div class="row wrap between">
           <div>
-            <div class="muted small">{{ bd.day.mode === 'later' ? 'Next bidding day ends in' : "Today's bidding ends in" }}</div>
-            <div class="clock">{{ bd.day.at ? bd.countdown(now) : '—' }}</div>
-            <div class="muted small">{{ bd.day.mode === 'none' ? 'No open car.' : bd.day.mode === 'later' ? 'All of today is closed. ' : '' }}{{ bd.dateLabel.value }}<template v-if="bd.day.mode !== 'none'"> · {{ bd.day.cars }} open cars · {{ bd.day.venues.length }} venue{{ bd.day.venues.length === 1 ? '' : 's' }}</template></div>
+            <div class="muted small">{{ bd.day.mode === 'closed' ? 'Bidding today' : "Today's bidding ends in" }}</div>
+            <div class="clock">{{ bd.day.mode === 'today' && bd.day.at ? bd.countdown(bd.tick.value) : bd.day.mode === 'closed' ? 'Closed' : '—' }}</div>
+            <div class="muted small"><template v-if="bd.day.mode === 'today'">{{ bd.dateLabel.value }} · {{ bd.day.cars }} open cars · {{ bd.day.venues.length }} venue{{ bd.day.venues.length === 1 ? '' : 's' }}</template><template v-else-if="bd.day.mode === 'closed'">All venues are closed.<template v-if="bd.day.next"> Next bidding day: {{ bd.nextLabel.value }} ({{ bd.day.next.cars }} cars). The countdown starts after 12:00 am Japan time (11:00 pm Malaysia time).</template></template><template v-else>No open car.</template></div>
           </div>
         </div>
         <div v-if="bd.day.venues.length" class="venues">
@@ -77,7 +77,7 @@
             <tbody>
               <tr v-for="c in bestCars" :key="c.id">
                 <td><NuxtLink :to="`/margin?lot=${c.id}`"><b>{{ c.brand }} {{ c.model }}</b></NuxtLink><small class="muted">{{ [c.mfg_year, c.grade, c.venue].filter(Boolean).join(' · ') }}</small></td>
-                <td class="r nw">{{ timeLeft(c.bid_deadline, now).label }}</td>
+                <td class="r nw">{{ isPlaceholderDeadline(c.bid_deadline) ? 'TBA' : timeLeft(c.bid_deadline, now).label }}</td>
                 <td class="r nw">{{ c.maxBid ? yen(c.maxBid) : '—' }}</td>
                 <td class="r nw">{{ c.history ? yen(c.history.price) : '—' }}</td>
                 <td class="r nw up"><b>{{ c.headroom == null ? '—' : (c.headroom >= 0 ? '+' : '−') + yen(Math.abs(c.headroom)) }}</b></td>
@@ -108,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { timeLeft } from '@aim/core'
+import { timeLeft, isPlaceholderDeadline } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -167,7 +167,7 @@ async function loadCounts() {
   const nowIso = new Date().toISOString(), in24 = new Date(Date.now() + 24 * 3600_000).toISOString()
   const open = () => db.from('lots').select('id', { count: 'exact', head: true }).gt('bid_deadline', nowIso).eq('my_eligible', true)
   const [o, c24, pb, rv, fl, ou, pa, rq, ee, aa, ed, oo, t1, t2, t3] = await Promise.all([
-    head(open()), head(open().lt('bid_deadline', in24)),
+    head(open()), db.from('lots').select('bid_deadline').gt('bid_deadline', nowIso).lt('bid_deadline', in24).eq('my_eligible', true).limit(5000).then((r: any) => (r.error ? null : (r.data || []).filter((x: any) => !isPlaceholderDeadline(x.bid_deadline)).length)),
     head(db.from('bids').select('id', { count: 'exact', head: true }).eq('status', 'pending')),
     head(db.from('lot_docket_decisions').select('lot_id', { count: 'exact', head: true }).eq('status', 'review')),
     head(open().eq('needs_review', true)),                                                  // null until migration 44 is run
