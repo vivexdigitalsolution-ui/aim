@@ -23,23 +23,7 @@ const has = (f) => process.argv.includes(f)
 const DRY = has('--dry'), ALL = has('--all'), OPEN = has('--open')
 const DAYS = Number(process.argv[process.argv.indexOf('--days') + 1]) || 3
 
-/** true only when the photo host clearly says 404 (a network error is not "gone") */
-async function gone(url) {
-  if (!url) return true
-  try { return (await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(15000) })).status === 404 } catch { return false }
-}
-
-async function missingOf(lotIds) {
-  const out = []
-  for (let i = 0; i < lotIds.length; i += 100) {
-    const r = await supabase.from('lots').select('id,lot_no,auction_date,brand,model,maker_code,car_code,photos,sheet_url').in('id', lotIds.slice(i, i + 100))
-    if (r.error) throw new Error('lots: ' + r.error.message)
-    // the checks of one page of cars run side by side (a day has about 2,000 open cars)
-    const flags = await Promise.all(r.data.map(async (l) => (await gone(l.photos?.[0])) || (await gone(l.sheet_url))))
-    r.data.forEach((l, k) => { if (flags[k]) out.push(l) })
-  }
-  return out
-}
+const { missingOf, openMissing } = require('./lib/photofix')
 
 async function main() {
   if (OPEN) return mainOpen()
@@ -71,27 +55,16 @@ async function main() {
     : `\nAll ${bad.length} restored.`)
 }
 
-/** every open car closing soon, whether or not it is in an offer batch */
+/** every open car closing soon that can still be restored, whether or not it is in an offer batch */
 async function mainOpen() {
-  const now = new Date().toISOString(), until = new Date(Date.now() + DAYS * 86400000).toISOString()
-  const ids = []
-  for (let from = 0; ; from += 1000) {
-    const r = await supabase.from('lots').select('id').gt('bid_deadline', now).lt('bid_deadline', until).range(from, from + 999)
-    if (r.error) throw new Error('lots: ' + r.error.message)
-    ids.push(...r.data.map((x) => x.id))
-    if (r.data.length < 1000) break
-  }
-  console.log(`Checking the photos of ${ids.length} open car(s) closing within ${DAYS} day(s)...`)
-  const bad = (await missingOf(ids)).filter((l) => l.maker_code && l.car_code)
+  const { bad, models } = await openMissing(DAYS)
   if (!bad.length) { console.log('All photos are there. Nothing to do.'); return }
-  const models = new Map()
-  bad.forEach((l) => { const k = l.maker_code + '|' + l.car_code; if (!models.has(k)) models.set(k, { maker_code: l.maker_code, car_code: l.car_code, brand_name: l.brand, model_name: String(l.model).split(' ')[0], lots: [] }); models.get(k).lots.push(l) })
   console.log(`${bad.length} car(s) have missing photos, in ${models.size} model(s)`)
   if (DRY) { console.log('--dry: nothing scraped.'); return }
   await ensureTargets([...models.values()])
   runScrape('bid', [...models.values()], { hint: 'Run node refresh-photos.js --open again.' })
   const still = await missingOf(bad.map((l) => l.id))
-  console.log(`${bad.length - still.length} restored, ${still.length} still missing (cars of today's auction cannot be restored: the scrape skips the auction that is already running).`)
+  console.log(`${bad.length - still.length} restored, ${still.length} still missing (the car may be gone from the listing).`)
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error(e.message); process.exit(1) })

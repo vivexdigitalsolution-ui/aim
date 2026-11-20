@@ -10,36 +10,44 @@ Run all of these on the scraper PC, in `services/scraper`. Ctrl+C once = stop cl
 | `node scrape.js one_price` | one-price (fixed price) cars of every enabled "One price" target — Japanese site, own login | `one_price_lots` (+ photos) |
 | `node scrape.js history` | sold prices of every enabled "History" target | `lot_history` |
 
+All three in ONE browser session (one login; bidding and history on the English site, then one price on the Japanese site, which reuses the same login and only logs in again if USS refuses):
+
+```
+node scrape.js all saturday            same as: node scrape.js bid,history,one_price saturday
+node scrape.js bid,one_price tuesday   any two
+```
+`node daily.js` runs its USS scrapes this way. The day applies to bidding only; one price and history ignore it.
+
 Options after the mode (any order):
 
 ```
 node scrape.js bid yokohama            one venue (names in lib/venues.js; several: yokohama,tokyo)
-node scrape.js bid tuesday             a weekday: only the venues set for that day in the table scrape_venue_days
+node scrape.js bid tuesday             a weekday: picks it on the USS site (that day's venues get ticked), then unticks the venues listed for it in scrape_day_skips
 node scrape.js bid today | tomorrow    the same, for today's / tomorrow's weekday (Japan time)
 node scrape.js bid 0day                only targets that never ran      (3days = never ran or last run 3+ days ago)
 node scrape.js bid offer               only the Offer report models, every venue
-node scrape.js one_price osaka         one price has venues but no weekday
+node scrape.js one_price osaka         one price takes a venue but no weekday (its page has no day box)
 node scrape.js bid --include-today     also keep cars of today's auction
 ```
 
-## Which venue on which day
+## Which venues on which day
 
-Table `scrape_venue_days` (weekday 1 = Monday … 7 = Sunday, venue code) with the venue list in `scrape_venues`.
-Edit them in the Supabase table editor — no code change:
+USS has a "day" list on its search page: choosing a weekday ticks that day's venues (Tuesday = Yokohama + R-Nagoya, and so on).
+The scraper does the same, then **unticks** the venues you listed for that weekday. Everything is data, no code change:
 
-* New venue → add a row to `scrape_venues` (its code is the value of the venue checkbox on the USS site), then a row per weekday in `scrape_venue_days`.
-* Closed venue → untick `active` in `scrape_venues` (or delete its day rows).
-* Moved day → change/add/delete the rows of `scrape_venue_days`.
-* A weekday with no row falls back to the old rule (the site's own day list minus `SKIP_VENUES` in `.env`).
-* The seed has two examples: Tuesday = Yokohama, Thursday = Tokyo. Change them.
+* `scrape_day_skips` (weekday 1 = Monday … 7 = Sunday, venue code): the venues to untick on that day. Seed: Tuesday -> R-Nagoya (`NR`), because R-score cars are not imported.
+* `scrape_venues` (code, name, active): the venue codes. Untick `active` when a venue closes: it is then unticked on every day.
+* New USS venue: nothing to do, it appears in the site's own day list. Add a row to `scrape_venues` only if you may want to skip it later.
+* If the database cannot be read, `SKIP_VENUES` in `.env` is used.
 
 ## Daily run (everything in order, with a log)
 
 ```
 node daily.js                         all steps
 node daily.js --dry                   show the plan only
-node daily.js --only scrape,oneprice  just these steps
+node daily.js --only scrape,oneprice  just these steps (scrape = bidding, history, oneprice: they share one login)
 node daily.js --skip history          everything except these
+node daily.js --day tuesday           the bidding scrape picks Tuesday on the USS site and unticks that day's skipped venues; also today / tomorrow
 ```
 Steps: `scrape` → `oneprice` → `photos` → `history` → `enrich` → `features` → `link` → `snapshot` → `alerts` → `housekeeping`.
 

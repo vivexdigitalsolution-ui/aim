@@ -1,9 +1,10 @@
 'use strict'
 
 /**
- * lib/schedule.js — which USS venues are scraped on which weekday. The list lives in the database (scrape_venue_days + scrape_venues),
- * so staff change it in the table editor when USS adds or closes a venue or moves a day. No rows for a weekday = null (the caller
- * then uses the old way: the site's own day list minus SKIP_VENUES in .env).
+ * lib/schedule.js — what to leave out when a weekday is scraped. USS has a "day" list on its search page: choosing a weekday ticks that
+ * day's venues. The database then says which of those to UNTICK (e.g. Tuesday = Yokohama + R-Nagoya, R-Nagoya unticked because we do
+ * not import its R-score cars): table scrape_day_skips (weekday, venue_code), plus every venue marked active = false in scrape_venues
+ * (a closed venue). A new USS venue needs no entry here: it simply appears in the site's own day list.
  */
 
 const supabase = require('./db')
@@ -16,13 +17,17 @@ function jstWeekday(offsetDays = 0) {
   return d.getUTCDay() === 0 ? 7 : d.getUTCDay()
 }
 
-/** @returns {Promise<{codes:string[], names:string[]}|null>} the active venues of that weekday, or null when none are set */
-async function venuesForWeekday(weekday) {
-  const { data, error } = await supabase.from('scrape_venue_days').select('venue_code, scrape_venues(code, name, active)').eq('weekday', weekday)
-  if (error) { console.log(`[SCHEDULE] cannot read scrape_venue_days (${error.message}) — using the old day rule`); return null }
-  const on = (data || []).map((r) => r.scrape_venues).filter((v) => v && v.active)
-  if (!on.length) return null
-  return { codes: on.map((v) => v.code), names: on.map((v) => v.name) }
+/** @returns {Promise<{codes:string[], names:string[]}|null>} venues to untick for that weekday; null when the tables cannot be read (caller uses .env SKIP_VENUES) */
+async function skipsForWeekday(weekday) {
+  const [days, venues] = await Promise.all([
+    supabase.from('scrape_day_skips').select('venue_code').eq('weekday', weekday),
+    supabase.from('scrape_venues').select('code, name, active'),
+  ])
+  if (days.error || venues.error) { console.log(`[SCHEDULE] cannot read the skip tables (${(days.error || venues.error).message}) - using SKIP_VENUES from .env`); return null }
+  const byCode = new Map((venues.data || []).map((v) => [v.code, v]))
+  const codes = new Set((days.data || []).map((r) => r.venue_code))
+  for (const v of venues.data || []) if (!v.active) codes.add(v.code)
+  return { codes: [...codes], names: [...codes].map((c) => byCode.get(c)?.name || c) }
 }
 
-module.exports = { NAMES, jstWeekday, venuesForWeekday }
+module.exports = { NAMES, jstWeekday, skipsForWeekday }

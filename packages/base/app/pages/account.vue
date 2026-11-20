@@ -17,6 +17,18 @@
       <div style="margin-top: 12px"><button class="btn" :disabled="busy1" @click="saveDetails">Save details</button></div>
     </div>
 
+    <div v-if="isStaff || profile?.role === 'ap_holder'" class="card" style="margin-bottom: 16px">
+      <h2>{{ isStaff ? 'Import costs: default for every AP holder' : 'My import costs' }}</h2>
+      <p class="muted small">{{ isStaff ? 'Port clearance, inland transfer and AP fee added to the import price of every car. AP holders start from these and can set their own.' : 'Added to the import price of every car and in the calculator. Change them here, or directly in the import price breakdown of any car. Leave a box empty to use the team default (shown inside the box).' }}</p>
+      <div class="grid3">
+        <label class="f">Port clearance (RM)<input v-model="fees.port" type="number" min="0" step="50" inputmode="numeric" :placeholder="isStaff ? '' : String(shared.port_myr)" /></label>
+        <label class="f">Inland transfer (RM)<input v-model="fees.inland" type="number" min="0" step="50" inputmode="numeric" :placeholder="isStaff ? '' : String(shared.inland_myr)" /></label>
+        <label class="f">AP fee (RM)<input v-model="fees.apFee" type="number" min="0" step="500" inputmode="numeric" :placeholder="isStaff ? '' : String(shared.ap_fee_myr)" /></label>
+      </div>
+      <div v-if="msgF" :class="okF ? 'okmsg' : 'err'" style="margin-top: 10px">{{ msgF }}</div>
+      <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap"><button class="btn" :disabled="busyF" @click="saveFees">Save</button><button v-if="!isStaff" class="btn ghost" :disabled="busyF" @click="useTeam">Use the team defaults</button></div>
+    </div>
+
     <div class="card" style="margin-bottom: 16px">
       <h2>Notifications on this device</h2>
       <p class="muted small">Get a notification on this phone or browser: new bid results, cars closing soon, and cars that fit your saved preferences.</p>
@@ -48,6 +60,41 @@ const pushText = computed(() => ({ on: 'On for this device.', off: 'Off for this
 onMounted(() => push.refresh())
 async function pushOn() { pushBusy.value = true; pushErr.value = ''; try { await push.enable() } catch (e: any) { pushErr.value = e.message } finally { pushBusy.value = false } }
 async function pushOff() { pushBusy.value = true; try { await push.disable() } catch (e: any) { pushErr.value = e.message } finally { pushBusy.value = false } }
+// ── import costs: staff set the team default (calc_presets), an AP holder keeps their own (empty = team default) ──
+const fees = reactive<{ port: number | string | null; inland: number | string | null; apFee: number | string | null }>({ port: null, inland: null, apFee: null })
+const shared = reactive({ port_myr: 2500, inland_myr: 250, ap_fee_myr: 10500 })
+const busyF = ref(false), msgF = ref(''), okF = ref(false)
+const numOrNull = (v: unknown) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v))
+async function loadFees() {
+  if (isStaff.value) {
+    const { data } = await db.from('calc_presets').select('preset_key,amount').in('preset_key', ['offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr'])
+    const m = Object.fromEntries((data || []).map((r: any) => [r.preset_key, Number(r.amount)]))
+    fees.port = m.offer_port_myr ?? 2500; fees.inland = m.offer_inland_myr ?? 250; fees.apFee = m.offer_ap_fee_myr ?? 10500
+  } else if (profile.value?.role === 'ap_holder') {
+    const { data } = await db.rpc('import_fees')
+    if (data) { Object.assign(shared, data.shared); fees.port = data.mine.port_myr; fees.inland = data.mine.inland_myr; fees.apFee = data.mine.ap_fee_myr }
+  }
+}
+async function saveFees() {
+  busyF.value = true; msgF.value = ''
+  try {
+    if (isStaff.value) {
+      const rows = [['offer_port_myr', fees.port], ['offer_inland_myr', fees.inland], ['offer_ap_fee_myr', fees.apFee]].map(([preset_key, v]) => ({ preset_key, amount: numOrNull(v) }))
+      if (rows.some((r) => r.amount == null || (r.amount as number) < 0)) throw new Error('Fill in all three amounts (0 or more).')
+      const { error } = await db.from('calc_presets').upsert(rows, { onConflict: 'preset_key' })
+      if (error) throw error
+      msgF.value = 'Saved. Every AP holder without their own figures now starts from these.'
+    } else {
+      const { error } = await db.rpc('save_my_import_fees', { p_port: numOrNull(fees.port), p_inland: numOrNull(fees.inland), p_ap_fee: numOrNull(fees.apFee) })
+      if (error) throw error
+      msgF.value = 'Saved. These now start every import price and calculator you open.'
+    }
+    okF.value = true
+  } catch (e: any) { okF.value = false; msgF.value = e.message } finally { busyF.value = false }
+}
+async function useTeam() { fees.port = fees.inland = fees.apFee = null; await saveFees() }
+watch(() => [profile.value?.id, isStaff.value], () => { if (profile.value) loadFees() }, { immediate: true })
+
 const f = reactive({ company_name: '', contact_name: '', phone: '', whatsapp: '', address: '' })
 const cur = ref(''), next = ref(''), again = ref('')
 const busy1 = ref(false), msg1 = ref(''), ok1 = ref(false), busy2 = ref(false), msg2 = ref(''), ok2 = ref(false)
@@ -85,6 +132,7 @@ async function changePassword() {
 <style scoped>
 .acct { max-width: 720px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 12px; }
 .f { display: grid; gap: 5px; font-size: 12.5px; opacity: .9; } .f input { width: 100%; }
-@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
 </style>

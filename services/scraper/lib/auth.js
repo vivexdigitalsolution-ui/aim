@@ -49,6 +49,13 @@ async function login(page, langMode = 'jp') {
         await page.waitForSelector(USS_LOGIN_USER_SELECTOR, { timeout: 30000 })
         continue
       }
+      // right after the password USS passes through waiting pages (login_usbkey_wait.aspx -> usb_login.aspx) before the real home page:
+      // wait until they are done, or the next page.goto cuts the redirect in half and the session is never finished
+      if (/usbkey|usb_login/i.test(page.url())) {
+        console.log(`Login passes through ${page.url()} - waiting for the home page (up to 90 s) ...`)
+        await page.waitForURL((u) => !/usbkey|usb_login/i.test(u.toString()), { timeout: 90000 }).catch(() => console.log('Still on the waiting page after 90 s - carrying on'))
+        await page.waitForLoadState('domcontentloaded').catch(() => {})
+      }
       console.log(`LOGIN SUCCESS on attempt ${attempt}/${MAX_LOGIN_ATTEMPTS} — reached ${page.url()}`)
       return
     }

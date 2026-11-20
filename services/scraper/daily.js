@@ -6,13 +6,15 @@
  *   node daily.js                    every step
  *   node daily.js --only link,snapshot       just these steps (names below)
  *   node daily.js --skip history     everything except these
+ *   node daily.js --day tuesday      the bidding scrape (step scrape) picks that weekday on the USS site and unticks the venues in scrape_day_skips
+ *                                    (monday..sunday, today or tomorrow; Japan time). One price and History have no day filter and run as usual.
  *   node daily.js --dry              show the plan, run nothing
  *   node daily.js --scheduled        marks the run as started by Task Scheduler (run-daily.bat does this)
  *
  * Steps (in order)         what it does
- *   scrape     node scrape.js bid         open cars from USS -> lots, photos
- *   oneprice   node scrape.js one_price   one-price cars (fixed price) -> one_price_lots
- *   history    node scrape.js history     past sold prices -> lot_history
+ *   scrape     node scrape.js bid,history,one_price   ONE browser session, one login: open cars -> lots + photos, sold prices -> lot_history,
+ *                                                     one-price cars -> one_price_lots (the Japanese site last). --only / --skip pick which of
+ *                                                     the three (names scrape = bidding, history, oneprice).
  *   enrich     node enrich.js --limit 300 Claude reads the sheets of new cars; docket decision and features (only if scrape worked)
  *   features   node extract-features.js --free   free feature matcher for cars still without features
  *   link       node link-lots.js --write  link every open car to the CarzNexus catalog
@@ -36,11 +38,15 @@ const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.
 const list = (v) => (v ? v.split(',').map((s) => s.trim()).filter(Boolean) : [])
 const H = 3600 * 1000
 
+const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun', 'today', 'tomorrow']
+const DAY = (arg('--day') || '').toLowerCase()
+if (has('--day') && !DAYS.includes(DAY)) { console.log('--day needs one of: ' + DAYS.join(', ')); process.exit(1) }
+
 const STEPS = [
-  { name: 'scrape', script: ['scrape.js', 'bid'], timeout: 6 * H },
-  { name: 'oneprice', script: ['scrape.js', 'one_price'], timeout: 4 * H },
-  { name: 'photos', script: ['refresh-photos.js', '--open'], timeout: 3 * H, needs: 'scrape' },
-  { name: 'history', script: ['scrape.js', 'history'], timeout: 3 * H },
+  { name: 'scrape', mode: 'bid', timeout: 6 * H },
+  { name: 'oneprice', mode: 'one_price', timeout: 4 * H },
+  { name: 'photos', mode: 'photos', timeout: 3 * H },
+  { name: 'history', mode: 'history', timeout: 3 * H },
   { name: 'enrich', script: ['enrich.js', '--limit', process.env.ENRICH_LIMIT || '1500'], timeout: 5 * H, needs: 'scrape' },
   { name: 'features', script: ['extract-features.js', '--free'], timeout: H },
   { name: 'link', script: ['link-lots.js', '--write'], timeout: H },
@@ -51,14 +57,17 @@ const STEPS = [
 
 const logDir = path.join(__dirname, 'logs')
 fs.mkdirSync(logDir, { recursive: true })
-const logFile = path.join(logDir, `daily-${new Date().toISOString().slice(0, 10)}.log`)
-const log = (s) => { const line = `[${new Date().toISOString().slice(11, 19)}] ${s}`; console.log(line); fs.appendFileSync(logFile, line + '\n') }
+// times in the log and on screen are Malaysia time (the database keeps UTC)
+const myt = (opt) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kuala_Lumpur', ...opt }).format(new Date())
+const mytDate = () => myt({ year: 'numeric', month: '2-digit', day: '2-digit' }).split('/').reverse().join('-')
+const logFile = path.join(logDir, `daily-${mytDate()}.log`)
+const log = (s) => { const line = `[${myt({ hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}] ${s}`; console.log(line); fs.appendFileSync(logFile, line + '\n') }
 
 function runScript(step) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, step.script, { cwd: __dirname, env: process.env })
     let tail = ''
-    const take = (b) => { const t = b.toString(); fs.appendFileSync(logFile, t); tail = (tail + t).slice(-4000) }
+    const take = (b) => { const t = b.toString(); fs.appendFileSync(logFile, t); process.stdout.write(t); tail = (tail + t).slice(-4000) }      // also shown live, so you can see where it is
     child.stdout.on('data', take); child.stderr.on('data', take)
     const timer = setTimeout(() => { tail += '\nSTOPPED: took longer than ' + step.timeout / H + ' hours'; child.kill() }, step.timeout)
     child.on('close', (code) => { clearTimeout(timer); resolve({ code, tail }) })
@@ -69,7 +78,14 @@ const lastLines = (t, n = 6) => t.split(/\r?\n/).map((l) => l.trim()).filter(Boo
 
 async function main() {
   const only = list(arg('--only')), skip = list(arg('--skip'))
-  const plan = STEPS.filter((s) => (!only.length || only.includes(s.name)) && !skip.includes(s.name))
+  let plan = STEPS.filter((s) => (!only.length || only.includes(s.name)) && !skip.includes(s.name))
+  // the USS scrapes (bidding, history, one price) run in ONE browser session = one login: scrape.js bid,history,one_price [day]
+  const uss = plan.filter((s) => s.mode)
+  if (uss.length) {
+    const modes = uss.map((s) => s.mode)
+    const merged = { name: 'scrape', script: ['scrape.js', modes.join(','), ...(DAY && modes.includes('bid') ? [DAY] : [])], timeout: uss.reduce((t, s) => t + s.timeout, 0) }
+    plan = plan.flatMap((s) => (s === uss[0] ? [merged] : s.mode ? [] : [s]))
+  }
   for (const n of [...only, ...skip]) if (!STEPS.some((s) => s.name === n)) { console.log('Unknown step: ' + n + '. Steps: ' + STEPS.map((s) => s.name).join(', ')); process.exit(1) }
   if (has('--dry')) { console.log('Plan:\n' + plan.map((s, i) => `  ${i + 1}. ${s.name}${s.script ? '  (node ' + s.script.join(' ') + ')' : '  (database function)'}`).join('\n')); return }
 
@@ -83,6 +99,17 @@ async function main() {
   const runId = ins.data.id
   const results = []
   const save = (status, done) => supabase.from('job_runs').update({ steps: results, status, ...(done ? { finished_at: new Date().toISOString() } : {}) }).eq('id', runId)
+
+  // Ctrl+C: mark the run as stopped, so the next `node daily.js` is not blocked by a run that is no longer going
+  let stopping = false
+  const onStop = async () => {
+    if (stopping) process.exit(130)
+    stopping = true
+    log('Stopped with Ctrl+C: marking this run as failed (the scrape finishes its current car first).')
+    try { await save('failed', true) } catch {}
+    process.exit(130)
+  }
+  process.on('SIGINT', onStop); process.on('SIGTERM', onStop)
 
   log(`Daily run started: ${plan.map((s) => s.name).join(' > ')}`)
   for (const step of plan) {

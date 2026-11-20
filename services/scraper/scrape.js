@@ -4,12 +4,14 @@
  * scrape.js — fills the Auction app.
  *
  *   node scrape.js bid [venue[,venue...]] [<N>days]   cars open for bidding  -> lots (photos go to R2)
- *   node scrape.js one_price [venue[,venue...]]       one-price cars (fixed price) -> one_price_lots   (Japanese site, its own login)
+ *   node scrape.js one_price [venue[,venue...]]       one-price cars (fixed price) -> one_price_lots   (Japanese site)
+ *   node scrape.js all [venue | day]                  bid, then history, then one price in ONE browser session (one login;
+ *                                                     the switch to the Japanese site reuses it, a second login only if USS refuses)
  *   node scrape.js history                            past SOLD prices        -> lot_history
  *
- * Day (bid only): node scrape.js bid tuesday | today | tomorrow - the venues of that weekday come from the table scrape_venue_days
- * (Tuesday = Yokohama only, Thursday = Tokyo only ... set in the database). A weekday with no row there falls back to the site's
- * own day list minus SKIP_VENUES in .env.
+ * Day (bid only): node scrape.js bid tuesday | today | tomorrow - picks that weekday on the site (it ticks that day's venues), then unticks the
+ * venues listed for that weekday in the table scrape_day_skips (Tuesday: R-Nagoya) and any venue marked closed in scrape_venues.
+ * If the database cannot be read, SKIP_VENUES in .env is used instead.
  *
  * Venue (optional): node scrape.js bid yokohama   — none = every venue. See lib/venues.js for the names.
  * "<N>days" (optional): pick targets by their LAST RUN date instead of "not finished today":
@@ -42,7 +44,10 @@ const { downloadAndUploadImages } = require('./lib/images')
 const { firstAuctionDate } = require('./lib/cutoff')
 const { isOthersGrade, cleanVenue, findExistingLot, updateLiveLot, upsertLot, recordScrapedModel, findExistingHistoryKeys, upsertHistory, recordGrades, findExistingOnePrice, updateOnePrice, upsertOnePrice } = require('./lib/writer')
 const { whyLeftOut, gradeName, codeMatches } = require('./lib/filters')
-const { jstWeekday, venuesForWeekday, NAMES: DAY_NAMES } = require('./lib/schedule')
+const photofix = require('./lib/photofix')
+const { ensureTargets } = require('./lib/targets')
+let PHOTO_PHASE = false      // the photo repair walks the listing of the broken cars' models on every venue, not just the chosen day
+const { jstWeekday, skipsForWeekday, NAMES: DAY_NAMES } = require('./lib/schedule')
 
 /** Year and score limits come from .env (YEAR_FROM, YEAR_TO, SCORE_MIN), not from the target row. */
 function withCriteria(target) {
@@ -53,13 +58,19 @@ function withCriteria(target) {
 
 // ── Arguments ─────────────────────────────────────────────────────────────────
 
-const ARG = (process.argv[2] || '').toLowerCase().replace(/[-\s]/g, '_')
-if (!['bid', 'history', 'one_price', 'oneprice'].includes(ARG)) {
-  console.log('Usage: node scrape.js bid|one_price|history [venue[,venue...] | monday..sunday | today | tomorrow] [<N>days]')
+// Modes: one (bid), several (bid,history,one_price) or all. Several modes share ONE login: bid and history use the English site, one price the Japanese
+// one, so one price always goes last and only that switch can need a second login.
+const ORDER = ['bid', 'photos', 'history', 'one_price']      // photos = bring back deleted photos of OPEN cars (bidding listing of just those models, every venue)
+const modeName = (m) => { const k = m.toLowerCase().replace(/[-\s]/g, '_'); return k === 'oneprice' ? 'one_price' : k }
+const argModes = (process.argv[2] || '').split(',').map(modeName).filter(Boolean)
+if (!argModes.length || argModes.some((m) => m !== 'all' && !ORDER.includes(m))) {
+  console.log('Usage: node scrape.js bid|photos|one_price|history|all [venue[,venue...] | monday..sunday | today | tomorrow] [<N>days]\n       several modes in one session: node scrape.js bid,photos,history,one_price saturday   (= all)')
   process.exit(1)
 }
-const MODE     = ARG === 'oneprice' ? 'one_price' : ARG
-const LANGMODE = MODE === 'one_price' ? 'jp' : 'en'      // the one-price site is Japanese only; bidding and history log in English
+const MODES    = argModes.includes('all') ? ORDER : ORDER.filter((m) => argModes.includes(m))
+const langOf   = (m) => (m === 'one_price' ? 'jp' : 'en')      // the one-price site is Japanese only; bidding and history log in English
+let MODE       = MODES[0]
+let LANGMODE   = langOf(MODE)
 
 const WEEKDAYS = { today: 'today', tomorrow: 'tomorrow', monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6, sunday: 7, sun: 7 }
 const rest       = process.argv.slice(3).filter((a) => !a.startsWith('--'))      // --include-today is read by lib/cutoff.js
@@ -70,9 +81,8 @@ const DAYVAL     = DAY_TOKEN ? WEEKDAYS[DAY_TOKEN.toLowerCase()] : null
 const WEEKDAY    = DAYVAL === 'today' ? jstWeekday(0) : DAYVAL === 'tomorrow' ? jstWeekday(1) : DAYVAL
 let VENUES = { codes: [], names: [] }
 try { VENUES = parseVenues(rest.filter((a) => a !== DAYS_TOKEN && a !== DAY_TOKEN && a.toLowerCase() !== 'offer')) } catch (e) { console.log(e.message); process.exit(1) }
-if (MODE === 'history' && (VENUES.codes.length || WEEKDAY)) { console.log('History has no venue or day filter - run it without one.'); process.exit(1) }
-if (MODE === 'one_price' && WEEKDAY) { console.log('One price has no day filter - use a venue (one_price yokohama) or none.'); process.exit(1) }
-let DAY_VENUES = null      // the venues of the chosen weekday from scrape_venue_days (loaded in main)
+if (MODES.length === 1 && MODE === 'history' && (VENUES.codes.length || WEEKDAY)) { console.log('History has no venue or day filter - run it without one.'); process.exit(1) }      // in a combined run the day / venue only applies to bid and one price
+let DAY_SKIP = null        // venues unticked after the weekday is chosen: scrape_day_skips of that weekday + closed venues (loaded in main; null = use SKIP_VENUES from .env)
 if (WEEKDAY && VENUES.codes.length) { console.log('Use either a day (bid tuesday) or venues (bid tokyo), not both.'); process.exit(1) }
 
 // Venues left unticked after a day is chosen (SKIP_VENUES in .env), as the source site's venue codes
@@ -85,6 +95,7 @@ const SKIP_VENUE_NAMES = new Set(config.skipVenues.map(norm))
 // every later (daily) run only looks back HISTORY_DAILY_TIMES (default 2), which is enough to catch what sold since the last run.
 const HISTORY_AUCTION_TIMES = parseInt(process.env.HISTORY_AUCTION_TIMES || '12', 10)
 const HISTORY_DAILY_TIMES   = parseInt(process.env.HISTORY_DAILY_TIMES || '2', 10)
+let HISTORY_CUTOFF = '0000-00-00'      // sold dates before this are not kept: app_settings.history_weeks (Settings) weeks + 7 days back, the same rule as housekeeping()
 
 // ── Graceful shutdown ─────────────────────────────────────────────────────────
 
@@ -146,7 +157,7 @@ async function processHistoryTarget(page, target, counters) {
     if (rawRows.length === 0) break
     counters.records_scraped += rawRows.length
 
-    const sold = rawRows.filter((r) => isSoldResult(r.auction_result_raw) && r.won_price > 0 && !isOthersGrade(r.grade))      // grade OTHERS is never saved
+    const sold = rawRows.filter((r) => isSoldResult(r.auction_result_raw) && r.won_price > 0 && !isOthersGrade(r.grade) && (!r.auction_date || r.auction_date >= HISTORY_CUTOFF))      // grade OTHERS is never saved; nothing older than the history window (it would be deleted by housekeeping anyway)
     const existing = await findExistingHistoryKeys(sold.map((r) => r.ex_key))
     const written = await upsertHistory(sold, target)
     if (written.ok) {
@@ -168,8 +179,8 @@ async function processHistoryTarget(page, target, counters) {
 
 async function processBidTarget(page, target, counters) {
   await goToSearchDirect(page, 'bid')
-  if (DAY_VENUES) await selectAllVenues(page, DAY_VENUES.codes)           // the venues set in the database for this weekday
-  else if (WEEKDAY) await selectWeekdayVenues(page, WEEKDAY, SKIP_CODES)  // no row for this weekday: the site's own day list minus SKIP_VENUES
+  if (PHOTO_PHASE) await selectAllVenues(page, [])
+  else if (WEEKDAY) await selectWeekdayVenues(page, WEEKDAY, DAY_SKIP ? DAY_SKIP.codes : SKIP_CODES)   // the site's own list for that weekday, then untick the skipped venues
   else await selectAllVenues(page, VENUES.codes)
   await selectBrand(page, target.maker_code)
   if (!(await selectModel(page, target.car_code))) { console.log(`\n[TARGET] No results at model step for: ${target.label}`); return 'No results at model step' }
@@ -202,7 +213,7 @@ async function processBidTarget(page, target, counters) {
       const left = whyLeftOut(target, row)
       if (left) { console.log(`${logPrefix} ${left} - skip`); continue }
       // safety net for the day mode: a venue on the skip list is never saved, even if the page still listed it
-      if (WEEKDAY && !DAY_VENUES && SKIP_VENUE_NAMES.has(norm(cleanVenue(row.venue)))) { console.log(`${logPrefix} venue ${cleanVenue(row.venue)} is skipped`); continue }
+      if (WEEKDAY && !PHOTO_PHASE && (DAY_SKIP ? DAY_SKIP.names.map(norm) : [...SKIP_VENUE_NAMES]).includes(norm(cleanVenue(row.venue)))) { console.log(`${logPrefix} venue ${cleanVenue(row.venue)} is skipped`); continue }
       if (!row.auction_date) { console.log(`${logPrefix} no auction date — skip`); counters.records_failed++; continue }
       // a scrape takes hours: a car of today's auction may be over before the offer goes out (--include-today turns this off)
       if (row.auction_date < firstAuctionDate()) { counters.records_skipped_today = (counters.records_skipped_today || 0) + 1; console.log(`${logPrefix} auction ${row.auction_date} is before ${firstAuctionDate()} (today / past) — skip`); continue }
@@ -253,13 +264,13 @@ function normalizeOnePriceRow(r) {
     transmission_raw: r.shift_type, engine_cc: r.displacement_cc, auction_grade: r.auction_grade, equipment_raw: r.equipment_raw,
     wholesale_price: r.price_jpy, thumb_parsed: r.thumb_parsed,
     venue: r.venue_name_ja ? (r.counter_no != null ? `${r.venue_name_ja}-Counter-${r.counter_no}` : r.venue_name_ja) : null,
-    raw_extra: { price_masked: r.price_masked, price_reveal_date: r.price_reveal_date, price_reveal_time: r.price_reveal_time, score_letter: r.score_letter },
+    price_sold: r.price_sold, raw_extra: { price_masked: r.price_masked, price_reveal_date: r.price_reveal_date, price_reveal_time: r.price_reveal_time, score_letter: r.score_letter },
   }
 }
 
 async function processOnePriceTarget(page, target, counters) {
   await goToSearchDirect(page, 'one_price')
-  await selectAllVenues(page, VENUES.codes)
+  await selectAllVenues(page, VENUES.codes)      // the one-price search has no weekday box: every venue, or the venues named on the command line
   await selectBrand(page, target.maker_code)
   if (!(await selectModel(page, target.car_code))) { console.log(`\n[TARGET] No results at model step for: ${target.label}`); return 'No results at model step' }
 
@@ -279,6 +290,9 @@ async function processOnePriceTarget(page, target, counters) {
       const logPrefix = `  ROW ${i + 1} [${row.ex_key}]:`
       counters.records_scraped++
       if (isOthersGrade(row.grade)) { console.log(`${logPrefix} grade is OTHERS - skip (never scraped)`); continue }
+      // only cars that can still be bought at a price we can see: one that is already sold, or whose price is not open yet, is left for a later run
+      if (row.price_sold) { console.log(`${logPrefix} already sold - skip`); counters.records_skipped_today = (counters.records_skipped_today || 0) + 1; continue }
+      if (row.raw_extra.price_masked || !(row.wholesale_price > 0)) { console.log(`${logPrefix} price not open yet${row.raw_extra.price_reveal_date ? ' (opens ' + row.raw_extra.price_reveal_date + ' ' + (row.raw_extra.price_reveal_time || '') + ')' : ''} - skip`); continue }
       // the one-price site is Japanese: its variant names are Japanese too, so only the model codes can narrow it
       if (!codeMatches(target, row.model_code)) { console.log(`${logPrefix} model code ${row.model_code || '?'} is not on the target list - skip`); continue }
       try {
@@ -302,9 +316,19 @@ async function processOnePriceTarget(page, target, counters) {
 
 // ── Session ───────────────────────────────────────────────────────────────────
 
+let sessionLang = null      // the language the browser is logged in with
+
 async function enterAfterLogin(page) {
   if (MODE === 'history') await openMarketPriceFirstTime(page)
-  else if (MODE === 'one_price') await openOneClickWizardFirstTime(page)
+  else if (MODE === 'one_price') {
+    // after the English modes, try the Japanese pages with the SAME login first (no second login); if USS does not accept it, log in again in Japanese
+    try { await openOneClickWizardFirstTime(page) } catch (e) {
+      if (sessionLang === 'jp') throw e
+      console.log(`[SESSION] the English login did not open the Japanese page (${String(e.message).split('\n')[0]}) - logging in again in Japanese`)
+      await login(page, 'jp'); sessionLang = 'jp'
+      await openOneClickWizardFirstTime(page)
+    }
+  }
 }
 
 async function bringUpSession() {
@@ -313,9 +337,13 @@ async function bringUpSession() {
   const page = context.pages()[0] || (await context.newPage())
   page.setDefaultTimeout(60000)
   page.setDefaultNavigationTimeout(120000)
-  // Do NOT accept()/dismiss(): the source site shows a prompt that must be clicked by a person, once.
-  page.on('dialog', (d) => console.log(`\n>>> Browser dialog: "${d.message()}" — click it manually in the browser window.\n`))
-  await login(page, LANGMODE)
+  // The site shows a notice (e.g. a change of the bidding order) that blocks the page until OK is pressed. Press it yourself in the browser;
+  // if nobody does within 20 seconds the scraper presses OK, so an unattended run does not hang until it times out.
+  page.on('dialog', (d) => {
+    console.log(`\n>>> Browser dialog: "${d.message().replace(/\s+/g, ' ').slice(0, 200)}" — click OK in the browser window (the scraper clicks it after 20 s).\n`)
+    setTimeout(() => d.accept().catch(() => {}), 20000)
+  })
+  await login(page, LANGMODE); sessionLang = LANGMODE
   await enterAfterLogin(page)
   return { context, page }
 }
@@ -326,7 +354,7 @@ async function recoverSession(page) {
     if (wait) { console.log('[RECOVER] Waiting 30 s before the last try...'); await new Promise((r) => setTimeout(r, wait)) }
     try {
       await page.goto('about:blank', { timeout: 10000 }).catch(() => {})
-      await login(page, LANGMODE)
+      await login(page, LANGMODE); sessionLang = LANGMODE
       await enterAfterLogin(page)
       console.log('[RECOVER] Session recovered')
       return true
@@ -339,25 +367,25 @@ async function recoverSession(page) {
 
 const failedThisRun = new Set()
 
-async function main() {
-  console.log('═'.repeat(60))
-  console.log(`  Scraper — mode: ${MODE}`)
-  console.log(`  Instance: ${INSTANCE_ID}`)
-  if (MODE === 'bid' || MODE === 'one_price') console.log(`  ${WEEKDAY ? `Day: ${DAY_TOKEN} (skipping ${config.skipVenues.join(', ') || 'none'})` : `Venue: ${VENUES.codes.length ? VENUES.names.join(', ') : 'ALL'}`}`)
-  console.log(`  Years: ${config.yearFrom || 'any'}${config.yearTo ? '–' + config.yearTo : '+'}   Score: ${config.scoreMin || 'any'}+   Skipped brands: ${config.skipBrandCodes.size}`)
-  console.log('  Ctrl+C once to stop cleanly after the current car.')
-  if (MODE === 'bid' && WEEKDAY) {
-    DAY_VENUES = await venuesForWeekday(WEEKDAY)
-    console.log(DAY_VENUES ? `  ${DAY_NAMES[WEEKDAY]} venues (from the database): ${DAY_VENUES.names.join(', ')}` : `  ${DAY_NAMES[WEEKDAY]}: no venues set in the database - using the site's day list minus SKIP_VENUES`)
-  }
-  console.log('═'.repeat(60))
+/** The photo repair: the open cars whose photos were deleted get them again (their models' bidding listing is read on every venue). */
+async function runPhotos(page) {
+  const { bad, models } = await photofix.openMissing(3)
+  if (!bad.length) { console.log('[PHOTOS] All photos of the open cars are there. Nothing to repair.'); return { processed: 0, fatal: false } }
+  console.log(`[PHOTOS] ${bad.length} open car(s) have missing photos, in ${models.size} model(s): ${[...models.values()].map((m) => `${m.brand_name} ${m.model_name} (${m.lots.length})`).join(', ')}`)
+  await ensureTargets([...models.values()])
+  MODE = 'bid'; PHOTO_PHASE = true
+  let r
+  try { r = await runMode(page, new Set(models.keys())) } finally { PHOTO_PHASE = false }
+  const still = await photofix.missingOf(bad.map((l) => l.id))
+  console.log(`[PHOTOS] ${bad.length - still.length} restored, ${still.length} still missing${still.length ? ' (the car may be gone from the listing)' : ''}`)
+  return r
+}
 
-  let context, page
-  try { ;({ context, page } = await bringUpSession()) } catch (err) { console.log(`[MAIN] Login failed: ${err.message}`); process.exit(1) }
-
+/** Runs every enabled target of the current MODE. @returns {{ processed: number, fatal: boolean }} */
+async function runMode(page, onlyModels = null) {
   let processed = 0
   while (!shutdownRequested) {
-    const claimed = await claimTarget(MODE, MIN_DAYS, failedThisRun)
+    const claimed = await claimTarget(MODE, MIN_DAYS, failedThisRun, onlyModels)
     const target = claimed && withCriteria(claimed)
     if (!target) { console.log(`\n[MAIN] No more "${MODE}" targets to run.`); break }
 
@@ -370,7 +398,7 @@ async function main() {
       const note = MODE === 'history' ? await processHistoryTarget(page, target, counters) : MODE === 'one_price' ? await processOnePriceTarget(page, target, counters) : await processBidTarget(page, target, counters)
       await finalizeRun(runId, 'complete', counters, note)
       await completeTarget(target.id, runId)
-      if (config.offerOnly) failedThisRun.add(target.id)      // offer mode ignores "done today", so remember what this run already did
+      if (config.offerOnly || onlyModels) failedThisRun.add(target.id)      // offer mode ignores "done today", so remember what this run already did
       processed++
       console.log(`[TARGET DONE] ${target.label} — scraped ${counters.records_scraped}, new ${counters.records_inserted}, refreshed ${counters.records_updated}, failed ${counters.records_failed}, images ${counters.images_uploaded}`)
     } catch (err) {
@@ -379,8 +407,46 @@ async function main() {
       failedThisRun.add(target.id)
       await releaseTarget(target.id)
       processed++
-      if (!(await recoverSession(page))) { console.log('[RECOVER] Cannot recover — exiting'); break }
+      if (!(await recoverSession(page))) { console.log('[RECOVER] Cannot recover — exiting'); return { processed, fatal: true } }
     }
+  }
+  return { processed, fatal: false }
+}
+
+async function main() {
+  console.log('═'.repeat(60))
+  console.log(`  Scraper — mode: ${MODES.join(' > ')}`)
+  console.log(`  Instance: ${INSTANCE_ID}`)
+  if (MODES.includes('bid')) console.log(`  Bidding: ${WEEKDAY ? `Day: ${DAY_TOKEN}` : `Venue: ${VENUES.codes.length ? VENUES.names.join(', ') : 'ALL'}`}`)
+  if (MODES.includes('one_price')) console.log(`  One price: venue ${VENUES.codes.length && !WEEKDAY ? VENUES.names.join(', ') : 'ALL'} (no weekday box on that page)`)
+  console.log(`  Years: ${config.yearFrom || 'any'}${config.yearTo ? '–' + config.yearTo : '+'}   Score: ${config.scoreMin || 'any'}+   Skipped brands: ${config.skipBrandCodes.size}`)
+  console.log('  Ctrl+C once to stop cleanly after the current car.')
+  if (WEEKDAY && MODES.includes('bid')) {
+    DAY_SKIP = await skipsForWeekday(WEEKDAY)
+    console.log(`  ${DAY_NAMES[WEEKDAY]}: the site's venues of that day, minus ${DAY_SKIP ? (DAY_SKIP.names.join(', ') || 'nothing') + ' (from the database)' : config.skipVenues.join(', ') + ' (SKIP_VENUES in .env)'}`)
+  }
+  console.log('═'.repeat(60))
+
+  if (MODES.includes('history')) {
+    const { data } = await require('./lib/db').from('app_settings').select('history_weeks').eq('id', true).maybeSingle()
+    const weeks = data?.history_weeks || 17
+    HISTORY_CUTOFF = new Date(Date.now() + 9 * 3600e3 - (weeks * 7 + 7) * 86400e3).toISOString().slice(0, 10)
+    console.log(`  History kept for ${weeks} weeks (sold on or after ${HISTORY_CUTOFF})`)
+  }
+
+  let context, page
+  try { ;({ context, page } = await bringUpSession()) } catch (err) { console.log(`[MAIN] Login failed: ${err.message}`); process.exit(1) }
+
+  let processed = 0
+  for (let i = 0; i < MODES.length && !shutdownRequested; i++) {
+    MODE = MODES[i]; LANGMODE = langOf(MODE)
+    if (i > 0) {
+      console.log('\n' + '═'.repeat(60) + `\n  Next: ${MODE}  (same browser session${langOf(MODES[i - 1]) !== LANGMODE ? ', switching to the ' + (LANGMODE === 'jp' ? 'Japanese' : 'English') + ' site' : ''})\n` + '═'.repeat(60))
+      try { await enterAfterLogin(page) } catch (e) { console.log(`[MAIN] Cannot start "${MODE}": ${e.message}`); continue }
+    }
+    const r = MODES[i] === 'photos' ? await runPhotos(page) : await runMode(page)
+    processed += r.processed
+    if (r.fatal) break
   }
 
   await context.close()

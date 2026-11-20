@@ -143,9 +143,11 @@ async function extractOnePriceListingRows(page) {
       const deadline_time_raw = periodParts[1] || null
 
       const priceCell = row.querySelector('td.price')
-      let price_jpy = null, price_masked = false
+      let price_jpy = null, price_masked = false, price_sold = false
       let price_reveal_date_raw = null, price_reveal_time_raw = null
       if (priceCell) {
+        // a car that already sold shows 落札 (won) / 成約 / 売約 with the price it sold at: it is no longer for sale
+        price_sold = /落札|成約|売約|SOLD/i.test(priceCell.textContent)
         const maskDiv = priceCell.querySelector('div.maskOnePrice')
         if (maskDiv) {
           price_masked = true
@@ -173,7 +175,7 @@ async function extractOnePriceListingRows(page) {
         ex_key, venue_name_ja, counter_no, model_year_raw, grade_ja, thumb_src,
         shift_type, displacement_cc, mileage_thousand_km, inspection_date_raw,
         color_ja, model_code, deadline_date_raw, deadline_time_raw,
-        price_jpy, price_masked, price_reveal_date_raw, price_reveal_time_raw,
+        price_jpy, price_masked, price_sold, price_reveal_date_raw, price_reveal_time_raw,
         score_raw, score_letter,
         ...readEquipment(row),
       }

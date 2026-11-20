@@ -19,6 +19,10 @@
       </div>
 
       <div class="grid" style="align-content: start">
+        <div v-if="car.needs_review" class="card review">
+          <b>Check the auction sheet</b>
+          <div class="small">Some details of this car were read from a handwritten or unclear part of the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you bid.</div>
+        </div>
         <div class="card">
           <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
@@ -54,12 +58,21 @@
               <tr><td>Car price</td><td class="r">{{ rmf(pricing.bodyMyr) }}</td></tr>
               <tr><td>Agent fee &amp; shipping</td><td class="r">{{ rmf(pricing.agentMyr) }}</td></tr>
               <tr><td>Customs duty</td><td class="r">{{ rmf(dutyMyr) }}</td></tr>
-              <tr><td>Port clearance + inland</td><td class="r">{{ rmf(fees.portMyr + fees.inlandMyr) }}</td></tr>
-              <tr><td>AP fee</td><td class="r">{{ rmf(fees.apFeeMyr) }}</td></tr>
+              <tr><td>Port clearance</td><td class="r feecell"><span>RM</span><input v-model.number="portIn" class="fee" type="number" min="0" step="50" aria-label="Port clearance in RM" /></td></tr>
+              <tr><td>Inland transfer</td><td class="r feecell"><span>RM</span><input v-model.number="inlandIn" class="fee" type="number" min="0" step="50" aria-label="Inland transfer in RM" /></td></tr>
+              <tr><td>AP fee</td><td class="r feecell"><span>RM</span><input v-model.number="apFeeIn" class="fee" type="number" min="0" step="500" aria-label="AP fee in RM" /></td></tr>
               <tr class="sum"><td><b>Import price</b></td><td class="r"><b>{{ rmf(pricing.importMyr) }}</b></td></tr>
               <tr v-if="marketMyr"><td>Malaysian market price (typical)</td><td class="r">{{ rmf(marketMyr) }}</td></tr>
               <tr v-if="marketMyr"><td><b>Margin</b></td><td class="r" :class="marketMyr - pricing.importMyr >= 0 ? 'up' : 'down'"><b>{{ rmf(marketMyr - pricing.importMyr) }}</b></td></tr>
             </table>
+            <div class="feebar">
+              <span class="muted small">Port, inland and AP fee are yours to change: the import price recounts as you type.</span>
+              <span class="feeacts">
+                <button v-if="feesChanged" class="btn ghost sm" @click="resetFees">Reset</button>
+                <button v-if="!isStaff && feesChanged" class="btn sm" :disabled="feeBusy" @click="saveFees">Save as my default</button>
+              </span>
+            </div>
+            <div v-if="feeMsg" :class="feeOk ? 'okmsg' : 'err'" style="margin-top: 6px">{{ feeMsg }}</div>
             <p class="muted small" style="margin-top: 8px">An estimate at ¥1 = RM {{ rate }}. Recon and prep are not included.</p>
           </template>
 
@@ -133,9 +146,24 @@ const refs = useReference()
 const bodyJpy = ref(0), dutyMyr = ref<number | null>(null), marketMyr = ref<number | null>(null), priceBasis = ref(''), costMsg = ref('')
 const docket = ref<Docket | null>(null), decisionNote = ref(''), pickOpen = ref(false), pickSearch = ref(''), busy = ref(false), dMsg = ref('')
 const apPort = ref(0), apInland = ref(0), recBid = ref<{ price_jpy: number; sales: number; basis: string } | null>(null)
-const fees = computed(() => (isStaff.value ? board.fees.value : { ...board.fees.value, portMyr: apPort.value, inlandMyr: apInland.value }))
+const apFeeRpc = ref(0)
+const fees = computed(() => (isStaff.value ? board.fees.value : { ...board.fees.value, portMyr: apPort.value, inlandMyr: apInland.value, apFeeMyr: apFeeRpc.value }))
+// port clearance, inland transfer and AP fee (RM): start from the AP holder's own default (or the team's), can be changed here and saved
+const portIn = ref<number>(0), inlandIn = ref<number>(0), apFeeIn = ref<number>(0)
+const feeBusy = ref(false), feeMsg = ref(''), feeOk = ref(false)
+const baseFees = computed(() => fees.value)
+const feesChanged = computed(() => Number(portIn.value || 0) !== baseFees.value.portMyr || Number(inlandIn.value || 0) !== baseFees.value.inlandMyr || Number(apFeeIn.value || 0) !== baseFees.value.apFeeMyr)
+function resetFees() { portIn.value = baseFees.value.portMyr; inlandIn.value = baseFees.value.inlandMyr; apFeeIn.value = baseFees.value.apFeeMyr; feeMsg.value = '' }
+async function saveFees() {
+  feeBusy.value = true; feeMsg.value = ''
+  const v = { port: Number(portIn.value || 0), inland: Number(inlandIn.value || 0), ap: Number(apFeeIn.value || 0) }
+  const { error } = await db.rpc('save_my_import_fees', { p_port: v.port, p_inland: v.inland, p_ap_fee: v.ap })
+  feeOk.value = !error; feeMsg.value = error ? error.message : 'Saved. These are now your starting figures on every car and in the calculator.'
+  if (!error) { apPort.value = v.port; apInland.value = v.inland; apFeeRpc.value = v.ap }
+  feeBusy.value = false
+}
 const rmf = (n: number | null | undefined) => (n == null ? '–' : (n < 0 ? '-RM ' : 'RM ') + Math.abs(Math.round(n)).toLocaleString('en-US'))
-const pricing = computed(() => offerPricing({ historyJpy: bodyJpy.value || null, rate: rate.value, dutyMyr: dutyMyr.value, portMyr: fees.value.portMyr, inlandMyr: fees.value.inlandMyr, apFeeMyr: fees.value.apFeeMyr }))
+const pricing = computed(() => offerPricing({ historyJpy: bodyJpy.value || null, rate: rate.value, dutyMyr: dutyMyr.value, portMyr: Number(portIn.value || 0), inlandMyr: Number(inlandIn.value || 0), apFeeMyr: Number(apFeeIn.value || 0) }))
 const dline = computed(() => (docket.value && car.value ? docketLine(docket.value, car.value.mfg_year, car.value.mfg_month || car.value.first_reg_month) : null))
 const candidates = computed<Docket[]>(() => {
   const r = refs.data.value, lot = car.value
@@ -155,7 +183,7 @@ async function loadCost(lot: any) {
     if (!isStaff.value) {
       // a dealer sees the docket and the duty, port and inland lines on their own (the report shows them too)
       const bd = await db.rpc('ap_lot_breakdown', { p_lot_id: lot.id })
-      if (!bd.error && bd.data) { dutyMyr.value = Number(bd.data.duty_myr); apPort.value = Number(bd.data.port_myr); apInland.value = Number(bd.data.inland_myr); if (bd.data.docket) docket.value = { ...bd.data.docket, amt_12m_24m: num(bd.data.docket.amt_12m_24m), amt_24m_36m: num(bd.data.docket.amt_24m_36m), amt_36m_48m: num(bd.data.docket.amt_36m_48m), amt_48m_60m: num(bd.data.docket.amt_48m_60m), amt_60m_plus: num(bd.data.docket.amt_60m_plus) }; decisionNote.value = '' }
+      if (!bd.error && bd.data) { dutyMyr.value = Number(bd.data.duty_myr); apPort.value = Number(bd.data.port_myr); apInland.value = Number(bd.data.inland_myr); apFeeRpc.value = Number(bd.data.ap_fee_myr); if (bd.data.docket) docket.value = { ...bd.data.docket, amt_12m_24m: num(bd.data.docket.amt_12m_24m), amt_24m_36m: num(bd.data.docket.amt_24m_36m), amt_36m_48m: num(bd.data.docket.amt_36m_48m), amt_48m_60m: num(bd.data.docket.amt_48m_60m), amt_60m_plus: num(bd.data.docket.amt_60m_plus) }; decisionNote.value = '' }
     }
     marketMyr.value = l?.market ? (sellFromRow(l.market.row, l.market.wider).sellMyr || null) : null
     const hist = l?.history?.price
@@ -169,6 +197,7 @@ async function loadCost(lot: any) {
       decisionNote.value = dec ? (dec.reason || dec.status) : 'no decision yet'
     }
   } catch (e: any) { costMsg.value = e.message }
+  resetFees()
 }
 async function useDocket(d: Docket) {
   busy.value = true; dMsg.value = ''; err.value = ''
@@ -200,6 +229,10 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.review { border-color: var(--warn); background: var(--warnbg); color: var(--warn); } .review .small { margin-top: 4px; }
+.feecell { white-space: nowrap; } .feecell span { color: var(--mu); margin-right: 6px; }
+.fee { width: 110px; height: 34px; text-align: right; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--s2); color: var(--tx); font: inherit; }
+.feebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; } .feeacts { display: inline-flex; gap: 8px; }
 .two { grid-template-columns: 1.15fr 1fr; align-items: start; }
 .hero { aspect-ratio: 4 / 3; background: var(--s2); border-radius: 10px; overflow: hidden; display: grid; place-items: center; }
 .hero img { width: 100%; height: 100%; object-fit: contain; background: #0b0b0d; }

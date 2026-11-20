@@ -16,8 +16,9 @@ const PAGE_SIZE    = 1000      // Supabase's default maximum rows per request
  * @param {number|null} minDays  null = skip targets completed today. A number picks by LAST RUN date instead:
  *   0 = only targets that never ran; N = never ran, or last ran N or more days ago.
  * @param {Set<string>|null} skipIds  targets that already failed in this run (not offered again)
+ * @param {Iterable<string>|null} onlyModels  "maker|car" keys: claim only these models, even if done today
  */
-async function claimTarget(lotType, minDays = null, skipIds = null) {
+async function claimTarget(lotType, minDays = null, skipIds = null, onlyModels = null) {
   if (!['bid', 'history', 'one_price'].includes(lotType)) throw new Error(`claimTarget: lotType must be 'bid', 'history' or 'one_price', got: ${lotType}`)
 
   const now        = new Date()
@@ -40,8 +41,8 @@ async function claimTarget(lotType, minDays = null, skipIds = null) {
   if (all.length === 0) return null
 
   // offer mode (offer.js): only the models of the offer report, whatever the skip list or today's runs say
-  let offerSet = null
-  if (config.offerOnly) {
+  let offerSet = onlyModels ? new Set(onlyModels) : null      // onlyModels: "maker|car" keys (the photo repair of a combined run)
+  if (!offerSet && config.offerOnly) {
     if (process.env.OFFER_MODELS) offerSet = new Set(process.env.OFFER_MODELS.split(',').filter(Boolean))      // offer.js --new: just these models
     else {
       const { data: om } = await supabase.from('offer_models').select('maker_code,car_code')

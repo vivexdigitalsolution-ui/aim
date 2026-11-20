@@ -14,7 +14,7 @@ const nullable = (type, extra = {}) => ({ anyOf: [{ type }, { type: 'null' }], .
 
 const READ_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['model_code', 'fuel', 'steering', 'chassis_no', 'first_reg_year', 'first_reg_month', 'inspection_until', 'doors', 'seats', 'drive', 'inspector_note_en', 'selling_points', 'highlight_score', 'highlight_reason', 'accident', 'doubts'],
+  required: ['model_code', 'fuel', 'steering', 'chassis_no', 'first_reg_year', 'first_reg_month', 'inspection_until', 'doors', 'seats', 'drive', 'inspector_note_en', 'selling_points', 'highlight_score', 'highlight_reason', 'accident', 'doubts', 'handwriting', 'uncertain'],
   properties: {
     model_code: nullable('string', { description: 'full model / chassis code printed on the sheet, e.g. 3BA-AGH40W' }),
     fuel: { anyOf: [{ type: 'string', enum: ['Petrol', 'Diesel', 'Hybrid', 'Plug-in hybrid', 'Electric'] }, { type: 'null' }], description: 'fuel type: the 燃料 box on the sheet (ガソリン = Petrol, 軽油 = Diesel) and the model name (HYBRID, e:HEV, PHEV, EV); a hybrid is shown as ガソリン on the sheet, so use the name; null when not clear' },
@@ -32,6 +32,8 @@ const READ_SCHEMA = {
     highlight_reason: nullable('string', { description: 'one short line (max 12 words) why this score' }),
     accident: { anyOf: [{ type: 'boolean' }, { type: 'null' }], description: 'true when the sheet shows repair history / accident (修復歴, R, RA) or heavy body damage; false when clearly none; null when unreadable' },
     doubts: { type: 'array', items: { type: 'string' }, description: 'anything unreadable or that disagrees with the listing' },
+    handwriting: { type: 'boolean', description: 'true when any value that matters (first registration date, chassis number, mileage, model code, grade, accident / repair mark, the inspector note) is HANDWRITTEN on the sheet or in a handwritten correction; false when the sheet is printed' },
+    uncertain: { type: 'array', items: { type: 'string' }, description: 'the fields you are NOT confident about, each as "field: why", e.g. "first registration: handwritten, 4 or 9?", "chassis number: smudged". Empty when you are confident in everything you filled in' },
   },
 }
 
@@ -50,7 +52,9 @@ Rules:
 - Write English only. Keep the notes short and factual; do not add opinions. Do not mention any company, auction house or website name.
 - selling_points: facts only, max 3 lines. Lead with what makes the car easy to sell: modified or custom parts, high spec, low mileage for its age, no accident, only light scratches.
 - highlight_score is your honest 0-10 rating of that (a plain car is 0-3). accident is true only for repair history or heavy damage.
-- doubts: short notes for staff (unreadable sheet, value that disagrees with the listing). Empty array when clear.` + FEATURE_RULE
+- doubts: short notes for staff (unreadable sheet, value that disagrees with the listing). Empty array when clear.
+- handwriting: true when something that matters is handwritten (a handwritten first-registration date, chassis number, mileage, grade, repair mark or note). Handwriting is the main reason a value is wrong, so be strict.
+- uncertain: list every value you filled in but are not sure of (handwritten, smudged, tiny, cut off, or two readings possible) as "field: why". If you are only guessing, leave the value null instead and say why in doubts. Empty array when you are sure of everything.` + FEATURE_RULE
 
 function lotText(lot) {
   const bits = [
@@ -149,6 +153,16 @@ async function enrichLot({ lot, ref, ask, imageBlock, today = new Date(), forceD
   if (read.highlight_reason) patch.pick_reason = String(read.highlight_reason).slice(0, 200)
   if (typeof read.accident === 'boolean') patch.accident = read.accident
   if (read.inspector_note_en) patch.inspector_report_en = read.inspector_note_en
+
+  // a car whose sheet is handwritten, or whose key values Claude is not sure of, is flagged: the car page warns buyers and staff to check the sheet
+  const keyField = /first reg|registration|chassis|model code|mileage|accident|repair|grade|year/i
+  const unsure = (read.uncertain || []).map((u) => String(u).trim()).filter(Boolean)
+  const reasons = []
+  if (read.handwriting) reasons.push('handwritten on the sheet')
+  unsure.filter((u) => keyField.test(u)).forEach((u) => reasons.push(u))
+  if (!lot.sheet_url) reasons.push('no auction sheet picture: read from the photo and listing only')
+  patch.needs_review = reasons.length > 0
+  patch.review_note = reasons.length ? ([...new Set(reasons)].join('; ')).slice(0, 300) : null
 
   // ── 2 + 3. docket and duty ──
   const lotNow = { ...lot, seats: patch.seats ?? lot.seats }

@@ -18,6 +18,10 @@
       </div>
 
       <div class="grid" style="align-content: start">
+        <div v-if="car.needs_review" class="card review">
+          <b>Check the auction sheet</b>
+          <div class="small">Some details of this car were read from a handwritten or unclear part of the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you bid.</div>
+        </div>
         <div class="card">
           <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
@@ -48,10 +52,19 @@
               <tr><td>Car price</td><td class="r">{{ rmf(pricing.bodyMyr) }}</td></tr>
               <tr><td>Agent fee &amp; shipping</td><td class="r">{{ rmf(pricing.agentMyr) }}</td></tr>
               <tr><td>Customs duty</td><td class="r">{{ rmf(Number(bd.duty_myr)) }}</td></tr>
-              <tr><td>Port clearance + inland</td><td class="r">{{ rmf(Number(bd.port_myr) + Number(bd.inland_myr)) }}</td></tr>
-              <tr><td>AP fee</td><td class="r">{{ rmf(Number(bd.ap_fee_myr)) }}</td></tr>
+              <tr><td>Port clearance</td><td class="r feecell"><span>RM</span><NumInput v-model="portIn" class="fee" aria-label="Port clearance in RM" /></td></tr>
+              <tr><td>Inland transfer</td><td class="r feecell"><span>RM</span><NumInput v-model="inlandIn" class="fee" aria-label="Inland transfer in RM" /></td></tr>
+              <tr><td>AP fee</td><td class="r feecell"><span>RM</span><NumInput v-model="apFeeIn" class="fee" aria-label="AP fee in RM" /></td></tr>
               <tr class="sum"><td><b>Import price</b></td><td class="r"><b>{{ rmf(pricing.importMyr) }}</b></td></tr>
             </table>
+            <div class="feebar">
+              <span class="muted small">Port, inland and AP fee are yours to change: the import price recounts as you type.</span>
+              <span class="feeacts">
+                <button v-if="feesChanged" class="btn ghost sm" @click="resetFees">Reset</button>
+                <button v-if="!isStaff && feesChanged" class="btn sm" :disabled="feeBusy" @click="saveFees">Save as my default</button>
+              </span>
+            </div>
+            <div v-if="feeMsg" :class="feeOk ? 'okmsg' : 'err'" style="margin-top: 6px">{{ feeMsg }}</div>
             <div v-if="docket" class="dk">
               <div class="muted small">Docket used (Customs price guide)</div>
               <div><b>{{ docket.model }}</b> <span class="muted small">{{ docket.cc ? docket.cc + ' cc' : '' }} · edition {{ docket.year }}</span></div>
@@ -123,7 +136,19 @@ const rmf = (n: number | null | undefined) => fmtMoney(n)
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
 const docket = computed<Docket | null>(() => (bd.value?.docket ? { ...bd.value.docket, amt_12m_24m: num(bd.value.docket.amt_12m_24m), amt_24m_36m: num(bd.value.docket.amt_24m_36m), amt_36m_48m: num(bd.value.docket.amt_36m_48m), amt_48m_60m: num(bd.value.docket.amt_48m_60m), amt_60m_plus: num(bd.value.docket.amt_60m_plus) } : null))
 const dline = computed(() => (docket.value && car.value ? docketLine(docket.value, car.value.mfg_year, car.value.mfg_month || car.value.first_reg_month) : null))
-const pricing = computed(() => offerPricing({ historyJpy: bodyInput.value > 0 && (cur.value === 'JPY' || rate.value > 0) ? (cur.value === 'JPY' ? Math.round(bodyInput.value) : Math.round(bodyInput.value / rate.value)) : null, rate: rate.value, dutyMyr: bd.value ? Number(bd.value.duty_myr) : null, portMyr: Number(bd.value?.port_myr || 0), inlandMyr: Number(bd.value?.inland_myr || 0), apFeeMyr: Number(bd.value?.ap_fee_myr || 0) }))
+// port clearance, inland transfer and AP fee (RM): start from the AP holder's own default (or the team's), can be changed here and saved
+const portIn = ref<number | null>(0), inlandIn = ref<number | null>(0), apFeeIn = ref<number | null>(0)
+const feeBusy = ref(false), feeMsg = ref(''), feeOk = ref(false)
+const feesChanged = computed(() => !!bd.value && (Number(portIn.value || 0) !== Number(bd.value.port_myr) || Number(inlandIn.value || 0) !== Number(bd.value.inland_myr) || Number(apFeeIn.value || 0) !== Number(bd.value.ap_fee_myr)))
+function resetFees() { portIn.value = Number(bd.value.port_myr); inlandIn.value = Number(bd.value.inland_myr); apFeeIn.value = Number(bd.value.ap_fee_myr); feeMsg.value = '' }
+async function saveFees() {
+  feeBusy.value = true; feeMsg.value = ''
+  const { error } = await db.rpc('save_my_import_fees', { p_port: Number(portIn.value || 0), p_inland: Number(inlandIn.value || 0), p_ap_fee: Number(apFeeIn.value || 0) })
+  feeOk.value = !error; feeMsg.value = error ? error.message : 'Saved. These are now your starting figures on every car and in the calculator.'
+  if (!error) bd.value = { ...bd.value, port_myr: Number(portIn.value || 0), inland_myr: Number(inlandIn.value || 0), ap_fee_myr: Number(apFeeIn.value || 0) }
+  feeBusy.value = false
+}
+const pricing = computed(() => offerPricing({ historyJpy: bodyInput.value > 0 && (cur.value === 'JPY' || rate.value > 0) ? (cur.value === 'JPY' ? Math.round(bodyInput.value) : Math.round(bodyInput.value / rate.value)) : null, rate: rate.value, dutyMyr: bd.value ? Number(bd.value.duty_myr) : null, portMyr: Number(portIn.value || 0), inlandMyr: Number(inlandIn.value || 0), apFeeMyr: Number(apFeeIn.value || 0) }))
 function useSuggested() { if (recBid.value) bidInput.value = fromJpy(recBid.value.price_jpy) }
 // switching RM / yen converts what is already typed, so the same bid and price stay the same
 vueWatch(cur, (now, was) => {
@@ -135,7 +160,7 @@ vueWatch(cur, (now, was) => {
 async function loadCost(lot: any) {
   const [r, b] = await Promise.all([db.rpc('recommended_bid', { p_lot_id: lot.id }), db.rpc('ap_lot_breakdown', { p_lot_id: lot.id })])
   if (!r.error && r.data) recBid.value = r.data
-  if (!b.error && b.data) bd.value = b.data
+  if (!b.error && b.data) { bd.value = b.data; resetFees() }
   costDone.value = true
   const base = recBid.value?.price_jpy || (lot.start_price_jpy > 0 ? lot.start_price_jpy : 0)
   bodyInput.value = base ? fromJpy(base) : 0
@@ -197,6 +222,7 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.review { border-color: var(--warn); background: var(--warnbg); color: var(--warn); } .review .small { margin-top: 4px; }
 .two { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; }
 .two > *, .two .grid { min-width: 0; }      /* a big photo or a long word must never make the page wider than the screen */
 .hero img, .sheet, .thumbs { max-width: 100%; }
@@ -217,6 +243,9 @@ onMounted(async () => {
 .sheet { width: 100%; border-radius: 8px; margin-top: 10px; }
 .price { font-size: 28px; font-weight: 800; margin-top: 4px; }
 .fld { display: grid; gap: 5px; color: var(--mu); font-size: 13px; margin-top: 10px; } .fld input { width: 100%; }
+.feecell { white-space: nowrap; } .feecell span { color: var(--mu); margin-right: 6px; }
+.fee { width: 110px; height: 34px; text-align: right; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; }
+.feebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; } .feeacts { display: inline-flex; gap: 8px; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 8px; } .spec td { padding: 6px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); width: 42%; }
 @media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
 </style>
