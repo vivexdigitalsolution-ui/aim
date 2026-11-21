@@ -23,8 +23,9 @@ async function loadBoard(core) {
   // the yen rate and the Offer report's fees
   const pr = (await supabase.from('calc_presets').select('preset_key,amount').in('preset_key', ['fx_jpy_myr', 'offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr'])).data || []
   const preset = (k) => { const r = pr.find((x) => x.preset_key === k); return r ? Number(r.amount) : NaN }
-  let rate = preset('fx_jpy_myr')
-  if (!(rate > 0)) rate = Number((await supabase.from('currency_rates').select('rate').eq('from_currency', 'JPY').eq('to_currency', 'MYR').order('rate_date', { ascending: false }).limit(1).maybeSingle()).data?.rate) || 0
+  // the live rate (latest in currency_rates, filled daily by fx.js); the old fixed preset is only the last resort
+  let rate = Number((await supabase.from('currency_rates').select('rate').eq('from_currency', 'JPY').eq('to_currency', 'MYR').order('rate_date', { ascending: false }).limit(1).maybeSingle()).data?.rate) || 0
+  if (!(rate > 0)) rate = preset('fx_jpy_myr')
   const fees = {
     portMyr: preset('offer_port_myr') >= 0 ? preset('offer_port_myr') : core.DEFAULT_PORT_MYR,
     inlandMyr: preset('offer_inland_myr') >= 0 ? preset('offer_inland_myr') : core.DEFAULT_INLAND_MYR,

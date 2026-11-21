@@ -39,9 +39,8 @@ export function useMarginBoard() {
       const ref = await loadRef()
       rate.value = ref.fx['JPY']?.rate || 0
       // the Offer report's own settings, so staff see the same numbers as the report
-      const pr = await db.from('calc_presets').select('preset_key,amount').in('preset_key', ['fx_jpy_myr', 'offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr'])
+      const pr = await db.from('calc_presets').select('preset_key,amount').in('preset_key', ['offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr'])
       const g = (k: string) => Number((pr.data || []).find((r: any) => r.preset_key === k)?.amount)
-      if (g('fx_jpy_myr') > 0) rate.value = g('fx_jpy_myr')
       fees.value = { portMyr: g('offer_port_myr') >= 0 ? g('offer_port_myr') : DEFAULT_PORT_MYR, inlandMyr: g('offer_inland_myr') >= 0 ? g('offer_inland_myr') : DEFAULT_INLAND_MYR, apFeeMyr: g('offer_ap_fee_myr') >= 0 ? g('offer_ap_fee_myr') : DEFAULT_AP_FEE_MYR }
     } else {
       const r = await db.rpc('ap_jpy_rate')

@@ -59,3 +59,17 @@ Remove it: `schtasks /Delete /TN "AIM daily refresh" /F`.
 
 ## Cost
 The only step that costs money is **enrich** (Claude reads the sheet of each new car, at most 300 a day). Everything else is free.
+
+## Daily exchange rates (CIMB)
+The calculators and car pages use the newest yen rate saved in `currency_rates`. `fx.js` fills it every morning with the CIMB **Selling TT/OD** rate for the Australian dollar, British pound and Japanese yen (yen is read from the "per 100 units" table and divided by 100, so every rate is ringgit per one unit).
+
+1. Run `supabase/migrations/48_live_exchange_rate.sql` in the Supabase SQL editor (once). Until then the old fixed rate (0.0270) is still used.
+2. Test: `cd services/scraper` then `node fx.js --dry` (shows the rates and the page's "Last Updated" line, writes nothing), then `node fx.js` to save.
+3. Schedule (PowerShell, once): 9:30 am, repeated every 30 minutes for 3 hours, so a slow CIMB update or a sleeping PC at 9:30 is still caught:
+```
+schtasks /Create /TN "AIM exchange rates" /TR "\"C:\Users\Alex\Projects\aim\services\scraper\run-fx.bat\"" /SC DAILY /ST 09:30 /RI 30 /DU 03:00 /F
+```
+
+How it checks the rate is current: the CIMB page prints `Last Updated: 5:08 pm, 20 Nov 2026, Friday`. The rate is saved under that date. If the date is today (Malaysia time) the run ends "up to date"; if it is an older day (CIMB not updated yet, weekend, public holiday) it keeps the newest rate the page shows and logs that it will check again. A rate that moved more than 20% since the last one is refused, in case the page layout changed. Look at `services/scraper/logs/fx.log`.
+
+CIMB blocks headless browsers (why the old scraper stopped), but a plain web request works, so `fx.js` makes one request, no browser. If that is ever blocked too, it falls back to the installed Microsoft Edge.
