@@ -65,10 +65,15 @@ The calculators and car pages use the newest yen rate saved in `currency_rates`.
 
 1. Run `supabase/migrations/48_live_exchange_rate.sql` in the Supabase SQL editor (once). Until then the old fixed rate (0.0270) is still used.
 2. Test: `cd services/scraper` then `node fx.js --dry` (shows the rates and the page's "Last Updated" line, writes nothing), then `node fx.js` to save.
-3. Schedule (PowerShell, once): 9:30 am, repeated every 30 minutes for 3 hours, so a slow CIMB update or a sleeping PC at 9:30 is still caught:
+3. Schedule it (once). Open **Windows PowerShell** (normal, not administrator), paste all four lines, press Enter. 9:30 am daily, repeated every 30 minutes for 3 hours, so a slow CIMB update or a PC that was asleep at 9:30 is still caught (`-StartWhenAvailable` runs a missed run when the PC wakes). The older `schtasks /Create ... /RI /DU` one-liner does not work in PowerShell 5.1 (quote error), so use this:
+```powershell
+$a = New-ScheduledTaskAction -Execute "C:UsersAlexProjectsaimservicesscraperun-fx.bat"
+$t = New-ScheduledTaskTrigger -Daily -At 9:30AM
+$t.Repetition = (New-ScheduledTaskTrigger -Once -At 9:30AM -RepetitionInterval (New-TimeSpan -Minutes 30) -RepetitionDuration (New-TimeSpan -Hours 3)).Repetition
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable
+Register-ScheduledTask -TaskName "AIM exchange rates" -Action $a -Trigger $t -Settings $s -Force
 ```
-schtasks /Create /TN "AIM exchange rates" /TR "\"C:\Users\Alex\Projects\aim\services\scraper\run-fx.bat\"" /SC DAILY /ST 09:30 /RI 30 /DU 03:00 /F
-```
+It prints a table with `AIM exchange rates` and State `Ready`. Test now: `Start-ScheduledTask -TaskName "AIM exchange rates"` then read `servicesscraperlogsx.log`. Check: `Get-ScheduledTask -TaskName "AIM exchange rates"`. Remove: `Unregister-ScheduledTask -TaskName "AIM exchange rates" -Confirm:$false`.
 
 How it checks the rate is current: the CIMB page prints `Last Updated: 5:08 pm, 20 Nov 2026, Friday`. The rate is saved under that date. If the date is today (Malaysia time) the run ends "up to date"; if it is an older day (CIMB not updated yet, weekend, public holiday) it keeps the newest rate the page shows and logs that it will check again. A rate that moved more than 20% since the last one is refused, in case the page layout changed. Look at `services/scraper/logs/fx.log`.
 
