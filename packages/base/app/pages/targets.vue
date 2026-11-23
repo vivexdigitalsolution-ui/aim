@@ -83,6 +83,7 @@
         <h2>Current targets <small class="muted">({{ groups.length }}{{ rows.length < total ? '+' : '' }} models)</small></h2>
         <div class="filters">
           <select v-model="fSource" @change="reload"><option value="">USS and ASNET</option><option value="uss">USS</option><option value="asnet">ASNET</option></select>
+          <select v-model="fStatus" @change="reload"><option value="">All models</option><option value="new">New (found by the weekly check)</option><option value="warn">Warning: 0 cars found</option></select>
           <span class="sbox"><input v-model="fSearch" placeholder="Search make or model" @keyup.enter="reload" /><button v-if="fSearch" type="button" class="x" aria-label="Clear" @click="fSearch = ''; reload()">×</button></span>
         </div>
       </div>
@@ -94,7 +95,10 @@
           <tbody>
             <tr v-for="g in groups" :key="g.key">
               <td data-label="Source" class="src">{{ g.source.toUpperCase() }}</td>
-              <td class="ttl"><b>{{ g.brand_name }}</b> {{ g.model_name }}</td>
+              <td class="ttl"><b>{{ g.brand_name }}</b> {{ g.model_name }}
+                <span v-if="newOf(g).length" class="tag new" :title="'Found by the weekly model check: USS has cars of this model for ' + newOf(g).join(', ') + '. Off until you switch it on.'">New · {{ newOf(g).join(', ') }}</span>
+                <span v-if="warnOf(g).length" class="tag warn" :title="'The weekly check found 0 cars ' + warnOf(g).map((w) => w.label + ' x' + w.n).join(', ') + ' in a row. A scrape type is switched off automatically after more than 8.'">0 cars × {{ Math.max(...warnOf(g).map((w) => w.n)) }}</span>
+                <span v-if="autoOff(g).length" class="tag off" :title="autoOff(g).join(' / ')">Auto-off</span></td>
               <td data-label="Years">{{ g.year_from || '?' }}–{{ g.year_to || 'now' }}</td>
               <td data-label="Scores">{{ g.scores?.length ? g.scores.join(' ') : (g.score_min != null ? g.score_min + '+' : 'default') }}</td>
               <td data-label="Narrowed by" class="nar">
@@ -105,7 +109,7 @@
               <td class="runs" data-label="Scrapes">
                 <button v-for="t in typesOf(g)" :key="t.k" class="run" :class="{ on: g.types[t.k]?.enabled, none: !g.types[t.k] }" :disabled="busy" :title="runTitle(g, t)" @click="togglePill(g, t.k)">
                   <span class="rn">{{ t.label }}</span>
-                  <span class="rd">{{ g.types[t.k] ? (g.types[t.k].enabled ? lastRun(g.types[t.k]) : 'off') : '+ add' }}</span>
+                  <span class="rd">{{ g.types[t.k] ? (g.types[t.k].enabled ? lastRun(g.types[t.k]) : (g.types[t.k].status === 'new' ? 'new · off' : 'off')) : '+ add' }}</span>
                 </button>
               </td>
               <td class="nw acts"><button class="btn ghost sm" @click="startEdit(g)">Edit</button> <button class="btn ghost sm" :disabled="busy" @click="removeGroup(g)">Delete</button></td>
@@ -294,12 +298,14 @@ async function add() {
 }
 
 // ═══════════════ the current targets, one line per model ═══════════════
-const rows = ref<any[]>([]), total = ref(0), fSource = ref(''), fSearch = ref('')
+const rows = ref<any[]>([]), total = ref(0), fSource = ref(''), fSearch = ref(''), fStatus = ref('')
 const PAGE = 300
-const COLS = 'id,source,lot_type,brand_name,model_name,year_from,year_to,scores,score_min,model_codes,grades,enabled,last_run_at,maker_code,car_code'
+const COLS = 'id,source,lot_type,brand_name,model_name,year_from,year_to,scores,score_min,model_codes,grades,enabled,last_run_at,maker_code,car_code,status,zero_count,disabled_reason'
 async function page(from: number) {
   let q = db.from('scrape_targets').select(COLS, { count: 'exact' })
   if (fSource.value) q = q.eq('source', fSource.value)
+  if (fStatus.value === 'new') q = q.eq('status', 'new')
+  if (fStatus.value === 'warn') q = q.gt('zero_count', 0)
   const s = fSearch.value.trim().replace(/[,()%]/g, ' ')
   if (s) q = q.or(`brand_name.ilike.%${s}%,model_name.ilike.%${s}%`)
   const { data, error, count } = await q.order('brand_name').order('model_name').order('source').order('maker_code').order('car_code').range(from, from + PAGE - 1)
@@ -322,6 +328,9 @@ const groups = computed<G[]>(() => {
   }
   return [...m.values()]
 })
+const newOf = (g: G) => TYPES.filter((t) => g.types[t.k]?.status === 'new').map((t) => t.label)
+const warnOf = (g: G) => TYPES.filter((t) => g.types[t.k]?.enabled && g.types[t.k]?.zero_count > 0).map((t) => ({ label: t.label, n: g.types[t.k].zero_count }))
+const autoOff = (g: G) => TYPES.filter((t) => g.types[t.k]?.disabled_reason && !g.types[t.k]?.enabled).map((t) => t.label + ': ' + g.types[t.k].disabled_reason)
 const typesOf = (g: G) => (g.source === 'asnet' ? TYPES.filter((t) => t.k === 'bid') : TYPES)
 const lastRun = (r: any) => (r.last_run_at ? new Date(r.last_run_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'never run')
 const runTitle = (g: G, t: { k: string; label: string }) => { const r = g.types[t.k]; return !r ? `Add ${t.label} for this model` : r.enabled ? `${t.label} is on (click to switch off). Last run: ${r.last_run_at ? new Date(r.last_run_at).toLocaleString('en-GB') : 'never'}` : `${t.label} is off (click to switch on)` }
@@ -330,7 +339,11 @@ async function togglePill(g: G, k: string) {
   busy.value = true; err.value = ''
   try {
     const r = g.types[k]
-    if (r) { const { error } = await db.from('scrape_targets').update({ enabled: !r.enabled }).eq('id', r.id); if (error) throw error; r.enabled = !r.enabled; return }
+    if (r) {
+      const patch: any = { enabled: !r.enabled }
+      if (patch.enabled) Object.assign(patch, { status: 'live', zero_count: 0, disabled_reason: null })      // switched on by hand: live, the weekly check starts counting again from 0
+      const { error } = await db.from('scrape_targets').update(patch).eq('id', r.id); if (error) throw error; Object.assign(r, patch); return
+    }
     const base = g.types.bid || Object.values(g.types)[0]
     const row = { label: `${g.brand_name} / ${g.model_name} (${k})`, lot_type: k, maker_code: g.maker_code, car_code: g.car_code, brand_name: g.brand_name, model_name: g.model_name, year_from: base?.year_from ?? null, year_to: base?.year_to ?? null, scores: base?.scores ?? null, model_codes: base?.model_codes ?? null, grades: base?.grades ?? null, enabled: true, source: g.source }
     const { data, error } = await db.from('scrape_targets').insert(row).select(COLS).single()
@@ -387,6 +400,10 @@ onMounted(async () => { await Promise.all([loadBrands('uss'), reload()]) })
 </script>
 
 <style scoped>
+.tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; vertical-align: middle; white-space: nowrap; }
+.tag.new { background: rgba(80, 160, 255, 0.18); color: #6db3ff; }
+.tag.warn { background: rgba(255, 180, 60, 0.18); color: #ffb43c; }
+.tag.off { background: rgba(255, 90, 90, 0.18); color: #ff7a7a; }
 .tg { max-width: 1100px; }
 .card { margin-bottom: 18px; }
 .step { margin-top: 14px; min-width: 0; }

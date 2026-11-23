@@ -87,3 +87,14 @@ node reprice.js | decide-dockets.js | catalog-gaps.js   maintenance / reports
 
 * **Model codes** or **Variants** per model — never both. Bidding and ASNET use either; **One price** uses model codes only (its site is Japanese, so the variant names do not match); **History** always takes every variant.
 * Years, scores and the narrowing are shared by the Bidding / One price / History lines of one model: changing them in Edit changes all three.
+
+## Weekly model check (which models are still worth scraping)
+`cd services/scraper` then `node model-watch.js` — run it **once a week**, it walks every brand and model on the USS site for **Bidding, History and One price** (years from YEAR_FROM in .env, 2022+; each type on its own page of the site) and takes a while; leave the browser window alone. Do not run it at the same time as `scrape.js` (same login). Needs migration `49_model_watch.sql` first.
+
+- A model with 2022+ cars that is **not in the scrape list** is added as a target of that type with status **New** and switched **off**. Open Admin › Scrape targets, filter "New", switch the type on for the ones you want (that makes it Live).
+- Every model already in the list is **Live** (all current rows). They are never re-added.
+- A Live, switched-on model with **0 cars** gets a warning count (`0 cars × N` on the Scrape targets page, filter "Warning"). Cars found again = back to 0. After **more than 8** weekly checks in a row with 0 cars it is switched **off** automatically (tag "Auto-off"); switch it on by hand to start over.
+- Each type is checked and counted on its own (a model can be live for Bidding and off for One price). Rows you switched off, and rows still New, are not checked.
+- Options: `--types bid,history,one_price` (default all three), `--brand "TOYOTA,BMW"` (just these), `--dry` (look and report, write nothing), `--force` (recheck models already checked in the last 5 days; normally they are skipped so an interrupted run continues and a model is never counted twice in one week), `--max-zero 8`.
+- Safety: if the first 15 models checked of a type all show 0 cars, that type stops and writes nothing (the year filter is probably not working). A model that fails to open is skipped, not counted.
+- The report is saved in `services/scraper/out/model-watch-DATE.csv`.
