@@ -127,6 +127,7 @@ async function main() {
   const wantedBrands = (arg('--brand') || '').split(',').map(norm).filter(Boolean)
   const types = (arg('--types') || 'bid,history,one_price').split(',').map((s) => s.trim()).filter((t) => SITES[t])
   if (!types.length) { console.log('--types takes bid, history and/or one_price'); process.exit(1) }
+  types.sort((a, b) => (a === 'history') - (b === 'history'))              // History goes last: it only looks at models that have cars on Bidding or One price
 
   const brandsDb = await loadAll('scraper_brands', 'code,name')
   const modelsDb = await loadAll('scraper_models', 'brand_code,code,name')
@@ -134,6 +135,12 @@ async function main() {
   const modelName = new Map(modelsDb.map((m) => [`${m.brand_code}|${m.code}`, m.name]))       // English names, whatever language the page we read is in
   const targets = await loadAll('scrape_targets', 'id,lot_type,maker_code,car_code,brand_name,model_name,enabled,status,zero_count,last_hits,checked_at,disabled_reason', (q) => q.eq('source', 'uss').in('lot_type', types))
   const anyName = new Map(); for (const t of await loadAll('scrape_targets', 'maker_code,car_code,brand_name,model_name', (q) => q.eq('source', 'uss'))) anyName.set(`${t.maker_code}|${t.car_code}`, t)
+  // models with cars on Bidding or One price: History is checked for these only (a model with none there is skipped completely)
+  const stocked = new Set()
+  if (types.includes('history')) {
+    for (const t of await loadAll('scrape_targets', 'lot_type,maker_code,car_code,enabled,status,last_hits', (q) => q.eq('source', 'uss').in('lot_type', ['bid', 'one_price'])))
+      if ((t.last_hits ?? 0) > 0 || (t.last_hits == null && t.enabled && t.status === 'live')) stocked.add(`${t.maker_code}|${t.car_code}`)
+  }
   const byKey = new Map(targets.map((t) => [key(t.lot_type, t.maker_code, t.car_code), t]))
   const recentCut = Date.now() - RECHECK_DAYS * 86400e3
   const fresh = (t) => !FORCE && t.checked_at && new Date(t.checked_at).getTime() > recentCut
@@ -144,6 +151,7 @@ async function main() {
   try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')) } catch {}
   for (const k of Object.keys(state)) if (new Date(state[k].at).getTime() < recentCut) delete state[k]
   if (FORCE) state = {}
+  if (types.includes('history')) for (const k of Object.keys(state)) { const [ty, b, c] = k.split('|'); if ((ty === 'bid' || ty === 'one_price') && state[k].hits > 0) stocked.add(`${b}|${c}`) }
   const saveState = () => { try { fs.mkdirSync(path.dirname(stateFile), { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(state)) } catch {} }
 
   log(`Weekly model check (${types.map((t) => SITES[t].label).join(', ')}): cars made in ${YEAR_FROM} or later${config.yearTo ? ' to ' + config.yearTo : ''}, all venues, any score. ${DRY ? 'DRY RUN: nothing is written.' : ''}`)
@@ -175,6 +183,7 @@ async function main() {
       // brands to walk: every brand on the site plus every brand with a row of this type (absent from the site = no stock), minus the skip list
       const codes = [...new Set([...brandsOnSite.map((b) => String(b.code)), ...mineAll.map((t) => String(t.maker_code))])]
         .filter((c) => !config.skipBrandCodes.has(c.toUpperCase()))
+        .filter((c) => type !== 'history' || [...stocked].some((s) => s.startsWith(c + '|')))   // History: no model of this brand has cars on Bidding / One price
         .filter((c) => !wantedBrands.length || wantedBrands.includes(norm(c)) || wantedBrands.includes(norm(brandName.get(c) || brandsOnSite.find((b) => String(b.code) === c)?.name)))
 
       // nothing is written until the first 15 models of this type have been looked at and not ALL were 0 (a broken filter makes every model look empty)
@@ -239,6 +248,7 @@ async function main() {
         for (const t of mine) {
           if (stop) break
           if (listed.has(String(t.car_code))) continue
+          if (type === 'history' && !stocked.has(`${code}|${t.car_code}`)) continue
           if (fresh(t) || state[key(type, code, t.car_code)]) { report.skippedFresh++; continue }
           await later(() => record(code, bName, { code: t.car_code, name: t.model_name }, 0))
         }
@@ -247,6 +257,7 @@ async function main() {
         for (const m of models) {
           if (stop) break
           const k = key(type, code, m.code), t = byKey.get(k)
+          if (type === 'history' && !stocked.has(`${code}|${m.code}`)) { report.noStock = (report.noStock || 0) + 1; continue }   // no cars on Bidding / One price: skip History for it
           if (t && !(t.enabled && t.status === 'live')) continue                  // in the list, off or still New: nothing to do
           if ((t && fresh(t)) || (!t && state[k])) { report.skippedFresh++; continue }
           let hits = null, lastErr = ''
@@ -258,6 +269,7 @@ async function main() {
           }
           if (hits === null) { report.errors.push(`${site.label} ${bName} ${m.name}: ${lastErr}`); log(`   ! ${bName} ${m.name}: could not check (${lastErr})`); continue }
           checked++; report.checked++; if (hits === 0) zeroSoFar++
+          if (hits > 0 && type !== 'history') stocked.add(`${code}|${m.code}`)
           log(`   ${hits > 0 ? '✓' : '·'} ${bName} ${m.name}: ${hits} car(s)${t ? '' : ' (not in the list)'}`)
           if (checked === 15 && zeroSoFar === 15) { aborted = true; report.aborted.push(site.label); log(`\nThe first 15 ${site.label} models all show 0 cars: the filter is probably not working. ${site.label} stopped; nothing from it was counted.`); break }
           await later(() => record(code, bName, m, hits))
@@ -283,6 +295,7 @@ async function main() {
 
   const fmt = (r, extra) => `${r.type}: ${r.brand} ${r.model}${extra ? ' ' + extra : ''}`
   log('\n' + '═'.repeat(60))
+  if (report.noStock) log(`History: ${report.noStock} model(s) skipped because they have no cars on Bidding or One price.`)
   log(`Checked ${report.checked} model(s) on the site. ${report.skippedFresh} skipped (already checked in the last ${RECHECK_DAYS} days).`)
   log(`New models found (added OFF, status New): ${report.added.length}${report.added.length ? '\n   ' + report.added.map((r) => fmt(r, `(${r.hits})`)).join('\n   ') : ''}`)
   log(`Live models with 0 cars (warning count): ${report.zero.length}${report.zero.length ? '\n   ' + report.zero.sort((a, b) => b.count - a.count).map((r) => fmt(r, `: ${r.count} of ${MAX_ZERO + 1}`)).join('\n   ') : ''}`)

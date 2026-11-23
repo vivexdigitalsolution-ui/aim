@@ -95,6 +95,7 @@ node reprice.js | decide-dockets.js | catalog-gaps.js   maintenance / reports
 - Every model already in the list is **Live** (all current rows). They are never re-added.
 - A Live, switched-on model with **0 cars** gets a warning count (`0 cars × N` on the Scrape targets page, filter "Warning"). Cars found again = back to 0. After **more than 8** weekly checks in a row with 0 cars it is switched **off** automatically (tag "Auto-off"); switch it on by hand to start over.
 - Each type is checked and counted on its own (a model can be live for Bidding and off for One price). Rows you switched off, and rows still New, are not checked.
+- **History only looks at models that have cars on Bidding or One price** (this run, or the last check saved in the list). A model with none there is skipped completely, History is checked last, and a brand with no such model is not opened. This saves most of the History time.
 - Options: `--types bid,history,one_price` (default all three), `--brand "TOYOTA,BMW"` (just these), `--dry` (look and report, write nothing), `--force` (recheck models already checked in the last 5 days; normally they are skipped so an interrupted run continues and a model is never counted twice in one week), `--max-zero 8`.
 - Safety: if the first 15 models checked of a type all show 0 cars, that type stops and writes nothing (the year filter is probably not working). A model that fails to open is skipped, not counted.
 - The report is saved in `services/scraper/out/model-watch-DATE.csv`.
