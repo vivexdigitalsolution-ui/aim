@@ -17,6 +17,7 @@
     <template v-else-if="name === 'gavel'"><path d="m14 4 6 6-3 3-6-6zM11 7 4 14l3 3 7-7M3 21h9" /></template>
     <template v-else-if="name === 'trophy'"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.500 20h7M10 17h4" /></template>
     <template v-else-if="name === 'cross'"><circle cx="12" cy="12" r="9" /><path d="m9 9 6 6M15 9l-6 6" /></template>
+    <template v-else-if="name === 'table'"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18M9 10v9" /></template>
     <template v-else-if="name === 'settings'"><path d="M4 7h9M17 7h3M4 17h3M11 17h9" /><circle cx="15" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></template>
   </svg>
 </template>
