@@ -52,6 +52,7 @@ const STEPS = [
   { name: 'link', script: ['link-lots.js', '--write'], timeout: H },
   { name: 'snapshot', script: ['market-snapshot.js', '--write'], timeout: H },
   { name: 'alerts', script: ['alerts.js', '--only', 'match,prefs,top5,send'], timeout: H },
+  { name: 'kpi', rpc: 'record_kpi_daily', timeout: H },                 // today's numbers for the dashboard line graphs (migration 50)
   { name: 'housekeeping', rpc: 'housekeeping', timeout: H },
 ]
 

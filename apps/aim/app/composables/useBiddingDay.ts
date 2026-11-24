@@ -7,18 +7,28 @@
  * The page refreshes by itself: the clock ticks every second, the data reloads every minute and at once when the countdown ends or the Japan date changes.
  */
 export interface DayVenue { name: string; cars: number; closesAt: string | null }
+export interface UpcomingDay { date: string; cars: number; venues: { name: string; cars: number }[] }
 
 export function useBiddingDay() {
   const db = useDb()
   const day = reactive({ mode: 'none' as 'today' | 'closed' | 'none', date: '', at: null as string | null, cars: 0, venues: [] as DayVenue[], next: null as { date: string; cars: number } | null })
+  const upcoming = ref<UpcomingDay[]>([])      // the auction days after today: cars per venue (every open car, also those whose closing time is not known yet)
   const tick = ref(Date.now())
   const placeholder = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Tokyo' }) === '23:59'
   const jstDate = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
   let loadedFor = ''
 
+  async function loadUpcoming(todayJst: string) {
+    const { data } = await db.from('lots').select('venue,auction_date').gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true).gt('auction_date', todayJst).order('auction_date').limit(5000)
+    const days = new Map<string, Map<string, number>>()
+    for (const r of (data || []) as any[]) { const d = days.get(r.auction_date) || days.set(r.auction_date, new Map()).get(r.auction_date)!; d.set(r.venue, (d.get(r.venue) || 0) + 1) }
+    upcoming.value = [...days.entries()].slice(0, 5).map(([date, v]) => ({ date, cars: [...v.values()].reduce((a, b) => a + b, 0), venues: [...v.entries()].map(([name, cars]) => ({ name, cars })).sort((a, b) => b.cars - a.cars) }))
+  }
+
   async function load() {
     const nowIso = new Date().toISOString(), todayJst = jstDate()
     loadedFor = todayJst
+    loadUpcoming(todayJst).catch(() => {})
     // only cars with a REAL closing time count
     const realOn = async (date: string) => (((await db.from('lots').select('venue,bid_deadline').gt('bid_deadline', nowIso).eq('my_eligible', true).eq('auction_date', date).limit(3000)).data || []) as any[]).filter((r) => !placeholder(r.bid_deadline))
     const rows = await realOn(todayJst)
@@ -66,5 +76,5 @@ export function useBiddingDay() {
     }, 1000)
   })
   onBeforeUnmount(() => { if (timer) clearInterval(timer) })
-  return { day, load, countdown, myt, dateLabel, nextLabel, tick }
+  return { day, load, countdown, myt, dateLabel, nextLabel, tick, upcoming, label }
 }

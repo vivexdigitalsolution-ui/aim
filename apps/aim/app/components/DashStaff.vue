@@ -7,7 +7,7 @@
     <div v-if="err" class="err">{{ err }}</div>
 
     <section class="kpis">
-      <div v-for="k in kpis" :key="k.label" class="card kpi"><small>{{ k.label }}</small><b>{{ k.value }}</b><span class="muted small">{{ k.sub }}</span></div>
+      <div v-for="k in kpis" :key="k.label" class="card kpi"><small>{{ k.label }}</small><div class="kv"><b>{{ k.value }}</b><Spark :values="k.series" /></div><span class="muted small">{{ k.sub }}</span></div>
     </section>
 
     <section class="two">
@@ -18,6 +18,7 @@
             <div class="clock">{{ bd.day.mode === 'today' && bd.day.at ? bd.countdown(bd.tick.value) : bd.day.mode === 'closed' ? 'Closed' : '—' }}</div>
             <div class="muted small"><template v-if="bd.day.mode === 'today'">{{ bd.dateLabel.value }} · {{ bd.day.cars }} open cars · {{ bd.day.venues.length }} venue{{ bd.day.venues.length === 1 ? '' : 's' }}</template><template v-else-if="bd.day.mode === 'closed'">All venues are closed.<template v-if="bd.day.next"> Next bidding day: {{ bd.nextLabel.value }} ({{ bd.day.next.cars }} cars). The countdown starts after 12:00 am Japan time (11:00 pm Malaysia time).</template></template><template v-else>No open car.</template></div>
           </div>
+          <div class="row wrap" style="gap: 10px; justify-content: flex-end"><NuxtLink to="/bids" class="btn" style="display: inline-flex; align-items: center">Open the bid pipeline</NuxtLink><NuxtLink to="/cars" class="btn ghost" style="display: inline-flex; align-items: center">See the cars</NuxtLink></div>
         </div>
         <div v-if="bd.day.venues.length" class="venues">
           <div v-for="v in bd.day.venues" :key="v.name" class="vrow">
@@ -26,7 +27,19 @@
             <span class="muted small vc">{{ v.cars }} cars · {{ bd.myt(v.closesAt) }}</span>
           </div>
         </div>
-        <div class="row wrap" style="gap: 10px; justify-content: flex-start"><NuxtLink to="/bids" class="btn" style="display: inline-flex; align-items: center">Open the bid pipeline</NuxtLink><NuxtLink to="/cars" class="btn ghost" style="display: inline-flex; align-items: center">See the cars</NuxtLink></div>
+        <div v-if="bd.upcoming.value.length" class="coming">
+          <div class="muted small">Coming auction days (cars open for bidding)</div>
+          <div v-for="u in bd.upcoming.value" :key="u.date" class="cday">
+            <div class="muted small">{{ bd.label(u.date) }} · {{ u.cars }} open cars · {{ u.venues.length }} venue{{ u.venues.length === 1 ? '' : 's' }}</div>
+            <div class="venues">
+              <div v-for="v in u.venues" :key="v.name" class="vrow">
+                <span class="vn">{{ v.name }}</span>
+                <span class="bar"><i :style="{ width: Math.max(2, Math.round((v.cars / u.venues[0]!.cars) * 100)) + '%' }" /></span>
+                <span class="muted small vc">{{ v.cars }} car{{ v.cars === 1 ? '' : 's' }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="card">
@@ -133,13 +146,21 @@ const days = ref<{ key: string; label: string; placed: number; won: number }[]>(
 const perf = ref<{ label: string; value: string; delta: string; up: boolean | null }[]>([])
 const bestCars = ref<any[]>([])
 
+// one number per day for the line graph of each card (table kpi_daily, migration 50; the card shows no line until the table exists and has 2 days)
+const hist = ref<any[]>([])
+const series = (f: string) => hist.value.map((r) => r[f])
 const kpis = computed(() => [
-  { label: 'Open cars', value: nf(c.open), sub: bd.day.cars ? `${bd.day.cars} on ${bd.dateLabel.value}` : 'for bidding' },
-  { label: 'Bids waiting to place', value: nf(c.pendingBids), sub: c.pendingBids ? 'AP holders are waiting' : 'Nothing waiting' },
-  { label: 'Closing in 24 hours', value: nf(c.closing24), sub: 'open cars' },
-  { label: 'Active AP holders', value: nf(c.activeAps), sub: c.pendingAps ? `${c.pendingAps} waiting for approval` : 'None waiting' },
-  { label: 'Bidding cars read', value: c.open ? Math.round((c.enrichDone / c.open) * 100) + '%' : '—', sub: `${c.enrichDone} of ${c.open}` },
+  { label: 'Open cars', value: nf(c.open), sub: bd.day.cars ? `${bd.day.cars} on ${bd.dateLabel.value}` : 'for bidding', series: series('open_cars') },
+  { label: 'Bids waiting to place', value: nf(c.pendingBids), sub: c.pendingBids ? 'AP holders are waiting' : 'Nothing waiting', series: series('pending_bids') },
+  { label: 'Closing in 24 hours', value: nf(c.closing24), sub: 'open cars', series: series('closing_24h') },
+  { label: 'Active AP holders', value: nf(c.activeAps), sub: c.pendingAps ? `${c.pendingAps} waiting for approval` : 'None waiting', series: series('active_aps') },
+  { label: 'Bidding cars read', value: c.open ? Math.round((c.enrichDone / c.open) * 100) + '%' : '—', sub: `${c.enrichDone} of ${c.open}`, series: series('read_pct') },
 ])
+async function loadHistory() {
+  await db.rpc('record_kpi_daily')                                  // saves today's numbers (does nothing useful before migration 50)
+  const { data, error } = await db.from('kpi_daily').select('*').order('day', { ascending: false }).limit(14)
+  if (!error) hist.value = (data || []).reverse()
+}
 const attention = computed(() => [
   { n: c.pendingBids, title: 'Bids waiting to be placed', sub: 'AP holders are waiting for these', to: '/bids' },
   { n: c.review, title: 'Dockets to review', sub: 'The rule and Claude picked differently', to: '/review' },
@@ -228,7 +249,7 @@ async function loadMargins() {
 }
 
 onMounted(async () => {
-  const jobs = await Promise.allSettled([loadCounts(), bd.load(), loadPerformance(), loadAps(), loadStatus()])
+  const jobs = await Promise.allSettled([loadCounts(), bd.load(), loadPerformance(), loadAps(), loadStatus(), loadHistory()])
   const bad = jobs.find((j) => j.status === 'rejected') as PromiseRejectedResult | undefined
   if (bad) err.value = String(bad.reason?.message || bad.reason)
   loadMargins()
@@ -241,7 +262,7 @@ onMounted(async () => {
 .syschip { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--s2); border-radius: 20px; padding: 5px 12px; font-size: 12.5px; color: var(--mu); }
 .sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--mu2); } .sdot.ok { background: var(--ok); } .sdot.warn { background: var(--warn); } .sdot.bad { background: var(--bad); }
 .kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
-.kpi { display: grid; gap: 2px; min-width: 0; } .kpi small { color: var(--mu); } .kpi b { font-size: 26px; letter-spacing: -.5px; line-height: 1.15; }
+.kpi { display: grid; gap: 4px; min-width: 0; } .kpi small { color: var(--mu); } .kv { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .kv :deep(.spark) { width: 46%; max-width: 110px; flex: none; } .kpi b { font-size: 26px; letter-spacing: -.5px; line-height: 1.15; }
 .two { display: flex; flex-wrap: wrap; gap: 14px; align-items: stretch; }
 .two > .card, .two > .stack { min-width: 0; flex: 2 1 340px; } .two > .big { flex: 3 1 520px; }
 .stack { display: grid; gap: 14px; align-content: start; }
@@ -249,7 +270,9 @@ onMounted(async () => {
 .grow { flex: 1; min-width: 0; }
 .clock { font-size: 38px; font-weight: 700; letter-spacing: -1px; font-variant-numeric: tabular-nums; line-height: 1.15; }
 .venues { display: grid; gap: 9px; margin: 14px 0; }
-.vrow { display: grid; grid-template-columns: 110px minmax(0, 1fr) 150px; gap: 12px; align-items: center; } .vn { font-weight: 500; } .vc { text-align: right; font-variant-numeric: tabular-nums; }
+.vrow { display: grid; grid-template-columns: 130px minmax(0, 1fr) 150px; gap: 12px; align-items: center; } .vn { font-weight: 500; } .vc { text-align: right; font-variant-numeric: tabular-nums; }
+.coming { border-top: 1px solid var(--line); margin: 6px 0 14px; padding-top: 12px; display: grid; gap: 8px; }
+.cday { border-top: 1px solid var(--line); padding-top: 10px; } .cday .venues { margin: 8px 0 6px; }
 .bar { height: 9px; border-radius: 5px; background: var(--s3); overflow: hidden; } .bar i { display: block; height: 100%; background: var(--ac); border-radius: 5px; }
 .att { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
 .att small { display: block; } .att b { font-weight: 500; }

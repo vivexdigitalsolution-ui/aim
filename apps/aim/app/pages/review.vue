@@ -14,9 +14,10 @@
           <h2>{{ r.lot.brand }} {{ r.lot.model }}</h2>
           <span class="chip warn">{{ r.reason }}</span>
         </div>
-        <div class="muted small">
-          {{ [r.lot.model_code, r.lot.engine_cc ? r.lot.engine_cc + ' cc' : null, r.lot.transmission, r.lot.seats ? r.lot.seats + ' seats' : 'seats not read', r.lot.mfg_year, r.lot.venue + ' lot ' + r.lot.lot_no].filter(Boolean).join(' · ') }}
+        <div class="facts">
+          <div v-for="f in facts(r.lot)" :key="f[0]"><small class="muted">{{ f[0] }}</small><b :class="{ miss: f[1] === '—' }">{{ f[1] }}</b></div>
         </div>
+        <div class="small" style="margin-top: 6px"><NuxtLink :to="`/cars/${r.lot.id}`">Open the car page</NuxtLink><template v-if="r.lot.sheet_url"> · <a :href="r.lot.sheet_url" target="_blank" rel="noopener">Open the auction sheet</a></template></div>
         <div v-if="r.lot.sales_points" class="small" style="margin-top: 6px; white-space: pre-line">{{ r.lot.sales_points }}</div>
 
         <div class="opts">
@@ -55,6 +56,12 @@ const { user } = useAuth()
 const { load } = useReference()
 const reviewCount = useState<number | null>('review-count', () => null)
 const rows = ref<any[]>([]), loading = ref(true), busy = ref(false), err = ref(''), done = ref('')
+// what the scrape read for the car, so a docket can be checked against it ("—" = the site / sheet did not give it)
+const facts = (l: any): [string, string][] => [
+  ['Model code', l.model_code || '—'], ['Chassis no.', l.chassis_no || '—'], ['Grade', l.grade || '—'], ['Year / month', l.mfg_year ? l.mfg_year + (l.mfg_month || l.first_reg_month ? ' / ' + (l.mfg_month || l.first_reg_month) : '') : '—'],
+  ['Engine', l.engine_cc ? l.engine_cc + ' cc' : '—'], ['Gearbox', l.transmission || '—'], ['Drive', l.drive || '—'], ['Fuel', l.fuel || '—'],
+  ['Seats / doors', (l.seats || '—') + ' / ' + (l.doors || '—')], ['Mileage', l.mileage_km != null ? Number(l.mileage_km).toLocaleString('en-US') + ' km' : '—'], ['Colour', l.color || '—'], ['Venue · lot', [l.venue, l.lot_no].filter(Boolean).join(' · ') || '—'],
+]
 let ref_: Awaited<ReturnType<typeof load>>
 
 onMounted(async () => {
@@ -120,6 +127,8 @@ async function noDocket(r: any) {
 </script>
 
 <style scoped>
+.facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px 14px; margin-top: 10px; background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.facts small { display: block; } .facts b { font-weight: 600; word-break: break-word; } .facts b.miss { color: var(--mu2); font-weight: 400; }
 .opts { display: grid; gap: 8px; margin-top: 12px; }
 .opt { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .opt.pick { width: 100%; text-align: left; cursor: pointer; }

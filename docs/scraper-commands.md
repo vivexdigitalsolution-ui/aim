@@ -49,7 +49,7 @@ node daily.js --only scrape,oneprice  just these steps (scrape = bidding, histor
 node daily.js --skip history          everything except these
 node daily.js --day tuesday           the bidding scrape picks Tuesday on the USS site and unticks that day's skipped venues; also today / tomorrow
 ```
-Steps: `scrape` → `oneprice` → `photos` → `history` → `enrich` → `features` → `link` → `snapshot` → `alerts` → `housekeeping`.
+Steps: `scrape` → `oneprice` → `photos` → `history` → `enrich` → `features` → `link` → `snapshot` → `alerts` → `kpi` → `housekeeping`.
 
 ## ASNET
 
