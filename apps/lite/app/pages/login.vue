@@ -1,7 +1,7 @@
 <template>
   <div class="loginpage">
     <div class="loginhero">
-      <div class="logo">Dealer <b>PublicGo</b></div>
+      <div class="logo"><b>PAW-J</b> Partner</div>
       <div><h2>Japan auction cars, priced in RM</h2><p>See the import price, a suggested bid and the closing time of every car. Place your bid order in a minute.</p></div>
       <div />
     </div>

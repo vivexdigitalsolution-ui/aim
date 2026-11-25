@@ -2,7 +2,7 @@
   <div v-if="!showShell" class="authwrap" :class="{ full: route.path === '/login' }"><slot /></div>
   <div v-else>
     <header class="topbar">
-      <NuxtLink to="/" class="logo">Dealer <b>PublicGo</b></NuxtLink>
+      <NuxtLink to="/" class="logo"><b>PAW-J</b> Partner</NuxtLink>
       <div class="mbtns">
         <button class="mbtn" :class="{ on: route.path.startsWith('/account') }" title="My account" aria-label="My account" @click="navigateTo('/account')"><RailIcon name="user" /></button>
         <button class="mbtn" title="Log out" aria-label="Log out" @click="logout"><RailIcon name="logout" /></button>

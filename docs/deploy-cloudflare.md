@@ -5,7 +5,7 @@ Both apps are static websites (`nuxt generate`, no server code), so Cloudflare s
 | Site | Repo folder | Build command | Output folder | Suggested address |
 |---|---|---|---|---|
 | Full AIM (AP holders, staff, walk-in customers) | `apps/aim` | `pnpm install && pnpm --filter ./apps/aim generate` | `apps/aim/.output/public` | `aim.carznexus.com` |
-| Lite (Dealer PublicGo, your boss) | `apps/lite` | `pnpm install && pnpm --filter ./apps/lite generate` | `apps/lite/.output/public` | `dealer.publicgo.my` |
+| Lite (PAW-J Partner, your boss) | `apps/lite` | `pnpm install && pnpm --filter ./apps/lite generate` | `apps/lite/.output/public` | `dealer.publicgo.my` |
 
 Environment variables for each Pages project (Settings > Variables, **Production**; they are baked in at build time):
 - `NUXT_PUBLIC_SUPABASE_URL` = the Supabase project URL
@@ -28,7 +28,7 @@ The address is not in the code. Every website you deploy is the same repo with i
 
 Both sites use the same Supabase project for now (`ettsohrbedakmqadkpga`): set `NUXT_PUBLIC_SUPABASE_URL=https://ettsohrbedakmqadkpga.supabase.co` and `NUXT_PUBLIC_SUPABASE_KEY` = the value in `apps/aim/.env` (the public key). The build command below was run on this PC and takes about 10 seconds.
 
-## A. Your boss's account: Dealer PublicGo at dealer.publicgo.my
+## A. Your boss's account: PAW-J Partner (deploy name dealer-publicgo) at dealer.publicgo.my
 1. Easiest: the boss invites you into his Cloudflare account (dash.cloudflare.com > Manage Account > Members > Invite, role **Administrator**), you accept and switch to his account (top-left account switcher). He never has to touch GitHub.
 2. **Workers & Pages > Create > Pages > Connect to Git.** Sign in to GitHub as `vivexdigitalsolution-ui`, install the "Cloudflare Workers and Pages" app and give it access to the one repository `aim`.
 3. Pick `vivexdigitalsolution-ui/aim`, **Begin setup**:
@@ -61,7 +61,7 @@ Every push to `main` on GitHub deploys both sites again by itself.
 # Update: the Workers way (what your Cloudflare accounts use)
 Your accounts already run sites as **Workers** (not Pages), so deploy these the same way. Each app has a `wrangler.jsonc` (static files + single-page fallback). In Workers & Pages > **Create application** > **Import a repository** (GitHub) > `vivexdigitalsolution-ui/aim`, then:
 
-| Setting | Dealer PublicGo (boss account) | AIM (carznexus account) |
+| Setting | PAW-J Partner (boss account) | AIM (carznexus account) |
 |---|---|---|
 | Project / Worker name | `dealer-publicgo` | `aim-app` |
 | Production branch | `main` | `main` |

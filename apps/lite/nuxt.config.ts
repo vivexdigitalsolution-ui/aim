@@ -9,7 +9,7 @@ export default defineNuxtConfig({
   build: { transpile: ['@aim/core'] },
   app: {
     head: {
-      title: 'Dealer PublicGo',
+      title: 'PAW-J Partner',
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
         { name: 'theme-color', content: '#ffffff' },

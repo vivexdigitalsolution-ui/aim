@@ -155,7 +155,7 @@ async function main() {
   for (const k of Object.keys(state)) if (new Date(state[k].at).getTime() < recentCut) delete state[k]
   if (FORCE) state = {}
   if (types.includes('history') && STOCKED_ONLY) for (const k of Object.keys(state)) { const [ty, b, c] = k.split('|'); if ((ty === 'bid' || ty === 'one_price') && state[k].hits > 0) stocked.add(`${b}|${c}`) }
-  const saveState = () => { try { fs.mkdirSync(path.dirname(stateFile), { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(state)) } catch {} }
+  const saveState = () => { if (DRY) return; try { fs.mkdirSync(path.dirname(stateFile), { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(state)) } catch {} }
 
   log(`Weekly model check (${types.map((t) => SITES[t].label).join(', ')}): cars made in ${YEAR_FROM} or later${config.yearTo ? ' to ' + config.yearTo : ''}, all venues, any score. ${DRY ? 'DRY RUN: nothing is written.' : ''}`)
   for (const t of types) { const r = targets.filter((x) => x.lot_type === t); log(`  ${SITES[t].label}: ${r.length} targets in the list (${r.filter((x) => x.enabled).length} on)`) }
