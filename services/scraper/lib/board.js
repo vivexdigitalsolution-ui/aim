@@ -52,15 +52,22 @@ async function loadBoard(core) {
     return { ...l, variant_id: link.variantId, model_id: link.modelId, level: c?.level || 'none', dutyMyr: cost.get(l.id) ?? null, market: core.lookupMarketById(market, { ...link, year: l.mfg_year }), history: null }
   })
   const need = lots.filter((l) => l.market && l.dutyMyr != null)
+  // the model family (migration 55): "GR COROLLA", not just the first word "GR" (that took the GR86 and GR Yaris too)
+  const famOf = new Map()
+  for (let i = 0; i < need.length; i += 100) {
+    const f = await supabase.from('lots').select('id,model_family').in('id', need.slice(i, i + 100).map((l) => l.id))
+    if (!f.error) for (const r of f.data || []) if (r.model_family) famOf.set(r.id, r.model_family)
+  }
+  const famKey = (l) => l.brand + '|' + (famOf.get(l.id) || l.model.split(/\s+/)[0])
   const hist = new Map()
-  for (const key of new Set(need.map((l) => l.brand + '|' + l.model.split(/\s+/)[0]))) {
-    const [b, w] = key.split('|')
-    const { data } = await supabase.from('lot_history').select('grade,sold_price_jpy,mfg_year').eq('brand', b).ilike('model', w + '%').eq('result', 'sold').not('sold_price_jpy', 'is', null).order('auction_date', { ascending: false }).limit(500)
+  for (const key of new Set(need.map(famKey))) {
+    const i = key.indexOf('|'), b = key.slice(0, i), w = key.slice(i + 1)
+    const { data } = await supabase.from('lot_history').select('grade,sold_price_jpy,mfg_year,model_code').eq('brand', b).ilike('model', w + '%').eq('result', 'sold').not('sold_price_jpy', 'is', null).order('auction_date', { ascending: false }).limit(2000)
     hist.set(key, data || [])
   }
   for (const l of need) {
-    const sales = (hist.get(l.brand + '|' + l.model.split(/\s+/)[0]) || []).filter((s) => l.mfg_year && s.mfg_year && Math.abs(s.mfg_year - l.mfg_year) <= 1).map((s) => ({ grade: s.grade, price: Number(s.sold_price_jpy) }))
-    l.history = core.historyPrice(sales, l.grade)
+    const sales = (hist.get(famKey(l)) || []).filter((s) => l.mfg_year && s.mfg_year && Math.abs(s.mfg_year - l.mfg_year) <= 1).map((s) => ({ grade: s.grade, price: Number(s.sold_price_jpy), model_code: s.model_code }))
+    l.history = core.historyPrice(sales, l.grade, l.model_code)
   }
 
   function evaluate(l, s) {

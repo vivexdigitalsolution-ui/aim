@@ -106,7 +106,7 @@ async function confirm(r: any, docket: Docket) {
     for (const x of same) {
       const { error: de } = await db.from('lot_docket_decisions').upsert({ lot_id: x.lot.id, status: 'confirmed', docket_id: docket.id, rule_docket_id: x.dec.rule_docket_id, ai_docket_id: x.dec.ai_docket_id, ai_confidence: x.dec.ai_confidence, ai_reason: x.dec.ai_reason, reason: 'confirmed by staff', decided_at: new Date().toISOString() }, { onConflict: 'lot_id' })
       if (de) throw de
-      const { cost } = dutyCostRow({ docket, regYear: x.lot.mfg_year, regMonth: x.lot.mfg_month || x.lot.first_reg_month, ref: ref_ })
+      const { cost } = dutyCostRow({ docket, regYear: x.lot.mfg_year, regMonth: x.lot.mfg_month || x.lot.first_reg_month, ref: ref_, vehicleType: x.lot.vehicle_type })
       if (cost) { const { error: le } = await db.from('lot_costs').upsert({ lot_id: x.lot.id, ...cost, updated_at: new Date().toISOString() }, { onConflict: 'lot_id' }); if (le) throw le } else noDuty++
     }
     rows.value = rows.value.filter((x) => !same.includes(x))

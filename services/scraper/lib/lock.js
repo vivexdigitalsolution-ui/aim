@@ -50,15 +50,20 @@ async function claimTarget(lotType, minDays = null, skipIds = null, onlyModels =
     }
   }
 
+  // --model / --brand (scrape.js): only the models whose name contains this text; runs even if done today and ignores the skip-brand list
+  const norm = (x) => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  const wantModel = norm(process.env.FILTER_MODEL), wantBrand = norm(process.env.FILTER_BRAND), modelSel = !!(wantModel || wantBrand)
   const dueCutoff = minDays == null ? null : new Date(now.getTime() - minDays * 86400000).toISOString()
   const candidates = all.filter((t) => {
     if (process.env.FILTER_MAKER_CODE && t.maker_code !== process.env.FILTER_MAKER_CODE) return false
     if (process.env.FILTER_CAR_CODE && t.car_code !== process.env.FILTER_CAR_CODE) return false
     if (skipIds && skipIds.has(t.id)) return false
+    if (wantModel && !norm(t.model_name).includes(wantModel)) return false
+    if (wantBrand && !norm(t.brand_name).includes(wantBrand)) return false
     if (offerSet) { if (!offerSet.has(t.maker_code + '|' + t.car_code)) return false }
-    else if (config.skipBrandCodes.has(String(t.maker_code).toUpperCase())) return false     // brands we never scrape (.env SKIP_BRAND_CODES)
+    else if (!modelSel && config.skipBrandCodes.has(String(t.maker_code).toUpperCase())) return false     // brands we never scrape (.env SKIP_BRAND_CODES)
     if (minDays == null) {
-      if (!offerSet && t.completed_at && t.completed_at >= todayStart) return false
+      if (!offerSet && !modelSel && t.completed_at && t.completed_at >= todayStart) return false
     } else {
       const neverRan = !t.last_run_at && !t.run_count
       if (!(minDays === 0 ? neverRan : (neverRan || (t.last_run_at && t.last_run_at <= dueCutoff)))) return false

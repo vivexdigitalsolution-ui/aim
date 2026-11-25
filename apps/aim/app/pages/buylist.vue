@@ -20,7 +20,7 @@ const { user } = useAuth()
 const { load, lots, evaluate, fees } = useMarginBoard()
 const { map: segMap, load: loadSegments } = useSegments()
 const bl = ref<BuyList | null>(null), count = ref<number | null>(null)
-const RECON = 3000
+const RECON = 0
 
 async function recount() {
   if (!bl.value) return

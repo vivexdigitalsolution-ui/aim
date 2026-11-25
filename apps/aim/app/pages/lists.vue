@@ -116,7 +116,7 @@ import { matchesBuyList, rankForDealer, listMessage, fmtMytDateTime, timeLeft, t
 const db = useDb()
 const now = useNow()
 const { load, lots, evaluate, fees, rate } = useMarginBoard()
-const RECON = 3000
+const RECON = 0
 const aps = ref<any[]>([]), apId = ref(''), bl = ref<BuyList | null>(null), showBl = ref(false)
 const loading = ref(true), err = ref(''), busy = ref(false), showAll = ref(false)
 const picked = ref<string[]>([]), days = ref(7), message = ref(''), made = ref<{ url: string; text: string } | null>(null), copied = ref('')

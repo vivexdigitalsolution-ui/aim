@@ -4,11 +4,13 @@ export interface BoardLot {
   id: string; brand: string; model: string; model_code: string | null; grade: string | null; mfg_year: number | null; mileage_km: number | null
   start_price_jpy: number | null; photos: string[] | null; venue: string; auction_date: string; lot_no: string; bid_deadline: string
   variant_id: string | null; model_id: string | null; level: 'variant' | 'model' | 'none'
-  dutyMyr: number | null            // staff: the duty. AP holder: duty + port + inland as ONE number (never the duty alone)
+  dutyMyr: number | null            // staff: the duty. AP holder: duty + port + inland as ONE number
+  costParts?: { dutyMyr: number; portMyr: number; inlandMyr: number } | null      // AP holder: the same number split in its three parts (migration 53); null before it is run
   market: { row: IdMarketRow; wider: boolean } | null
   history: { price: number; n: number; basis: string } | null
 }
-export interface Settings { targetPct: number; reconMyr: number; apFeeMyr: number }
+// japanInlandJpy: the extra Japan inland transfer (yen) when the car is far from the port; port / inland (RM) default to the company's fees. reconMyr (a plain RM amount) is still accepted by older pages.
+export interface Settings { targetPct: number; reconMyr?: number; japanInlandJpy?: number; portMyr?: number; inlandMyr?: number; apFeeMyr: number }
 export interface Evaluated extends BoardLot {
   sellMyr: number | null; confidence: Confidence; maxBid: number | null
   headroom: number | null            // max bid minus the usual winning price: positive = room to move
@@ -58,7 +60,7 @@ export function useMarginBoard() {
       if ((data || []).length < 1000) break
     }
     const ids = open.map((l) => l.id)
-    const cat = new Map<string, any>(), cost = new Map<string, number>()
+    const cat = new Map<string, any>(), cost = new Map<string, number>(), parts = new Map<string, { dutyMyr: number; portMyr: number; inlandMyr: number }>()
     for (const part of chunks(ids, 100)) {
       const [c, k] = await Promise.all([
         db.from('lot_catalog').select('lot_id,variant_id,model_id,level').in('lot_id', part),
@@ -67,7 +69,17 @@ export function useMarginBoard() {
       if (c.error) throw c.error
       if (k.error) throw k.error
       for (const r of c.data || []) cat.set(r.lot_id, r)
-      for (const r of (k.data || []) as any[]) { const v = isStaff.value ? r.duty_myr : r.fixed_myr; if (v != null) cost.set(r.lot_id, Number(v)) }
+      for (const r of (k.data || []) as any[]) {
+        const v = isStaff.value ? r.duty_myr : r.fixed_myr; if (v != null) cost.set(r.lot_id, Number(v))
+        if (!isStaff.value && r.duty_myr != null && r.port_myr != null && r.inland_myr != null) parts.set(r.lot_id, { dutyMyr: Number(r.duty_myr), portMyr: Number(r.port_myr), inlandMyr: Number(r.inland_myr) })
+      }
+    }
+
+    // an AP holder now gets the three parts (migration 53): the board then works like the staff one, with the duty alone and the port / inland fees the AP can change
+    if (!isStaff.value && parts.size) {
+      const first = parts.values().next().value!
+      fees.value = { portMyr: first.portMyr, inlandMyr: first.inlandMyr, apFeeMyr: fees.value.apFeeMyr }
+      for (const [id, pt] of parts) cost.set(id, pt.dutyMyr)
     }
 
     // market rows: the newest CarzNexus snapshot, plus every hand-entered (manual) price; a manual price overrides the snapshot for the same car and year
@@ -94,21 +106,28 @@ export function useMarginBoard() {
       const link = c ? { variantId: c.variant_id as string | null, modelId: c.model_id as string | null } : { variantId: null, modelId: null }
       return {
         ...l, variant_id: link.variantId, model_id: link.modelId, level: c?.level || 'none',
-        dutyMyr: cost.get(l.id) ?? null, market: lookupMarketById(mk, { ...link, year: l.mfg_year }), history: null,
+        dutyMyr: cost.get(l.id) ?? null, costParts: parts.get(l.id) ?? null, market: lookupMarketById(mk, { ...link, year: l.mfg_year }), history: null,
       }
     })
 
     // the usual winning price: sold results of the same brand + model name, cars of nearly the same year, same grade (core historyPrice)
+    // (the model family is the model name USS lists it under, "GR COROLLA": the first word alone would take the GR86 and GR Yaris too. Before migration 55 the first word is used.)
     const need = out.filter((l) => l.market && l.dutyMyr != null)
+    const famOf = new Map<string, string>()
+    for (const part of chunks(need.map((l) => l.id), 100)) {
+      const f = await db.from('lots').select('id,model_family').in('id', part)
+      if (!f.error) for (const r of (f.data || []) as any[]) if (r.model_family) famOf.set(r.id, r.model_family)
+    }
+    const famKey = (l: BoardLot) => l.brand + '|' + (famOf.get(l.id) || l.model.split(/\s+/)[0])
     const hist = new Map<string, any[]>()
-    for (const key of new Set(need.map((l) => l.brand + '|' + l.model.split(/\s+/)[0]))) {
-      const [b, w] = key.split('|')
-      const { data } = await db.from('lot_history').select('grade,sold_price_jpy,mfg_year').eq('brand', b).ilike('model', w + '%').eq('result', 'sold').not('sold_price_jpy', 'is', null).order('auction_date', { ascending: false }).limit(500)
+    for (const key of new Set(need.map(famKey))) {
+      const i = key.indexOf('|'), b = key.slice(0, i), w = key.slice(i + 1)
+      const { data } = await db.from('lot_history').select('grade,sold_price_jpy,mfg_year,model_code').eq('brand', b).ilike('model', w + '%').eq('result', 'sold').not('sold_price_jpy', 'is', null).order('auction_date', { ascending: false }).limit(2000)
       hist.set(key, data || [])
     }
     for (const l of need) {
-      const sales = (hist.get(l.brand + '|' + l.model.split(/\s+/)[0]) || []).filter((s) => l.mfg_year && s.mfg_year && Math.abs(s.mfg_year - l.mfg_year) <= 1).map((s) => ({ grade: s.grade, price: Number(s.sold_price_jpy) }))
-      l.history = historyPrice(sales, l.grade)
+      const sales = (hist.get(famKey(l)) || []).filter((s) => l.mfg_year && s.mfg_year && Math.abs(s.mfg_year - l.mfg_year) <= 1).map((s) => ({ grade: s.grade, price: Number(s.sold_price_jpy), model_code: s.model_code }))
+      l.history = historyPrice(sales, l.grade, l.model_code)
     }
 
     lots.value = out
@@ -122,7 +141,7 @@ export function useMarginBoard() {
     if (!l.market || l.dutyMyr == null || !(rate.value > 0)) return none
     const { sellMyr, confidence } = sellFromRow(l.market.row, l.market.wider)
     if (!sellMyr) return { ...none, confidence }
-    const costs = { rate: rate.value, dutyMyr: l.dutyMyr, reconMyr: s.reconMyr, portMyr: fees.value.portMyr, inlandMyr: fees.value.inlandMyr, apFeeMyr: s.apFeeMyr }
+    const costs = { rate: rate.value, dutyMyr: l.dutyMyr, reconMyr: s.reconMyr ?? Math.round((s.japanInlandJpy || 0) * rate.value), portMyr: s.portMyr ?? fees.value.portMyr, inlandMyr: s.inlandMyr ?? fees.value.inlandMyr, apFeeMyr: s.apFeeMyr }
     const maxBid = maxBidJpy({ sellMyr, targetPct: s.targetPct, ...costs })
     const at = l.history ? marginAtBid({ bodyJpy: l.history.price, sellMyr, ...costs }) : null
     return { ...l, sellMyr, confidence, maxBid, headroom: l.history ? maxBid - l.history.price : null, atHistory: at ? { profitMyr: at.profitMyr, marginPct: at.marginPct, landedMyr: at.landedMyr } : null }

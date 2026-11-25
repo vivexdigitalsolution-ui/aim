@@ -52,7 +52,7 @@ async function main() {
     const rc = await ap.rpc('ap_lot_costs', { p_lot_ids: ids })
     ok(!rc.error && rc.data.length === ids.length, 'ap_lot_costs returns a cost for each lot' + (rc.error ? ' (' + rc.error.message + ')' : ''))
     if (!rc.error) {
-      ok(rc.data.every((r) => Object.keys(r).sort().join() === 'fixed_myr,lot_id'), 'ap_lot_costs exposes only lot_id and fixed_myr (no duty, no docket)')
+      ok(rc.data.every((r) => ['fixed_myr', 'lot_id'].every((k) => k in r) && !('docket_id' in r)), 'ap_lot_costs returns fixed_myr (plus duty / port / inland since migration 53), never the docket')
       const exact = (staffCosts || []).every((s) => { const r = rc.data.find((x) => x.lot_id === s.lot_id); return r && Math.abs(Number(r.fixed_myr) - Math.round(Number(s.duty_myr) + pv('offer_port_myr', 2500) + pv('offer_inland_myr', 250))) <= 1 })
       ok(exact, 'fixed_myr = duty + port + inland (matches the staff numbers)')
     }

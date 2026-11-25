@@ -14,7 +14,7 @@
       <template v-else>
       <div class="grid kpis6">
         <div class="card kpi"><small>Landed cost</small><b>RM {{ myr(m.landedMyr) }}</b><span class="muted small">at ¥{{ Number(bid || 0).toLocaleString('en-US') }}</span></div>
-        <div class="card kpi"><small>Recon / prep</small><b>RM {{ myr(reconMyr) }}</b></div>
+        <div class="card kpi"><small>Japan inland transfer</small><b>{{ japanInlandJpy ? yen(japanInlandJpy) : '—' }}</b><span class="muted small">{{ japanInlandJpy ? 'RM ' + myr(reconMyr) : 'none added' }}</span></div>
         <div class="card kpi"><small>Expected sell</small><b>RM {{ myr(ev.sellMyr!) }}</b><span class="muted small">cautious</span></div>
         <div class="card kpi"><small>Gross profit</small><b :class="m.profitMyr >= 0 ? 'up' : 'down'">RM {{ myr(m.profitMyr) }}</b></div>
         <div class="card kpi"><small>Margin on cost</small><b :class="m.marginPct >= targetPct ? 'up' : 'down'">{{ m.marginPct }}%</b></div>
@@ -32,12 +32,15 @@
           <table class="t">
             <tr><td>Car at auction</td><td>RM {{ myr(p.bodyMyr) }}</td></tr>
             <tr><td>Agent fee & shipping</td><td>RM {{ myr(p.agentMyr) }}</td></tr>
-            <tr v-if="isStaff"><td>Duty (docket)</td><td>RM {{ myr(car.dutyMyr) }}</td></tr>
-            <tr v-if="isStaff"><td>Port, inland, AP fee</td><td>RM {{ myr(fees.portMyr + fees.inlandMyr + apFeeMyr) }}</td></tr>
-            <tr v-if="!isStaff"><td>Duty, port clearance & inland transfer</td><td>RM {{ myr(car.dutyMyr) }}</td></tr>
-            <tr v-if="!isStaff"><td>Your AP fee</td><td>RM {{ myr(apFeeMyr) }}</td></tr>
+            <template v-if="isStaff || car.costParts">
+              <tr><td>Duty</td><td>RM {{ myr(car.dutyMyr) }}</td></tr>
+              <tr><td>Port clearance</td><td>RM {{ myr(portMyr) }}</td></tr>
+              <tr><td>Malaysia inland transfer</td><td>RM {{ myr(inlandMyr) }}</td></tr>
+            </template>
+            <tr v-else><td>Duty, port clearance & inland transfer</td><td>RM {{ myr(car.dutyMyr) }}</td></tr>
+            <tr><td>{{ isStaff ? 'AP fee' : 'Your AP fee' }}</td><td>RM {{ myr(apFeeMyr) }}</td></tr>
             <tr class="sum"><td>Landed cost</td><td>RM {{ myr(m.landedMyr) }}</td></tr>
-            <tr><td>Recon / prep</td><td>RM {{ myr(reconMyr) }}</td></tr>
+            <tr v-if="japanInlandJpy"><td>Japan inland transfer ({{ yen(japanInlandJpy) }})</td><td>RM {{ myr(reconMyr) }}</td></tr>
             <tr><td>Sell price (cautious)</td><td>RM {{ myr(ev.sellMyr!) }}</td></tr>
             <tr class="sum"><td>Profit</td><td :class="m.profitMyr >= 0 ? 'up' : 'down'">RM {{ myr(m.profitMyr) }}</td></tr>
             <tr class="sum"><td>Margin on cost</td><td :class="m.marginPct >= targetPct ? 'up' : 'down'">{{ m.marginPct }}%</td></tr>
@@ -62,7 +65,9 @@
           </div>
           <div class="row wrap" style="gap: 14px; margin-top: 12px">
             <label class="fld">Target margin %<input v-model.number="targetPct" type="number" min="0" max="60" /></label>
-            <label class="fld">Recon (RM)<NumInput v-model="reconMyr" /></label>
+            <label class="fld">Japan inland (¥)<NumInput v-model="japanInlandJpy" placeholder="0" /></label>
+            <label class="fld">Port clearance (RM)<NumInput v-model="portMyr" /></label>
+            <label class="fld">Inland transfer (RM)<NumInput v-model="inlandMyr" /></label>
             <label class="fld">AP fee (RM)<NumInput v-model="apFeeMyr" /></label>
           </div>
         </div>
@@ -122,14 +127,15 @@ const db = useDb()
 const now = useNow()
 const { isStaff } = useAuth()
 const { load, lots, rate, fees, evaluate, marketRows, marketAsOf } = useMarginBoard()
-const targetPct = ref(12), reconMyr = ref(3000), apFeeMyr = ref(10500), loading = ref(true), err = ref(''), bid = ref(0)
+const targetPct = ref(12), japanInlandJpy = ref<number | null>(0), portMyr = ref<number | null>(2500), inlandMyr = ref<number | null>(250), apFeeMyr = ref(10500), loading = ref(true), err = ref(''), bid = ref(0)
 const yen = (n: number) => '¥' + Math.round(n).toLocaleString('en-US')
 const myr = (n: number) => Math.round(n).toLocaleString('en-US')
 
 const car = computed(() => lots.value.find((l) => l.id === route.query.lot) || null)
-const ev = computed(() => evaluate(car.value!, { targetPct: targetPct.value || 0, reconMyr: reconMyr.value || 0, apFeeMyr: apFeeMyr.value || 0 }))
-const p = computed(() => offerPricing({ historyJpy: bid.value || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, portMyr: fees.value.portMyr, inlandMyr: fees.value.inlandMyr, apFeeMyr: apFeeMyr.value || 0 }))
-const m = computed(() => marginAtBid({ bodyJpy: bid.value || 0, sellMyr: ev.value.sellMyr || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, reconMyr: reconMyr.value || 0, portMyr: fees.value.portMyr, inlandMyr: fees.value.inlandMyr, apFeeMyr: apFeeMyr.value || 0 })!)
+const reconMyr = computed(() => Math.round((japanInlandJpy.value || 0) * rate.value))      // the only extra cost in Japan: inland transfer when the car is far from the port
+const ev = computed(() => evaluate(car.value!, { targetPct: targetPct.value || 0, japanInlandJpy: japanInlandJpy.value || 0, portMyr: portMyr.value || 0, inlandMyr: inlandMyr.value || 0, apFeeMyr: apFeeMyr.value || 0 }))
+const p = computed(() => offerPricing({ historyJpy: bid.value || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, portMyr: portMyr.value || 0, inlandMyr: inlandMyr.value || 0, apFeeMyr: apFeeMyr.value || 0 }))
+const m = computed(() => marginAtBid({ bodyJpy: bid.value || 0, sellMyr: ev.value.sellMyr || 0, rate: rate.value, dutyMyr: car.value?.dutyMyr ?? 0, reconMyr: reconMyr.value || 0, portMyr: portMyr.value || 0, inlandMyr: inlandMyr.value || 0, apFeeMyr: apFeeMyr.value || 0 })!)
 const sliderMax = computed(() => Math.max(2_000_000, Math.ceil(((ev.value.maxBid || 0) * 1.6) / 100000) * 100000))
 
 // the range bar: min..max of the market row, with a little margin either side
@@ -179,7 +185,7 @@ const table = computed(() => [...marketRows.value].sort((a, b) => (a.brand + a.m
 
 watch(() => [car.value?.id, rate.value], () => { if (car.value) bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0 })
 onMounted(async () => {
-  try { await load(); apFeeMyr.value = fees.value.apFeeMyr } catch (e: any) { err.value = e.message } finally { loading.value = false }
+  try { await load(); apFeeMyr.value = fees.value.apFeeMyr; portMyr.value = fees.value.portMyr; inlandMyr.value = fees.value.inlandMyr } catch (e: any) { err.value = e.message } finally { loading.value = false }
   if (car.value) { bid.value = ev.value.maxBid || car.value.history?.price || car.value.start_price_jpy || 0; await loadOpen(); if (open.value) bid.value = Number(open.value.max_bid_jpy); await loadComps() }
 })
 </script>

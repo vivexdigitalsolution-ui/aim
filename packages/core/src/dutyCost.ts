@@ -13,7 +13,7 @@ export interface CostRef {
 }
 
 /** @returns the cost row, or null with the reasons in `notes` (no rate, no year / month ...). */
-export function dutyCostRow(p: { docket: Docket; regYear: number | null; regMonth: number | null; ref: CostRef; today?: Date }): { cost: CostRow | null; notes: string[] } {
+export function dutyCostRow(p: { docket: Docket; regYear: number | null; regMonth: number | null; ref: CostRef; today?: Date; vehicleType?: 'car' | 'non_car' | null }): { cost: CostRow | null; notes: string[] } {
   const { docket, regYear, regMonth, ref } = p
   const today = p.today || new Date()
   const notes: string[] = []
@@ -23,7 +23,7 @@ export function dutyCostRow(p: { docket: Docket; regYear: number | null; regMont
   const rate = ref.fx?.[cur]?.rate
   if (!(Number(rate) > 0)) return { cost: null, notes: [`no exchange rate for ${cur}`] }
   const info = ref.currencies.find((c) => c.code === cur)
-  const input = { docket, mfgYear: regYear, mfgMonth: month, rate: Number(rate), rates: ref.rates, standardFare: info?.standard_fare_myr ?? undefined, vehicleType: 'car' as const, today }
+  const input = { docket, mfgYear: regYear, mfgMonth: month, rate: Number(rate), rates: ref.rates, standardFare: info?.standard_fare_myr ?? undefined, vehicleType: p.vehicleType === 'non_car' ? ('non_car' as const) : ('car' as const), today }
   const now = calcDuty(input)
   const from = matangFrom(regYear, month, today)
   const later = calcDutyAt(input, from)

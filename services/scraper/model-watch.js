@@ -3,8 +3,10 @@
 /**
  * model-watch.js — the weekly check of WHICH models are still worth scraping (run it once a week, it takes a while, leave it running).
  *
- *   node model-watch.js                        check Bidding, History and One price, every brand
- *   node model-watch.js --types bid            only some types (bid, history, one_price; comma separated)
+ *   node model-watch.js                        DEFAULT = History only: every model with 2022+ sold results that is not in the list yet is added
+ *                                              as Bidding + One price + History (all New / off). Bidding and One price are not walked at all.
+ *   node model-watch.js --types bid,one_price,history   also walk Bidding / One price (their 0-car warnings and auto-off work as before)
+ *   node model-watch.js --stocked-only         History: only models that have cars on Bidding or One price (the old rule)
  *   node model-watch.js --brand "TOYOTA,BMW"   only these brands (name or code)
  *   node model-watch.js --dry                  look and report, write nothing to the database
  *   node model-watch.js --force                check again even models checked in the last 5 days (normally they are skipped, so an
@@ -39,7 +41,7 @@ const nav = require('./lib/nav')
 const args = process.argv.slice(2)
 const has = (n) => args.includes(n)
 const arg = (n) => { const i = args.indexOf(n); return i > -1 && args[i + 1] && !args[i + 1].startsWith('--') ? args[i + 1] : null }
-const DRY = has('--dry'), FORCE = has('--force')
+const DRY = has('--dry'), FORCE = has('--force'), STOCKED_ONLY = has('--stocked-only')
 const MAX_ZERO = parseInt(arg('--max-zero') || '8', 10)
 const RECHECK_DAYS = 5
 const YEAR_FROM = config.yearFrom || 2022
@@ -125,7 +127,7 @@ async function hitsFor(site, page, brandCode, modelCode) {
 
 async function main() {
   const wantedBrands = (arg('--brand') || '').split(',').map(norm).filter(Boolean)
-  const types = (arg('--types') || 'bid,history,one_price').split(',').map((s) => s.trim()).filter((t) => SITES[t])
+  const types = (arg('--types') || 'history').split(',').map((s) => s.trim()).filter((t) => SITES[t])
   if (!types.length) { console.log('--types takes bid, history and/or one_price'); process.exit(1) }
   types.sort((a, b) => (a === 'history') - (b === 'history'))              // History goes last: it only looks at models that have cars on Bidding or One price
 
@@ -134,10 +136,11 @@ async function main() {
   const brandName = new Map(brandsDb.map((b) => [String(b.code), b.name]))
   const modelName = new Map(modelsDb.map((m) => [`${m.brand_code}|${m.code}`, m.name]))       // English names, whatever language the page we read is in
   const targets = await loadAll('scrape_targets', 'id,lot_type,maker_code,car_code,brand_name,model_name,enabled,status,zero_count,last_hits,checked_at,disabled_reason', (q) => q.eq('source', 'uss').in('lot_type', types))
-  const anyName = new Map(); for (const t of await loadAll('scrape_targets', 'maker_code,car_code,brand_name,model_name', (q) => q.eq('source', 'uss'))) anyName.set(`${t.maker_code}|${t.car_code}`, t)
+  const anyName = new Map(), allKeys = new Set()
+  for (const t of await loadAll('scrape_targets', 'lot_type,maker_code,car_code,brand_name,model_name', (q) => q.eq('source', 'uss'))) { anyName.set(`${t.maker_code}|${t.car_code}`, t); allKeys.add(key(t.lot_type, t.maker_code, t.car_code)) }
   // models with cars on Bidding or One price: History is checked for these only (a model with none there is skipped completely)
   const stocked = new Set()
-  if (types.includes('history')) {
+  if (types.includes('history') && STOCKED_ONLY) {
     for (const t of await loadAll('scrape_targets', 'lot_type,maker_code,car_code,enabled,status,last_hits', (q) => q.eq('source', 'uss').in('lot_type', ['bid', 'one_price'])))
       if ((t.last_hits ?? 0) > 0 || (t.last_hits == null && t.enabled && t.status === 'live')) stocked.add(`${t.maker_code}|${t.car_code}`)
   }
@@ -151,7 +154,7 @@ async function main() {
   try { state = JSON.parse(fs.readFileSync(stateFile, 'utf8')) } catch {}
   for (const k of Object.keys(state)) if (new Date(state[k].at).getTime() < recentCut) delete state[k]
   if (FORCE) state = {}
-  if (types.includes('history')) for (const k of Object.keys(state)) { const [ty, b, c] = k.split('|'); if ((ty === 'bid' || ty === 'one_price') && state[k].hits > 0) stocked.add(`${b}|${c}`) }
+  if (types.includes('history') && STOCKED_ONLY) for (const k of Object.keys(state)) { const [ty, b, c] = k.split('|'); if ((ty === 'bid' || ty === 'one_price') && state[k].hits > 0) stocked.add(`${b}|${c}`) }
   const saveState = () => { try { fs.mkdirSync(path.dirname(stateFile), { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(state)) } catch {} }
 
   log(`Weekly model check (${types.map((t) => SITES[t].label).join(', ')}): cars made in ${YEAR_FROM} or later${config.yearTo ? ' to ' + config.yearTo : ''}, all venues, any score. ${DRY ? 'DRY RUN: nothing is written.' : ''}`)
@@ -183,7 +186,7 @@ async function main() {
       // brands to walk: every brand on the site plus every brand with a row of this type (absent from the site = no stock), minus the skip list
       const codes = [...new Set([...brandsOnSite.map((b) => String(b.code)), ...mineAll.map((t) => String(t.maker_code))])]
         .filter((c) => !config.skipBrandCodes.has(c.toUpperCase()))
-        .filter((c) => type !== 'history' || [...stocked].some((s) => s.startsWith(c + '|')))   // History: no model of this brand has cars on Bidding / One price
+        .filter((c) => type !== 'history' || !STOCKED_ONLY || [...stocked].some((s) => s.startsWith(c + '|')))   // History: no model of this brand has cars on Bidding / One price
         .filter((c) => !wantedBrands.length || wantedBrands.includes(norm(c)) || wantedBrands.includes(norm(brandName.get(c) || brandsOnSite.find((b) => String(b.code) === c)?.name)))
 
       // nothing is written until the first 15 models of this type have been looked at and not ALL were 0 (a broken filter makes every model look empty)
@@ -192,6 +195,22 @@ async function main() {
       const later = (fn) => (passed ? fn() : (pending.push(fn), undefined))
       const flush = async () => { passed = true; for (const f of pending.splice(0)) await f() }
 
+      // History found cars (2022+ sold results): the model can be imported, so it also gets a Bidding and a One price target (New, off).
+      // That is how the History page alone finds new models: no need to walk Bidding and One price. Rows already in the list are left alone.
+      const addSiblings = async (brandCode, model, bName, mName, hits, now) => {
+        for (const ty of ['bid', 'one_price']) {
+          const k2 = key(ty, brandCode, model.code)
+          if (allKeys.has(k2)) continue
+          allKeys.add(k2)
+          report.added.push({ type: SITES[ty].label + ' (from History)', brand: bName, model: mName, hits })
+          log(`   + NEW  ${bName} ${mName}: sold in ${YEAR_FROM}+ -> added to ${SITES[ty].label} as New (off)`)
+          if (!DRY) {
+            const row = { label: `${bName} / ${mName} (${ty})`, lot_type: ty, source: 'uss', maker_code: brandCode, car_code: model.code, brand_name: bName, model_name: mName, year_from: YEAR_FROM, year_to: config.yearTo ?? null, enabled: false, status: 'new', checked_at: now, zero_count: 0 }
+            const { error } = await supabase.from('scrape_targets').upsert(row, { onConflict: 'source,lot_type,maker_code,car_code', ignoreDuplicates: true })
+            if (error) report.errors.push(`${bName} ${mName}: could not add ${ty} (${error.message})`)
+          }
+        }
+      }
       const record = async (brandCode, brand, model, hits) => {
         const k = key(type, brandCode, model.code), t = byKey.get(k), now = new Date().toISOString()
         state[k] = { hits, at: now }
@@ -207,9 +226,12 @@ async function main() {
               const { error } = await supabase.from('scrape_targets').upsert(row, { onConflict: 'source,lot_type,maker_code,car_code', ignoreDuplicates: true })
               if (error) report.errors.push(`${bName} ${mName}: could not add (${error.message})`)
             }
+            allKeys.add(k)
+            if (type === 'history') await addSiblings(brandCode, model, bName, mName, hits, now)
           }
           return
         }
+        if (type === 'history' && hits > 0 && t.enabled && t.status === 'live') await addSiblings(brandCode, model, t.brand_name, t.model_name, hits, now)
         const zero = hits > 0 ? 0 : (t.zero_count || 0) + 1
         const patch = { zero_count: zero, last_hits: hits, checked_at: now }
         if (hits === 0) {
@@ -248,7 +270,7 @@ async function main() {
         for (const t of mine) {
           if (stop) break
           if (listed.has(String(t.car_code))) continue
-          if (type === 'history' && !stocked.has(`${code}|${t.car_code}`)) continue
+          if (type === 'history' && STOCKED_ONLY && !stocked.has(`${code}|${t.car_code}`)) continue
           if (fresh(t) || state[key(type, code, t.car_code)]) { report.skippedFresh++; continue }
           await later(() => record(code, bName, { code: t.car_code, name: t.model_name }, 0))
         }
@@ -257,7 +279,7 @@ async function main() {
         for (const m of models) {
           if (stop) break
           const k = key(type, code, m.code), t = byKey.get(k)
-          if (type === 'history' && !stocked.has(`${code}|${m.code}`)) { report.noStock = (report.noStock || 0) + 1; continue }   // no cars on Bidding / One price: skip History for it
+          if (type === 'history' && STOCKED_ONLY && !stocked.has(`${code}|${m.code}`)) { report.noStock = (report.noStock || 0) + 1; continue }   // no cars on Bidding / One price: skip History for it
           if (t && !(t.enabled && t.status === 'live')) continue                  // in the list, off or still New: nothing to do
           if ((t && fresh(t)) || (!t && state[k])) { report.skippedFresh++; continue }
           let hits = null, lastErr = ''

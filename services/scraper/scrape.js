@@ -18,6 +18,9 @@
  *   node scrape.js bid yokohama 0day    — only targets that never ran
  *   node scrape.js bid yokohama 3days   — never run, or last run 3+ days ago
  *
+ * One model only: node scrape.js bid --model "GR COROLLA" [--brand TOYOTA]   (also all / one_price / history; every venue, even if it already ran today;
+ *   the name is matched inside the model name, spaces and dashes ignored, so "COROLLA" takes every Corolla; the model must be switched on in Scrape targets)
+ *
  * Work comes from scrape_targets (one brand + model + year range each); create them with `node make-targets.js`.
  * Each target is claimed with a lock (lib/lock.js), so several PCs can run this at the same time.
  *
@@ -73,7 +76,10 @@ let MODE       = MODES[0]
 let LANGMODE   = langOf(MODE)
 
 const WEEKDAYS = { today: 'today', tomorrow: 'tomorrow', monday: 1, mon: 1, tuesday: 2, tue: 2, wednesday: 3, wed: 3, thursday: 4, thu: 4, friday: 5, fri: 5, saturday: 6, sat: 6, sunday: 7, sun: 7 }
-const rest       = process.argv.slice(3).filter((a) => !a.startsWith('--'))      // --include-today is read by lib/cutoff.js
+const flagVal    = (n) => { const i = process.argv.indexOf(n); return i > 2 ? (process.argv[i + 1] || '') : '' }
+if (flagVal('--model')) process.env.FILTER_MODEL = flagVal('--model')
+if (flagVal('--brand')) process.env.FILTER_BRAND = flagVal('--brand')
+const rest       = process.argv.slice(3).filter((a, i, all) => !a.startsWith('--') && !['--model', '--brand'].includes(all[i - 1]))      // --include-today is read by lib/cutoff.js
 const DAYS_TOKEN = rest.find((a) => /^\d+\s*days?$/i.test(a))
 const MIN_DAYS   = DAYS_TOKEN ? parseInt(DAYS_TOKEN, 10) : null
 const DAY_TOKEN  = rest.find((a) => WEEKDAYS[a.toLowerCase()])
@@ -401,7 +407,7 @@ async function runMode(page, onlyModels = null) {
       const note = MODE === 'history' ? await processHistoryTarget(page, target, counters) : MODE === 'one_price' ? await processOnePriceTarget(page, target, counters) : await processBidTarget(page, target, counters)
       await finalizeRun(runId, 'complete', counters, note)
       await completeTarget(target.id, runId)
-      if (config.offerOnly || onlyModels) failedThisRun.add(target.id)      // offer mode ignores "done today", so remember what this run already did
+      if (config.offerOnly || onlyModels || process.env.FILTER_MODEL) failedThisRun.add(target.id)      // offer mode ignores "done today", so remember what this run already did
       processed++
       console.log(`[TARGET DONE] ${target.label} — scraped ${counters.records_scraped}, new ${counters.records_inserted}, refreshed ${counters.records_updated}, failed ${counters.records_failed}, images ${counters.images_uploaded}`)
     } catch (err) {

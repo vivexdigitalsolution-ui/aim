@@ -100,7 +100,7 @@ function priceLot({ lot, code, regYear, regMonth, ref, today = new Date(), force
     const info = (ref.currencies || []).find((c) => c.code === cur)
     if (!(rate > 0)) notes.push(`no exchange rate for ${cur}`)
     else {
-      const input = { docket, mfgYear: regYear, mfgMonth: month, rate, rates: ref.rates, standardFare: info?.standard_fare_myr ?? undefined, vehicleType: 'car', today }
+      const input = { docket, mfgYear: regYear, mfgMonth: month, rate, rates: ref.rates, standardFare: info?.standard_fare_myr ?? undefined, vehicleType: lot.vehicle_type === 'non_car' ? 'non_car' : 'car', today }
       const now = D.calcDuty(input)
       const from = D.matangFrom(regYear, month, today)
       const later = D.calcDutyAt(input, from)

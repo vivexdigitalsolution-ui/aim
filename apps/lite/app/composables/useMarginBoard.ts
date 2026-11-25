@@ -99,16 +99,23 @@ export function useMarginBoard() {
     })
 
     // the usual winning price: sold results of the same brand + model name, cars of nearly the same year, same grade (core historyPrice)
+    // (the model family is the model name USS lists it under, "GR COROLLA": the first word alone would take the GR86 and GR Yaris too. Before migration 55 the first word is used.)
     const need = out.filter((l) => l.market && l.dutyMyr != null)
+    const famOf = new Map<string, string>()
+    for (const part of chunks(need.map((l) => l.id), 100)) {
+      const f = await db.from('lots').select('id,model_family').in('id', part)
+      if (!f.error) for (const r of (f.data || []) as any[]) if (r.model_family) famOf.set(r.id, r.model_family)
+    }
+    const famKey = (l: BoardLot) => l.brand + '|' + (famOf.get(l.id) || l.model.split(/\s+/)[0])
     const hist = new Map<string, any[]>()
-    for (const key of new Set(need.map((l) => l.brand + '|' + l.model.split(/\s+/)[0]))) {
-      const [b, w] = key.split('|')
-      const { data } = await db.from('lot_history').select('grade,sold_price_jpy,mfg_year').eq('brand', b).ilike('model', w + '%').eq('result', 'sold').not('sold_price_jpy', 'is', null).order('auction_date', { ascending: false }).limit(500)
+    for (const key of new Set(need.map(famKey))) {
+      const i = key.indexOf('|'), b = key.slice(0, i), w = key.slice(i + 1)
+      const { data } = await db.from('lot_history').select('grade,sold_price_jpy,mfg_year,model_code').eq('brand', b).ilike('model', w + '%').eq('result', 'sold').not('sold_price_jpy', 'is', null).order('auction_date', { ascending: false }).limit(2000)
       hist.set(key, data || [])
     }
     for (const l of need) {
-      const sales = (hist.get(l.brand + '|' + l.model.split(/\s+/)[0]) || []).filter((s) => l.mfg_year && s.mfg_year && Math.abs(s.mfg_year - l.mfg_year) <= 1).map((s) => ({ grade: s.grade, price: Number(s.sold_price_jpy) }))
-      l.history = historyPrice(sales, l.grade)
+      const sales = (hist.get(famKey(l)) || []).filter((s) => l.mfg_year && s.mfg_year && Math.abs(s.mfg_year - l.mfg_year) <= 1).map((s) => ({ grade: s.grade, price: Number(s.sold_price_jpy), model_code: s.model_code }))
+      l.history = historyPrice(sales, l.grade, l.model_code)
     }
 
     lots.value = out

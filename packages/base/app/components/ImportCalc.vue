@@ -23,6 +23,13 @@
         </template>
       </div>
 
+      <div class="vt">
+        <span class="muted small">Vehicle type (sets the duty rate)</span>
+        <select v-if="isStaff" v-model="vtype" :disabled="vtBusy" @change="saveType"><option value="car">Saloon (sedan, hatchback, coupe)</option><option value="non_car">Non-saloon (MPV, SUV, pick-up, van)</option></select>
+        <b v-else class="small">{{ vtype === 'non_car' ? 'Non-saloon (MPV, SUV, pick-up, van)' : 'Saloon (sedan, hatchback, coupe)' }}</b>
+        <span v-if="vtNote" class="muted small">{{ vtNote }}</span>
+      </div>
+
       <label v-if="!knownMonth" class="f">Month first registered (the sheet does not say)
         <select v-model.number="monthPick"><option :value="0">Choose the month</option><option v-for="m in 12" :key="m" :value="m">{{ m }}</option></select>
       </label>
@@ -31,7 +38,7 @@
       <table v-if="pricing.importMyr != null" class="spec">
         <tr><td>Car price</td><td class="r">{{ rmf(pricing.bodyMyr) }}</td></tr>
         <tr><td>Agent fee &amp; shipping</td><td class="r">{{ rmf(pricing.agentMyr) }}</td></tr>
-        <tr><td>Customs duty</td><td class="r">{{ rmf(duty?.dutyMyr) }}</td></tr>
+        <tr><td>Customs duty<span v-if="duty?.multiplier" class="muted small"> ({{ Math.round(duty.multiplier * 10000) / 100 }}%)</span></td><td class="r">{{ rmf(duty?.dutyMyr) }}</td></tr>
         <tr><td>Port clearance</td><td class="r feecell"><span>RM</span><NumInput v-model="port" class="fee" aria-label="Port clearance in RM" /></td></tr>
         <tr><td>Inland transfer</td><td class="r feecell"><span>RM</span><NumInput v-model="inland" class="fee" aria-label="Inland transfer in RM" /></td></tr>
         <tr><td>AP fee</td><td class="r feecell"><span>RM</span><NumInput v-model="apFee" class="fee" aria-label="AP fee in RM" /></td></tr>
@@ -49,10 +56,22 @@ import { calcDuty, offerPricing, docketPool, docketBrand, docketLine, type Docke
 // The import price of one car: pick the customs docket, the duty is worked out in the browser. Used for One price cars and for cars with no docket yet.
 const props = defineProps<{ car: any; priceJpy: number; priceNote?: string; docketId?: string | null; lockPrice?: boolean }>()
 const db = useDb()
+const { isStaff } = useAuth()
 const ref_ = ref<{ dockets: Docket[]; rates: DutyRate[]; currencies: any[] } | null>(null)
 const err = ref(''), rate = ref(0)
 const price = ref<number | null>(props.priceJpy || null)
 const docket = ref<Docket | null>(null), picking = ref(false), search = ref(''), monthPick = ref(0)
+// the model's vehicle type (lots.vehicle_type, set from the model; staff can correct it here and it is kept for every car of that model)
+const vtype = ref<'car' | 'non_car'>(props.car?.vehicle_type === 'non_car' ? 'non_car' : 'car'), vtBusy = ref(false), vtNote = ref('')
+watch(() => props.car?.vehicle_type, (v) => { vtype.value = v === 'non_car' ? 'non_car' : 'car' })
+async function saveType() {
+  vtBusy.value = true; vtNote.value = ''
+  try {
+    if (!props.car?.maker_code || !props.car?.car_code) { vtNote.value = 'Used for this price only (the car has no model code).'; return }
+    const { error } = await db.from('scraper_models').update({ vehicle_type: vtype.value, vehicle_type_by: 'staff' }).eq('brand_code', props.car.maker_code).eq('code', props.car.car_code)
+    vtNote.value = error ? 'Could not save: ' + error.message : 'Saved for every car of this model. Run node recalc-duty.js to update the saved duty of the open cars.'
+  } finally { vtBusy.value = false }
+}
 const port = ref<number | null>(0), inland = ref<number | null>(0), apFee = ref<number | null>(0)
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v))
 const rmf = (v: number | null | undefined) => (v == null ? '–' : (v < 0 ? '-RM ' : 'RM ') + Math.abs(Math.round(v)).toLocaleString('en-US'))
@@ -80,7 +99,7 @@ const duty = computed(() => {
   const r = ref_.value, d = docket.value
   if (!r || !d || !regYear.value || !regMonth.value) return null
   const standardFare = r.currencies.find((c: any) => c.code === (d.currency_code || 'JPY'))?.standard_fare_myr ?? undefined
-  return calcDuty({ docket: d, mfgYear: regYear.value, mfgMonth: regMonth.value, rate: rate.value, rates: r.rates, standardFare, vehicleType: 'car', cc: d.cc ? undefined : props.car?.engine_cc || undefined })
+  return calcDuty({ docket: d, mfgYear: regYear.value, mfgMonth: regMonth.value, rate: rate.value, rates: r.rates, standardFare, vehicleType: vtype.value, cc: d.cc ? undefined : props.car?.engine_cc || undefined })
 })
 const pricing = computed(() => offerPricing({ historyJpy: price.value || null, rate: rate.value, dutyMyr: duty.value?.dutyMyr ?? null, portMyr: Number(port.value || 0), inlandMyr: Number(inland.value || 0), apFeeMyr: Number(apFee.value || 0) }))
 
@@ -99,6 +118,7 @@ onMounted(async () => {
 
 <style scoped>
 .dk { margin-top: 12px; }
+.vt { display: grid; gap: 4px; margin-top: 12px; } .vt select { width: 100%; }
 .picked { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 6px; }
 .list { display: grid; gap: 6px; max-height: 240px; overflow: auto; margin: 8px 0; }
 .opt { display: flex; justify-content: space-between; gap: 10px; background: var(--s2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; cursor: pointer; text-align: left; color: inherit; } .opt:hover { border-color: var(--ac); }
