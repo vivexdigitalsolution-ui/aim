@@ -48,7 +48,7 @@
     <div v-if="profile?.role === 'ap_holder'" class="card" style="margin-bottom: 16px">
       <h2>My agent fee &amp; shipping</h2>
       <p class="muted small">The calculator adds an agent fee &amp; shipping (in yen) to the car price. By default it uses our standard table. If your own supplier charges differently, enter your rates here and the calculator uses them instead. Each row: cars priced below the yen amount pay that fee; the last row (empty amount) is for every car above.</p>
-      <div v-if="!tiers.length" class="muted small" style="margin: 8px 0">Now using: our standard table. <a href="#" @click.prevent="startTiers">Start my own table from the standard one</a></div>
+      <div v-if="!tiers.length" style="margin: 10px 0"><div class="muted small" style="margin-bottom: 8px">Now using: our standard table.</div><button class="btn" @click="startTiers">Set my own agent fee &amp; shipping</button></div>
       <div v-else>
         <div v-for="(t, i) in tiers" :key="i" class="trow">
           <span class="muted small">Car price below</span>
