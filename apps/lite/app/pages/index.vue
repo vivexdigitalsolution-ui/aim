@@ -130,6 +130,7 @@ const broken = reactive(new Set<string>())      // photos that no longer load: s
 
 // banner
 const slides = [
+  { kicker: 'WELCOME TO PAW-J', title: 'Your direct gateway to Japanese car auctions', text: 'JDM and European cars, real auction prices and an import calculator, all in Ringgit.', cta: 'About PAW-J', to: '/about', big: 'PAW', bg: 'linear-gradient(120deg, #0e2c54, #2268b8)' },
   { kicker: 'JAPAN AUCTION', title: 'Cars priced in RM, with the import cost shown', text: 'Every car shows its customs docket, duty and import price, so you know what it lands at.', cta: 'Browse cars', to: '/cars', big: 'RM', bg: 'linear-gradient(120deg, #1a56a0, #2a7bd6)' },
   { kicker: 'NOT SURE WHAT TO BID?', title: 'A suggested bid on every car', text: 'Worked out from what the same model and grade sold for recently.', cta: 'Open the calculator', to: '/calculator', big: '¥', bg: 'linear-gradient(120deg, #17406f, #2268b8)' },
   { kicker: 'NEVER MISS A CLOSING', title: 'Save the cars you like', text: 'Your favourites are kept for you, and we alert you before they close.', cta: 'My favourites', to: '/watchlist', big: 'heart', bg: 'linear-gradient(120deg, #2a5ea8, #3d8fe6)' },

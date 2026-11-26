@@ -2,6 +2,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const { init, user, profile, isStaff } = useAuth()
   if (to.path === '/reset') return       // the e-mail link to choose a new password
   await init()
+  if (to.path === '/about') return       // the PAW-J introduction: open to everyone, signed in or not
   if (!user.value) return to.path === '/login' ? undefined : navigateTo('/login')
   if (to.path === '/login') return navigateTo('/')
   // signed in, but waiting for approval or suspended

@@ -1,6 +1,6 @@
 // The reverse-bid question: "what is the most I can bid and still make my target margin?", and what a bid of X earns.
 // Uses the same offerPricing() as the offer report, so every figure here adds up to the same import price.
-import { offerPricing, DEFAULT_PORT_MYR, DEFAULT_INLAND_MYR, DEFAULT_AP_FEE_MYR } from './offerPricing.ts'
+import { offerPricing, type AgentTier, DEFAULT_PORT_MYR, DEFAULT_INLAND_MYR, DEFAULT_AP_FEE_MYR } from './offerPricing.ts'
 import { margin, maxLandedFor, conservativeSell, confidence, type MarketStats, type Confidence, type Margin } from './marketStats.ts'
 import { BID_STEP } from './historyPrice.ts'
 import type { IdMarketRow } from './marketSnapshot.ts'

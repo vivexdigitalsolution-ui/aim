@@ -3,7 +3,7 @@
     <div class="loginhero">
       <div class="logo"><b>PAW-J</b> Partner</div>
       <div><h2>Japan auction cars, priced in RM</h2><p>See the import price, a suggested bid and the closing time of every car. Place your bid order in a minute.</p></div>
-      <div />
+      <div><NuxtLink to="/about" style="color: #fff; font-weight: 700">About PAW-J ›</NuxtLink></div>
     </div>
     <div class="loginform">
   <div class="authbox">

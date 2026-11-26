@@ -61,6 +61,7 @@ const items = computed<Item[]>(() => isStaff.value ? [
   { to: '/cars', label: 'Marketplace', icon: 'cars', match: (p) => p.startsWith('/cars') || p.startsWith('/car/') },
   { to: '/offer', label: 'Offer report', icon: 'offer' },
   { to: '/cif', label: 'CIF rates', icon: 'table' },
+  { to: '/about', label: 'About PAW-J', icon: 'info' },
   { to: '/targets', label: 'Scrape targets', icon: 'target' },
   { to: '/aps?tab=fees', label: 'Settings', icon: 'settings', match: (p: string) => p === '/aps' && !!route.query.tab },
 ] : [
@@ -70,6 +71,7 @@ const items = computed<Item[]>(() => isStaff.value ? [
   { to: '/calculator', label: 'Calculator', icon: 'calc', primary: true },
   { to: '/watchlist', label: 'Favourites', icon: 'heart' },
   { to: '/cif', label: 'CIF rates', icon: 'table' },
+  { to: '/about', label: 'About PAW-J', icon: 'info' },
 ])
 const hasMore = computed(() => items.value.some((i) => !i.primary))     // phone: 4 icons + More (staff and dealers alike); the rest sits in the drawer
 const moreOpen = ref(false)

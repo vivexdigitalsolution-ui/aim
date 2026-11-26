@@ -48,7 +48,7 @@
             <label class="f">AP fee (RM)<NumInput v-model="apFee" /></label>
             <label class="f">Port clearance (RM)<NumInput v-model="port" /></label>
             <label class="f">Inland transfer (RM)<NumInput v-model="inland" /></label>
-            <label class="f">Recon / prep (RM)<NumInput v-model="recon" /></label>
+            <label class="f">Japan inland transfer (¥)<NumInput v-model="japanInland" placeholder="0" /></label>
           </div>
         </details>
 
@@ -64,13 +64,13 @@
           <div v-if="result.maxBid != null" class="big">Highest price to pay: <b>¥{{ result.maxBid.toLocaleString('en-US') }}</b><small class="muted"> (RM {{ myr(result.maxBid * rate) }}, in ¥5,000 steps)</small></div>
           <table class="spec">
             <tr><td>Car price</td><td class="r">¥{{ result.bodyJpy.toLocaleString('en-US') }} · RM {{ myr(result.p.bodyMyr) }}</td></tr>
-            <tr><td>Agent fee &amp; shipping</td><td class="r">¥{{ (result.p.agentJpy || 0).toLocaleString('en-US') }} · RM {{ myr(result.p.agentMyr) }}</td></tr>
+            <tr><td>Agent fee &amp; shipping<span v-if="agentTiers" class="muted small"> ({{ ownTable ? 'my table' : 'team table' }})</span></td><td class="r">¥{{ (result.p.agentJpy || 0).toLocaleString('en-US') }} · RM {{ myr(result.p.agentMyr) }}</td></tr>
             <tr><td>Customs value (docket ¥{{ (result.duty.docketAmountForeign || 0).toLocaleString('en-US') }}, {{ result.duty.band }})</td><td class="r">RM {{ myr(result.duty.customsValueMyr) }}</td></tr>
             <tr><td>Customs duty (× {{ result.duty.multiplier }})</td><td class="r">RM {{ myr(result.duty.dutyMyr) }}</td></tr>
             <tr><td>Port clearance + inland</td><td class="r">RM {{ myr(port + inland) }}</td></tr>
             <tr><td>AP fee</td><td class="r">RM {{ myr(apFee) }}</td></tr>
             <tr class="sum"><td><b>Landed price</b></td><td class="r"><b>RM {{ myr(result.p.importMyr) }}</b></td></tr>
-            <tr v-if="recon"><td>Recon / prep</td><td class="r">RM {{ myr(recon) }}</td></tr>
+            <tr v-if="japanInland"><td>Japan inland transfer (¥{{ japanInland.toLocaleString('en-US') }})</td><td class="r">RM {{ myr(reconMyr) }}</td></tr>
             <tr v-if="result.m"><td><b>Profit</b></td><td class="r" :class="result.m.profitMyr >= 0 ? 'up' : 'down'"><b>RM {{ myr(result.m.profitMyr) }} · {{ result.m.marginPct }}%</b></td></tr>
           </table>
           <p class="muted small" style="margin-top: 8px">An estimate. Duty follows the Customs docket for the car's age; the real figure is set by Customs.</p>
@@ -81,7 +81,7 @@
 </template>
 
 <script setup lang="ts">
-import { calcDuty, offerPricing, marginAtBid, maxBidJpy, docketBrand, type Docket, type DutyRate } from '@aim/core'
+import { calcDuty, offerPricing, marginAtBid, maxBidJpy, docketBrand, type Docket, type DutyRate, type AgentTier } from '@aim/core'
 
 const db = useDb()
 const thisYear = new Date().getFullYear()
@@ -92,7 +92,10 @@ const search = ref(''), docket = ref<Docket | null>(null)
 const year = ref<number>(thisYear - 3), month = ref(6), vtype = ref<'car' | 'non_car'>('car')
 const mode = ref<'landed' | 'maxbid'>('landed')
 const bodyJpy = ref(0), sellMyr = ref(0), targetPct = ref(12)
-const rate = ref(0), apFee = ref(10500), port = ref(2500), inland = ref(250), recon = ref(3000)
+const rate = ref(0), apFee = ref(10500), port = ref(2500), inland = ref(250), japanInland = ref(0)
+const reconMyr = computed(() => Math.round((japanInland.value || 0) * rate.value))      // Japan inland transfer in RM (the car is far from the port); 0 unless you add it
+const ownTable = ref(false)
+const agentTiers = ref<AgentTier[] | null>(null)      // my own agent fee table (My account); empty = the AIM table
 const result = ref<any>(null)
 const myr = (n: number | null | undefined) => (n == null ? '–' : Math.round(n).toLocaleString('en-US'))
 const limitText = computed(() => status.value?.period === 'once' ? 'The Free plan includes one calculation.' : status.value?.period ? `Your plan includes ${status.value.uses} calculation(s) per ${status.value.period}.` : '')
@@ -113,6 +116,11 @@ onMounted(async () => {
     if (st.error) throw st.error
     status.value = st.data
     if (!st.data?.allowed) return
+    const own = (await db.rpc('my_agent_tiers')).data as AgentTier[] | null
+    if (own?.length) { agentTiers.value = own; ownTable.value = true } else {
+      const team = (await db.from('cif_rates').select('to_jpy,mode,value').eq('active', true).order('from_jpy')).data || []
+      agentTiers.value = team.length ? team.map((r: any) => ({ upTo: r.to_jpy == null ? null : Number(r.to_jpy), fee: Number(r.value), pct: r.mode === 'percent' })) : null
+    }
     const { data, error } = await db.rpc('calculator_reference')
     if (error) throw error
     ref_.value = { dockets: (data.dockets || []).map((d: any) => ({ ...d, amt_12m_24m: n(d.amt_12m_24m), amt_24m_36m: n(d.amt_24m_36m), amt_36m_48m: n(d.amt_36m_48m), amt_48m_60m: n(d.amt_48m_60m), amt_60m_plus: n(d.amt_60m_plus) })), rates: (data.rates || []).map((r: any) => ({ ...r, multiplier: Number(r.multiplier) })), currencies: data.currencies || [] }
@@ -131,10 +139,10 @@ async function calculate() {
     status.value = used.data
     const standardFare = ref_.value!.currencies.find((c: any) => c.code === (d.currency_code || 'JPY'))?.standard_fare_myr ?? undefined
     const duty = calcDuty({ docket: d, mfgYear: year.value, mfgMonth: month.value, rate: rate.value, rates: ref_.value!.rates, standardFare, vehicleType: vtype.value })
-    const costs = { rate: rate.value, dutyMyr: duty.dutyMyr || 0, reconMyr: recon.value || 0, portMyr: port.value, inlandMyr: inland.value, apFeeMyr: apFee.value }
+    const costs = { rate: rate.value, dutyMyr: duty.dutyMyr || 0, reconMyr: reconMyr.value, portMyr: port.value, inlandMyr: inland.value, apFeeMyr: apFee.value, agentTiers: agentTiers.value }
     let body = bodyJpy.value, maxBid: number | null = null
     if (mode.value === 'maxbid') { maxBid = maxBidJpy({ sellMyr: sellMyr.value, targetPct: targetPct.value || 0, ...costs }); body = maxBid }
-    const p = offerPricing({ historyJpy: body || null, rate: rate.value, dutyMyr: duty.dutyMyr, portMyr: port.value, inlandMyr: inland.value, apFeeMyr: apFee.value })
+    const p = offerPricing({ historyJpy: body || null, rate: rate.value, dutyMyr: duty.dutyMyr, portMyr: port.value, inlandMyr: inland.value, apFeeMyr: apFee.value, agentTiers: agentTiers.value })
     const m = sellMyr.value > 0 && body ? marginAtBid({ bodyJpy: body, sellMyr: sellMyr.value, ...costs }) : null
     const warnings = [...duty.warnings]
     if (mode.value === 'maxbid' && !maxBid) warnings.push('Even a ¥0 price cannot reach that margin: duty and fees alone are too high for this selling price.')
