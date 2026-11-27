@@ -25,18 +25,31 @@
         <div class="card">
           <div class="muted small">{{ car.venue }} · One price</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
+          <template v-if="isLite">
           <div class="muted small" style="margin-top: 8px">One price (fixed, no bidding)</div>
           <div class="price">{{ car.price_jpy > 0 ? shown(car.price_jpy) : 'Price not open yet' }}</div>
           <div v-if="car.price_jpy > 0" class="muted small">{{ cur === 'JPY' ? rm(car.price_jpy) : '¥' + car.price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
           <div v-else-if="car.price_reveal" class="muted small">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span></div>
-          <div v-if="!(isLite && isStaff)" class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? (isLite ? '♥ In your favourites' : '★ On your watchlist') : (isLite ? '♡ Add to favourites' : '☆ Watch this car') }}</button><button v-if="isStaff && !isLite" class="btn ghost sm" :class="{ starred: recs?.has(car.id) }" @click="recommend">{{ recs?.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button></div>
+          </template>
+          <template v-else>
+          <div class="toprow">
+            <div>
+              <div class="muted small">One price (fixed, no bidding)</div>
+              <div class="price" style="margin-top: 0">{{ car.price_jpy > 0 ? yenf(car.price_jpy) : 'Price not open yet' }}<small v-if="car.price_jpy > 0 && rateNow > 0" class="muted rmsmall"> · RM {{ Math.round(car.price_jpy * rateNow).toLocaleString('en-US') }}</small></div>
+            </div>
+            <div v-if="car.price_jpy > 0 && calc?.importMyr != null" class="estb" title="Estimated import price at the One price: the car, agent fee and shipping, duty, port, inland and AP fee"><span>Est. import price</span><b>RM {{ Math.round(calc.importMyr).toLocaleString('en-US') }}</b></div>
+          </div>
+          <div v-if="!(car.price_jpy > 0) && car.price_reveal" class="muted small" style="margin-top: 4px">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
+          <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span><span v-if="rateNow > 0" class="chip ac" title="Exchange rate used on this page (change it in the breakdown)">¥1 = RM {{ rateNow }}</span></div>
+          </template>
+          <div v-if="!(isLite && isStaff)" :class="isLite ? 'row wrap' : 'actrow'" :style="isLite ? 'gap: 8px; margin-top: 10px; justify-content: flex-start' : ''"><button class="btn ghost sm" :class="{ starred: watching, wstar: !isLite }" @click="star"><StarIcon v-if="!isLite" :filled="watching" />{{ watching ? (isLite ? '♥ In your favourites' : 'On your watchlist') : (isLite ? '♡ Add to favourites' : 'Watch this car') }}</button><button v-if="isStaff && !isLite" class="btn ghost sm" :class="{ starred: recs?.has(car.id) }" @click="recommend">{{ recs?.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button></div>
           <p class="muted small" style="margin-top: 10px">One price cars are sold at the listed price to the first buyer. Ask our team to buy one for you.</p>
         </div>
 
         <div class="card">
           <h2>Import price breakdown</h2>
-          <ImportCalc :car="car" :price-jpy="car.price_jpy || 0" :docket-id="car.docket_id" :lock-price="car.price_jpy > 0" :price-note="car.price_jpy > 0 ? '(the One price; it is fixed)' : '(the price is not open yet: type the price you expect)'" />
+          <ImportCalc :car="car" @result="calc = $event" :price-jpy="car.price_jpy || 0" :docket-id="car.docket_id" :lock-price="car.price_jpy > 0" :price-note="car.price_jpy > 0 ? '(the One price; it is fixed)' : '(the price is not open yet: type the price you expect)'" />
         </div>
 
         <div class="card">
@@ -67,6 +80,9 @@ const { rate, loadRate, rm } = useRate()
 const { hasTier, isStaff } = useAuth()
 const isLite = useRuntimeConfig().public.appKind === 'lite'
 const watch = useWatch()
+const calc = ref<{ importMyr: number | null; rate: number } | null>(null)      // from the breakdown: the estimate and the rate in use (a typed rate moves every RM figure)
+const rateNow = computed(() => calc.value?.rate || rate.value || 0)
+const yenf = (jpy: number) => '¥' + Math.round(jpy).toLocaleString('en-US')
 const watching = computed(() => !!car.value && watch.has(car.value.id))
 const recs = isStaff.value && !isLite ? useRecommend() : null      // staff, aim only
 async function recommend() { try { await recs?.toggle(car.value.id, true) } catch (e: any) { err.value = e.message } }
@@ -105,6 +121,12 @@ onMounted(async () => {
 .sheet { width: 100%; border-radius: 8px; display: block; margin-top: 8px; }
 .price { font-size: 26px; font-weight: 800; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 8px; } .spec td { padding: 7px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); } .r { text-align: right; }
+.toprow { display: flex; justify-content: space-between; align-items: stretch; gap: 12px; } .toprow > div:first-child { min-width: 0; } .rmsmall { font-size: 14px; font-weight: 500; }
+.estb { flex: none; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 1px; background: var(--acbg); color: var(--ac2); border-radius: 12px; padding: 6px 12px; line-height: 1.25; } .estb span { font-size: 11.5px; font-weight: 600; } .estb b { font-size: 17px; }
+.actrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; } .actrow .btn { padding-left: 10px; padding-right: 10px; white-space: nowrap; } .wstar { display: inline-flex; align-items: center; gap: 6px; }
+@media (min-width: 520px) { .actrow { flex-wrap: nowrap; } }
+@media (max-width: 560px) { .toprow { flex-wrap: wrap; } .price { font-size: 24px; } .estb { width: 100%; flex-direction: row; justify-content: space-between; align-items: center; } }
+.op > div { min-width: 0; } .wstar.starred { color: var(--ac); border-color: var(--ac); }
 .starred { color: #e0452b; border-color: #e0452b; }
 .review { border-color: var(--warn); background: var(--warnbg); color: var(--warn); } .review .small { margin-top: 4px; }
 @media (max-width: 860px) { .op { grid-template-columns: 1fr; } }

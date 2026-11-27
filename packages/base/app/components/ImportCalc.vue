@@ -3,7 +3,8 @@
     <div v-if="err" class="muted small">{{ err }}</div>
     <div v-else-if="!ref_" class="muted small">Loading the customs list ...</div>
     <template v-else>
-      <label class="f" style="margin-top: 8px">Car price (¥)<NumInput v-model="price" :disabled="lockPrice" /></label>
+      <label v-if="isLite" class="f" style="margin-top: 8px">Car price (¥)<NumInput v-model="price" :disabled="lockPrice" /></label>
+      <label v-else class="f" style="margin-top: 8px">Car price<span class="inbox wide"><span class="sy">¥</span><NumInput v-model="price" :disabled="lockPrice" class="fee" aria-label="Car price in yen" /></span></label>
       <div v-if="priceNote" class="muted small" style="margin-top: 4px">{{ priceNote }}</div>
 
       <div class="dk">
@@ -35,13 +36,27 @@
       </label>
       <div v-for="w in duty?.warnings || []" :key="w" class="warnbox" style="margin-top: 8px">{{ w }}</div>
 
-      <div v-if="isLite" class="ratebar">
+      <div v-if="!isLite" class="ratebar">
+        <span class="inbox wide grow"><span class="sy">Exchange rate ¥1 = RM</span><NumInput v-model="rateIn" decimal class="fee rateinp" aria-label="Exchange rate, RM for ¥1" /></span>
+        <button v-if="!customRate" class="btn ghost sm tog" title="Round the rate up to 3 decimals, e.g. 0.026465 becomes 0.027" @click="roundRate">Round up</button>
+        <button v-else class="btn ghost sm tog" @click="customRate = null">Back to {{ rate }}</button>
+      </div>
+      <div v-else class="ratebar">
         <label class="muted small" for="rateIn2">Exchange rate ¥1 = RM</label>
         <NumInput id="rateIn2" v-model="rateIn" decimal class="fee rateinp" aria-label="Exchange rate, RM for ¥1" />
         <button class="btn ghost sm" title="Round the rate up to 3 decimals, e.g. 0.026465 becomes 0.027" @click="roundRate">Round up</button>
         <button v-if="customRate" class="btn ghost sm" @click="customRate = null">Back to {{ rate }}</button>
       </div>
-      <table v-if="pricing.importMyr != null" class="spec">
+      <table v-if="!isLite && pricing.importMyr != null" class="spec bk">
+        <tr><td>Car price<span v-if="pricing.bodyJpy != null" class="yn">¥{{ Math.round(pricing.bodyJpy).toLocaleString('en-US') }}</span></td><td class="r"><span class="cell"><span class="sy">RM</span><span>{{ amt(pricing.bodyMyr) }}</span></span></td></tr>
+        <tr><td>{{ L.agent }}<span v-if="pricing.agentJpy != null" class="yn">¥{{ Math.round(pricing.agentJpy).toLocaleString('en-US') }}</span></td><td class="r"><span class="cell"><span class="sy">RM</span><span>{{ amt(pricing.agentMyr) }}</span></span></td></tr>
+        <tr><td>Customs duty<span v-if="duty?.multiplier" class="muted small"> ({{ Math.round(duty.multiplier * 10000) / 100 }}%)</span></td><td class="r"><span class="cell"><span class="sy">RM</span><span>{{ amt(duty?.dutyMyr) }}</span></span></td></tr>
+        <tr><td>Port clearance</td><td class="r"><span class="inbox"><span class="sy">RM</span><NumInput v-model="port" class="fee" aria-label="Port clearance in RM" /></span></td></tr>
+        <tr><td>{{ L.inland }}</td><td class="r"><span class="inbox"><span class="sy">RM</span><NumInput v-model="inland" class="fee" :aria-label="L.inland + ' in RM'" /></span></td></tr>
+        <tr><td>AP fee</td><td class="r"><span class="inbox"><span class="sy">RM</span><NumInput v-model="apFee" class="fee" aria-label="AP fee in RM" /></span></td></tr>
+        <tr class="sum"><td><b>Import price</b></td><td class="r"><span class="cell b"><span class="sy">RM</span><span>{{ amt(pricing.importMyr) }}</span></span></td></tr>
+      </table>
+      <table v-else-if="pricing.importMyr != null" class="spec">
         <tr><td>Car price<span v-if="isLite && pricing.bodyJpy != null" class="yn">¥{{ Math.round(pricing.bodyJpy).toLocaleString('en-US') }}</span></td><td class="r" :class="{ feecell: isLite }"><template v-if="isLite"><span>RM</span><span class="amt">{{ amt(pricing.bodyMyr) }}</span></template><template v-else>{{ rmf(pricing.bodyMyr) }}</template></td></tr>
         <tr><td>{{ L.agent }}<span v-if="isLite && pricing.agentJpy != null" class="yn">¥{{ Math.round(pricing.agentJpy).toLocaleString('en-US') }}</span></td><td class="r" :class="{ feecell: isLite }"><template v-if="isLite"><span>RM</span><span class="amt">{{ amt(pricing.agentMyr) }}</span></template><template v-else>{{ rmf(pricing.agentMyr) }}</template></td></tr>
         <tr><td>Customs duty<span v-if="duty?.multiplier" class="muted small"> ({{ Math.round(duty.multiplier * 10000) / 100 }}%)</span></td><td class="r" :class="{ feecell: isLite }"><template v-if="isLite"><span>RM</span><span class="amt">{{ amt(duty?.dutyMyr) }}</span></template><template v-else>{{ rmf(duty?.dutyMyr) }}</template></td></tr>
@@ -60,6 +75,7 @@
 import { calcDuty, offerPricing, docketPool, docketBrand, docketLine, type Docket, type DutyRate } from '@aim/core'
 
 // The import price of one car: pick the customs docket, the duty is worked out in the browser. Used for One price cars and for cars with no docket yet.
+const emit = defineEmits<{ (e: 'result', v: { importMyr: number | null; rate: number }): void }>()      // the page shows the estimate and the rate used up by the price
 const props = defineProps<{ car: any; priceJpy: number; priceNote?: string; docketId?: string | null; lockPrice?: boolean }>()
 const db = useDb()
 const { isStaff } = useAuth()
@@ -81,8 +97,8 @@ async function saveType() {
 const isLite = useRuntimeConfig().public.appKind === 'lite'
 const L = isLite ? { inland: 'Carrier fee', agent: 'CIF' } : { inland: 'Inland transfer', agent: 'Agent fee & shipping' }
 const amt = (n: number | null | undefined) => rmf(n).replace(/^(RM|¥)\s*/, '')      // the number alone: the RM sits in its own column so every line lines up
-const customRate = ref<number | null>(null)      // lite: a rate typed here (e.g. the rate you really pay); empty = the live rate
-const rateUsed = computed(() => (isLite && customRate.value && customRate.value > 0 ? customRate.value : rate.value))
+const customRate = ref<number | null>(null)      // a rate typed here (e.g. the rate you really pay); empty = the live rate
+const rateUsed = computed(() => (customRate.value && customRate.value > 0 ? customRate.value : rate.value))
 const rateIn = computed<number | null>({ get: () => rateUsed.value || null, set: (v) => { customRate.value = v && v > 0 && v !== rate.value ? v : null } })
 const roundRate = () => { rateIn.value = Math.ceil(rateUsed.value * 1000 - 1e-9) / 1000 }      // 0.026465 -> 0.027
 const port = ref<number | null>(0), inland = ref<number | null>(0), apFee = ref<number | null>(0)
@@ -116,6 +132,7 @@ const duty = computed(() => {
 })
 const pricing = computed(() => offerPricing({ historyJpy: price.value || null, rate: rateUsed.value, dutyMyr: duty.value?.dutyMyr ?? null, portMyr: Number(port.value || 0), inlandMyr: Number(inland.value || 0), apFeeMyr: Number(apFee.value || 0) }))
 
+watch([() => pricing.value.importMyr, rateUsed], ([m, r]) => emit('result', { importMyr: m as number | null, rate: r as number }), { immediate: true })
 onMounted(async () => {
   try {
     const { data, error } = await db.rpc('car_duty_reference')
@@ -140,5 +157,13 @@ onMounted(async () => {
 .r { text-align: right; white-space: nowrap; padding-left: 10px; } .sum td { border-top: 2px solid var(--line); color: inherit !important; }
 .feecell { display: flex; align-items: center; justify-content: flex-end; gap: 6px; } .feecell span { color: var(--mu); } .ratebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 10px 0 0; } .rateinp { width: 120px; }
 .yn { margin-left: 8px; font-size: 12.5px; color: var(--mu); } .feecell .amt { color: var(--tx); } .amt { display: inline-block; width: 110px; text-align: right; padding-right: 9px; box-sizing: border-box; } .fee { width: 110px; text-align: right; height: 32px; }
+.cell { display: inline-flex; justify-content: space-between; align-items: center; width: 130px; padding: 0 9px; box-sizing: border-box; white-space: nowrap; } .cell .sy { color: var(--mu); } .cell.b, .cell.b .sy { font-weight: 800; color: inherit; }
+.inbox { position: relative; display: inline-block; width: 130px; } .inbox .sy { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--mu); pointer-events: none; z-index: 1; }
+.inbox .fee { width: 100%; box-sizing: border-box; padding: 0 9px 0 34px; height: 34px; }
+.inbox.wide { display: block; width: 100%; margin-top: 4px; } .inbox.wide.grow { flex: 1; min-width: 0; margin-top: 0; }
+.inbox.wide .fee { height: 38px; text-align: left; padding-left: 30px; } .inbox.wide .rateinp { padding-left: 160px; } .inbox.wide .sy { font-size: 13px; }
+.ratebar .tog { flex: none; white-space: nowrap; width: 150px; justify-content: center; text-align: center; }
+.spec.bk td:first-child { width: auto; white-space: nowrap; } .spec.bk td.r { width: 1%; white-space: nowrap; }
+@media (max-width: 560px) { .spec.bk td:first-child { white-space: normal; } .ratebar { flex-wrap: wrap; } .inbox.wide.grow { flex: 1 1 100%; } .ratebar .tog { width: 100%; } }
 .warnbox { background: rgba(255, 170, 0, .12); border: 1px solid rgba(255, 170, 0, .4); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
 </style>
