@@ -217,7 +217,7 @@ async function copyImage() {
 .pd-cost { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; background: var(--s2, #f3f5f8); border: 1px solid var(--line, #ddd); border-radius: 8px; padding: 8px 12px; } .pd-cost b { font-size: 17px; }
 .pd-margin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .pd-pct { padding: 6px 14px; border: 1px solid var(--line, #ccc); border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; } .pd-pct.on { background: var(--ac, #2268b8); border-color: var(--ac, #2268b8); color: #fff; }
-.pd-pctbox { position: relative; display: inline-block; width: 84px; } .pd-pctin { padding-right: 24px; text-align: right; } .pd-sy { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--mu, #666); font-size: 13px; pointer-events: none; }
+.pd-pctbox { position: relative; display: inline-block; width: 84px; } .pd-pctbox .pd-pctin { padding: 8px 26px 8px 10px; text-align: right; } .pd-sy { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--mu, #666); font-size: 13px; pointer-events: none; }
 .pd-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pd-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
 .pd-field small { font-weight: 400; color: var(--mu, #666); font-size: 11.5px; }
