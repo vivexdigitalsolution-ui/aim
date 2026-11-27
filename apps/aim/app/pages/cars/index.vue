@@ -2,7 +2,7 @@
 <template>
   <div>
     <h1>Cars at auction</h1>
-    <p class="sub">Every open car that passes the age rule, with the starting price in RM at today's rate. {{ hasTier('member') ? 'Open a car for its margin.' : 'Upgrade to see the margin on each car.' }}</p>
+    <p class="sub hidem">Every open car that passes the age rule, with the starting price in RM at today's rate. {{ hasTier('member') ? 'Open a car for its margin.' : 'Upgrade to see the margin on each car.' }}</p>
 
     <div v-if="!isCustomer" class="prefs">
       <span class="muted small">My preferences</span>
@@ -22,12 +22,12 @@
         <option value="closing">Closing soonest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option>
         <option value="year_desc">Newest year</option><option value="km_asc">Lowest mileage</option>
       </select>
-      <button class="btn" @click="reload">Search</button>
+      <div class="cur" role="group" aria-label="Viewed cars"><button :class="{ on: !hide }" @click="setHide(0)">All</button><button :class="{ on: !!hide }" @click="setHide(1)">Hide viewed</button></div>
+      <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
       <button v-if="kind === 'bidding'" class="btn ghost featbtn" :class="{ on: nFeat || ftext }" :title="hasTier('member') ? 'Find cars by what is on them: sunroof, leather, TRD ...' : 'Find by feature is part of the Member plan'" @click="hasTier('member') ? openFeat() : navigateTo('/upgrade')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>Features<span v-if="nFeat || ftext" class="fcount">{{ nFeat + (ftext ? 1 : 0) }}</span><span v-if="nFeat || ftext" class="fx" role="button" tabindex="0" title="Clear the features" aria-label="Clear the features" @click.stop.prevent="clearFeat" @keyup.enter.stop="clearFeat">✕</span><span v-if="!hasTier('member')" aria-label="Member plan">🔒</span>
       </button>
-      <div class="cur" role="group" aria-label="Viewed cars"><button :class="{ on: !hide }" @click="setHide(0)">All</button><button :class="{ on: !!hide }" @click="setHide(1)">Hide viewed</button></div>
-      <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
+      <button class="btn" @click="reload">Search</button>
     </div>
     <div v-if="rate" class="muted small" style="margin: 8px 2px 0">Rate used: ¥1 = RM {{ rate }}</div>
 
@@ -39,8 +39,8 @@
         <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span>
           <span class="gl loc">{{ c.venue }}</span>
           <span class="gl tm" :class="glassCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span>
-          <button v-if="isStaff && !c.op" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
-          <button class="star" :class="{ on: watch.has(c.id), low: isStaff && !c.op }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id, !!c.op)"><StarIcon :filled="watch.has(c.id)" /></button>
+          <button v-if="isStaff" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id, !!c.op)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
+          <button class="star" :class="{ on: watch.has(c.id), low: isStaff }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id, !!c.op)"><StarIcon :filled="watch.has(c.id)" /></button>
           <span v-if="impOf(c)?.kind === 'amt'" class="gl estchip">Est. RM {{ Math.round(impOf(c)!.myr!).toLocaleString('en-US') }}</span>
           <div v-if="impOf(c)?.kind === 'amt'" class="estov" aria-hidden="true">
             <span class="el">Est. import price</span>
@@ -98,7 +98,7 @@ const route = useRoute()
 const { rate, loadRate } = useRate()
 const watch = useWatch()
 const recs = useRecommend()
-async function recommend(id: string) { try { await recs.toggle(id) } catch (e: any) { err.value = e.message } }
+async function recommend(id: string, op = false) { try { await recs.toggle(id, op) } catch (e: any) { err.value = e.message } }
 // saved preferences: one tap applies a set (makes, models, years, price, score)
 const prefs = ref<any[]>([]), activePref = ref<any>(null)
 const SCORE_ORDER = ['S', '6', '5', '4.5', '4', '3.5', '3', '2', '1', 'R']
@@ -356,6 +356,10 @@ onMounted(async () => {
 .cur button.on { background: var(--ac); color: #000; }
 .plabel { font-size: 11.5px; color: var(--mu); line-height: 1.2; }
 .mg { font-size: 13px; font-weight: 700; margin: 2px 0; }
+@media (max-width: 760px) {
+  .hidem { display: none; } h1 { margin-bottom: 10px; }
+  .filters > .btn { flex: 1 1 calc(50% - 5px); } .filters > .cur { flex: 1 1 auto; } .filters > .cur button { flex: 1; white-space: nowrap; padding: 6px 10px; } .featbtn { justify-content: center; }
+}
 @media (max-width: 760px) { .pills { flex-wrap: wrap; } .cars { grid-template-columns: 1fr 1fr; gap: 10px; } .filters input, .filters select { flex: 1 1 140px; } }
 @media (max-width: 460px) { .cars { grid-template-columns: 1fr; } }
 </style>

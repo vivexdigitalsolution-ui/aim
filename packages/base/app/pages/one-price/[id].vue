@@ -30,7 +30,7 @@
           <div v-if="car.price_jpy > 0" class="muted small">{{ cur === 'JPY' ? rm(car.price_jpy) : '¥' + car.price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
           <div v-else-if="car.price_reveal" class="muted small">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span></div>
-          <div v-if="!(isLite && isStaff)" class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? (isLite ? '♥ In your favourites' : '★ On your watchlist') : (isLite ? '♡ Add to favourites' : '☆ Watch this car') }}</button></div>
+          <div v-if="!(isLite && isStaff)" class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? (isLite ? '♥ In your favourites' : '★ On your watchlist') : (isLite ? '♡ Add to favourites' : '☆ Watch this car') }}</button><button v-if="isStaff && !isLite" class="btn ghost sm" :class="{ starred: recs?.has(car.id) }" @click="recommend">{{ recs?.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button></div>
           <p class="muted small" style="margin-top: 10px">One price cars are sold at the listed price to the first buyer. Ask our team to buy one for you.</p>
         </div>
 
@@ -68,6 +68,8 @@ const { hasTier, isStaff } = useAuth()
 const isLite = useRuntimeConfig().public.appKind === 'lite'
 const watch = useWatch()
 const watching = computed(() => !!car.value && watch.has(car.value.id))
+const recs = isStaff.value && !isLite ? useRecommend() : null      // staff, aim only
+async function recommend() { try { await recs?.toggle(car.value.id, true) } catch (e: any) { err.value = e.message } }
 async function star() { try { await watch.toggle(car.value.id, true) } catch (e: any) { err.value = e.message } }
 const car = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
 const cur = ref<'RM' | 'JPY'>('RM')
@@ -88,7 +90,7 @@ onMounted(async () => {
   try { const c = localStorage.getItem('cars-currency'); if (c === 'RM' || c === 'JPY') cur.value = c } catch { /* private mode */ }
   try {
     await loadRate().catch(() => {})
-    watch.load().catch(() => {})
+    watch.load().catch(() => {}); recs?.load().catch(() => {})
     const { data, error } = await db.from('one_price_lots').select('*').eq('id', route.params.id as string).maybeSingle()
     if (error) throw error
     car.value = data
