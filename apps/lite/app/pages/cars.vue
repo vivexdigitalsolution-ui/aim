@@ -32,17 +32,17 @@
           <button v-if="!isStaff" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from favourites' : 'Add to favourites'" @click.prevent.stop="star(c.id, !!c.op)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
         <div class="body">
           <div class="pricerow">
-            <div class="estrow">
-              <div v-if="impOf(c) && impOf(c)!.kind !== 'none'" class="est" :title="c.op ? 'Estimated import price at the One price' : 'Estimated import price at the suggested bid (what cars like this usually sell for)'">
-                <template v-if="impOf(c)!.kind === 'amt'"><span class="el">Est.</span>
+            <div class="estrow" :class="{ opc: c.op }">
+              <div v-if="impOf(c) && impOf(c)!.kind !== 'none'" class="est" :class="{ col: c.op }" :title="c.op ? 'Estimated import price at the One price' : 'Estimated import price at the suggested bid (what cars like this usually sell for)'">
+                <template v-if="impOf(c)!.kind === 'amt'"><span class="el">{{ c.op ? 'Estimate Import Price' : 'Est.' }}</span>
                 <b class="ev">RM {{ Math.round(impOf(c)!.myr!).toLocaleString('en-US') }}</b>
                 </template>
                 <b v-else class="ev need">Pick docket</b>
               </div>
-              <div v-else class="est" aria-hidden="true" style="visibility: hidden"><span class="el">Est.</span><b class="ev">RM 0</b></div>
+              <div v-else class="est" :class="{ col: c.op }" aria-hidden="true" style="visibility: hidden"><span class="el">{{ c.op ? 'Estimate Import Price' : 'Est.' }}</span><b class="ev">RM 0</b></div>
               <CarFlags :docket="c.op ? !!c.docket_id : flags.docket(c.id)" :review="c.op ? !!c.needs_review : flags.review(c.id)" />
             </div>
-            <div class="sp">{{ c.op ? 'One price' : 'Start price' }} <span>{{ c.op && !(c.start_price_jpy > 0) ? 'Not open yet' : money(c.start_price_jpy) }}</span></div>
+            <div class="sp" :class="{ hid: c.op }" :aria-hidden="c.op ? 'true' : undefined">{{ c.op ? 'One price' : 'Start price' }} <span>{{ c.op && !(c.start_price_jpy > 0) ? 'Not open yet' : money(c.start_price_jpy) }}</span></div>
           </div>
           <div class="namerow"><div class="name">{{ carTitle(c) }}</div></div>
           <div class="infochips">
@@ -225,6 +225,8 @@ onMounted(async () => {
 .pricerow { grid-row: 2; padding-top: 12px; display: grid; align-content: start; gap: 1px; }
 .estrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
 .est { display: flex; align-items: baseline; gap: 6px; } .est .el { font-size: 12px; font-weight: 700; color: var(--mu); } .est .ev { font-size: 19px; font-weight: 800; } .est .ev.need { font-size: 14px; color: var(--mu); }
+.estrow.opc { min-height: 44px; } .est.col { flex-direction: column; align-items: flex-start; gap: 0; } .est.col .el { font-size: 11.5px; line-height: 1.2; }
+.sp.hid { visibility: hidden; }      /* One price cars: the price is hidden for now, the line keeps its space so it can come back */
 .sp { font-size: 12.5px; color: var(--mu); } .sp span { font-weight: 500; color: var(--tx); }
 .namerow { grid-row: 3; align-items: flex-start; }
 .infochips .chip { font-size: 11px; padding: 3px 8px; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }

@@ -26,8 +26,15 @@
           <div class="muted small">{{ car.venue }} · One price</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
           <template v-if="isLite">
-          <div class="muted small" style="margin-top: 8px">One price (fixed, no bidding)</div>
-          <div class="price">{{ car.price_jpy > 0 ? shown(car.price_jpy) : 'Price not open yet' }}</div>
+          <div class="toprow">
+            <div v-if="car.price_jpy > 0 && calc?.importMyr != null">
+              <div class="muted small" title="Estimated import price at the One price">Est. import price</div>
+              <div class="price" style="margin-top: 0">RM {{ Math.round(calc.importMyr).toLocaleString('en-US') }}</div>
+              <div class="sp2">One price <span>{{ shown(car.price_jpy) }}</span></div>
+            </div>
+            <div v-else><div class="muted small">One price (fixed, no bidding)</div><div class="price" style="margin-top: 0">{{ car.price_jpy > 0 ? shown(car.price_jpy) : 'Price not open yet' }}</div></div>
+            <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
+          </div>
           <div v-if="car.price_jpy > 0" class="muted small">{{ cur === 'JPY' ? rm(car.price_jpy) : '¥' + car.price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
           <div v-else-if="car.price_reveal" class="muted small">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span></div>
@@ -43,7 +50,7 @@
           <div v-if="!(car.price_jpy > 0) && car.price_reveal" class="muted small" style="margin-top: 4px">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span><span v-if="rateNow > 0" class="chip ac" title="Exchange rate used on this page (change it in the breakdown)">¥1 = RM {{ rateNow }}</span></div>
           </template>
-          <div v-if="!(isLite && isStaff)" :class="isLite ? 'row wrap' : 'actrow'" :style="isLite ? 'gap: 8px; margin-top: 10px; justify-content: flex-start' : ''"><button class="btn ghost sm" :class="{ starred: watching, wstar: !isLite }" @click="star"><StarIcon v-if="!isLite" :filled="watching" />{{ watching ? (isLite ? '♥ In your favourites' : 'On your watchlist') : (isLite ? '♡ Add to favourites' : 'Watch this car') }}</button><button v-if="isStaff && !isLite" class="btn ghost sm" :class="{ starred: recs?.has(car.id) }" @click="recommend">{{ recs?.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button></div>
+          <div v-if="!(isLite && isStaff)" :class="isLite ? 'row wrap' : 'actrow'" :style="isLite ? 'gap: 8px; margin-top: 10px; justify-content: flex-start' : ''"><button class="btn ghost sm" :class="{ starred: watching, wstar: !isLite, fav: isLite }" @click="star"><StarIcon v-if="!isLite" :filled="watching" /><svg v-else viewBox="0 0 24 24" :fill="watching ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5S4.5 16 3 11a4.7 4.7 0 0 1 9-2.3A4.7 4.7 0 0 1 21 11c-1.5 5-9 9.5-9 9.5z" /></svg>{{ watching ? (isLite ? 'In your favourites' : 'On your watchlist') : (isLite ? 'Add to favourites' : 'Watch this car') }}</button><button v-if="isStaff && !isLite" class="btn ghost sm" :class="{ starred: recs?.has(car.id) }" @click="recommend">{{ recs?.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button></div>
           <p class="muted small" style="margin-top: 10px">One price cars are sold at the listed price to the first buyer. Ask our team to buy one for you.</p>
         </div>
 
@@ -89,6 +96,7 @@ async function recommend() { try { await recs?.toggle(car.value.id, true) } catc
 async function star() { try { await watch.toggle(car.value.id, true) } catch (e: any) { err.value = e.message } }
 const car = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
 const cur = ref<'RM' | 'JPY'>('RM')
+function setCur(c: 'RM' | 'JPY') { cur.value = c; try { localStorage.setItem('cars-currency', c) } catch { /* private mode */ } }
 const shown = (jpy: number) => (cur.value === 'JPY' ? '¥' + Math.round(jpy).toLocaleString('en-US') : rm(jpy))
 const photos = computed<string[]>(() => (Array.isArray(car.value?.photos) ? car.value.photos : []))
 const feats = computed<any[]>(() => (Array.isArray(car.value?.features) ? car.value.features.filter((f: any) => f && f.label) : []))
@@ -126,7 +134,11 @@ onMounted(async () => {
 .actrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; } .actrow .btn { padding-left: 10px; padding-right: 10px; white-space: nowrap; } .wstar { display: inline-flex; align-items: center; gap: 6px; }
 @media (min-width: 520px) { .actrow { flex-wrap: nowrap; } }
 @media (max-width: 560px) { .toprow { flex-wrap: wrap; } .price { font-size: 24px; } .estb { width: 100%; flex-direction: row; justify-content: space-between; align-items: center; } }
-.op > div { min-width: 0; } .wstar.starred { color: var(--ac); border-color: var(--ac); }
+.op > div { min-width: 0; } .wstar.fav { display: inline-flex; align-items: center; gap: 6px; } .fav svg { width: 16px; height: 16px; }
+.sp2 { font-size: 13px; color: var(--mu); margin-top: 2px; } .sp2 span { color: var(--tx); font-weight: 500; }
+.cur { display: inline-flex; align-self: flex-start; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; } .cur button.on { background: var(--ac); color: #fff; }
+.starred { color: var(--ac); border-color: var(--ac); }
 .starred { color: #e0452b; border-color: #e0452b; }
 .review { border-color: var(--warn); background: var(--warnbg); color: var(--warn); } .review .small { margin-top: 4px; }
 @media (max-width: 860px) { .op { grid-template-columns: 1fr; } }
