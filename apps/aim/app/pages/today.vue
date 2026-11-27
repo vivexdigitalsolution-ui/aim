@@ -14,7 +14,7 @@
         <label class="fld">Your AP fee<span class="inp"><i class="pre">RM</i><NumInput v-model="apFeeMyr" /></span></label>
       </div>
       <div class="muted small note">Margin is on cost: RM 12 back for every RM 100 put in. Price source: CarzNexus asking prices{{ marketAsOf ? ', ' + marketAsOf : '' }}. These are estimates, not sold prices. Repairs are not included.</div>
-      <div v-if="!marketAsOf" class="muted small note">No CarzNexus market prices yet. They appear once CarzNexus has linked its listings to the catalog and the market snapshot has been run (<code>node market-snapshot.js --write</code>). Cars with a hand-checked price are listed meanwhile; the others stay in Find by feature.</div>
+      <div v-if="!marketAsOf" class="muted small note">No CarzNexus market prices yet. They appear once CarzNexus has linked its listings to the catalog and the market snapshot has been run (<code>node market-snapshot.js --write</code>). Cars with a hand-checked price are listed meanwhile; the others are on the Cars page.</div>
     </div>
 
     <div v-if="loading" class="muted">Loading cars ...</div>

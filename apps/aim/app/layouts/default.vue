@@ -48,7 +48,6 @@ const items = computed<NavItem[]>(() => profile.value?.role === 'customer' ? [{ 
   { to: '/calculator', label: 'Import calculator', short: 'Calc', icon: 'calc' },
   ...(!isStaff.value && hasTier('member') ? [{ to: '/buylist', label: 'My buy list', short: 'Buy list', icon: 'buylist' }] : []),
   ...(isStaff.value ? [{ to: '/review', label: 'Docket review', short: 'Review', icon: 'review', badge: reviewCount.value || null }] : []),
-  { to: '/search', label: 'Find by feature', short: 'Find', icon: 'search' },
   { to: '/watchlist', label: 'Watchlist', short: 'Watch', icon: 'star' },
   { to: '/preferences', label: 'My preferences', short: 'Prefs', icon: 'prefs' },
   { to: '/requests', label: isStaff.value ? 'Sourcing requests' : 'Find me a car', short: isStaff.value ? 'Requests' : 'Request', icon: 'request', badge: isStaff.value ? openRequests.value || null : null },

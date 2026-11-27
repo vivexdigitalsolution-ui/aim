@@ -23,13 +23,16 @@
         <option value="year_desc">Newest year</option><option value="km_asc">Lowest mileage</option>
       </select>
       <button class="btn" @click="reload">Search</button>
+      <button v-if="kind === 'bidding'" class="btn ghost featbtn" :class="{ on: nFeat || ftext }" :title="hasTier('member') ? 'Find cars by what is on them: sunroof, leather, TRD ...' : 'Find by feature is part of the Member plan'" @click="hasTier('member') ? openFeat() : navigateTo('/upgrade')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>Features<span v-if="nFeat || ftext" class="fcount">{{ nFeat + (ftext ? 1 : 0) }}</span><span v-if="nFeat || ftext" class="fx" role="button" tabindex="0" title="Clear the features" aria-label="Clear the features" @click.stop.prevent="clearFeat" @keyup.enter.stop="clearFeat">✕</span><span v-if="!hasTier('member')" aria-label="Member plan">🔒</span>
+      </button>
       <div class="cur" role="group" aria-label="Viewed cars"><button :class="{ on: !hide }" @click="setHide(0)">All</button><button :class="{ on: !!hide }" @click="setHide(1)">Hide viewed</button></div>
       <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
     </div>
     <div v-if="rate" class="muted small" style="margin: 8px 2px 0">Rate used: ¥1 = RM {{ rate }}</div>
 
     <div v-if="err" class="err" style="margin-top: 12px">{{ err }}</div>
-    <div class="muted small" style="margin: 12px 2px">{{ loading ? 'Loading ...' : total + ' car' + (total === 1 ? '' : 's') }}<template v-if="hide && !loading && shown.length < cars.length"> · {{ cars.length - shown.length }} viewed hidden</template></div>
+    <div class="muted small" style="margin: 12px 2px">{{ loading ? 'Loading ...' : total + ' car' + (total === 1 ? '' : 's') }}<template v-if="kind === 'bidding' && (nFeat || ftext)"> · with {{ [...featKeys.map(featureLabel), ftext ? '“' + ftext + '”' : ''].filter(Boolean).join(' + ') }} <button class="lnkbtn" @click="clearFeat">clear</button></template><template v-if="hide && !loading && shown.length < cars.length"> · {{ cars.length - shown.length }} viewed hidden</template></div>
 
     <div class="grid cars">
       <NuxtLink v-for="c in shown" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/cars/${c.id}`" class="card car" :class="{ seen: viewed.has(c.id) }" @click="viewed.mark(c.id)">
@@ -59,12 +62,33 @@
     </div>
     <div v-if="!loading && !shown.length" class="card muted">{{ cars.length ? 'You have already viewed every car on this page. Press Show more, or switch back to All.' : 'No car matches. Try another make or a higher price.' }}</div>
     <button v-if="cars.length < total" class="btn ghost" style="margin-top: 16px" :disabled="loading" @click="more">Show more ({{ total - cars.length }} left)</button>
+
+    <div v-if="fOpen" class="mbg" @click.self="fOpen = false">
+      <div class="modal card" role="dialog" aria-label="Find by feature">
+        <div class="mhead"><h2>Find by feature</h2><button class="x" aria-label="Close" @click="fOpen = false">✕</button></div>
+        <p class="muted small" style="margin: 0 0 10px">Every auction sheet is read, so you can filter by what is on the car, not only the model. Choose one or more options: a car must have all of them.</p>
+        <input v-model="dText" placeholder="Search the sheet text: Vellfire, Executive Lounge, TRD ..." @keyup.enter="applyFeat" />
+        <input v-model="dFind" class="optfind" placeholder="Find an option ..." />
+        <div class="mbody">
+          <div v-if="fLoad" class="muted">Loading the options ...</div>
+          <div v-else-if="fErr" class="err">{{ fErr }}</div>
+          <div v-else class="row wrap" style="gap: 6px; justify-content: flex-start">
+            <span v-for="f in chips" :key="f.key" class="chip tag" :class="{ on: draft.has(f.key) }" @click="toggleDraft(f.key)">{{ f.label }} <small>{{ f.n }}</small></span>
+            <span v-if="!chips.length" class="muted small">No option matches.</span>
+          </div>
+        </div>
+        <div class="mfoot">
+          <button class="btn ghost" :disabled="!draft.size && !dText" @click="draft = new Set(); dText = ''">Clear</button>
+          <button class="btn" @click="applyFeat">Apply{{ draft.size ? ' (' + draft.size + ')' : '' }}</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { watch as vueWatch } from 'vue'
-import { timeLeft, closesInfo, closingTimeText, docketPool, calcDuty, dutyMonth, offerPricing, type Docket, type DutyRate } from '@aim/core'
+import { featureLabel, CATALOG, timeLeft, closesInfo, closingTimeText, docketPool, calcDuty, dutyMonth, offerPricing, type Docket, type DutyRate } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -105,10 +129,10 @@ const marginMap = computed(() => {
 })
 const marginOf = (id: string) => marginMap.value.get(id) ?? null
 const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), kind = ref('bidding'), maxRm = ref<number | null>(null), sort = ref('closing')
-const prefId = ref(''), hide = ref(0)
+const prefId = ref(''), hide = ref(0), feat = ref(''), ftext = ref('')
 const viewed = useViewed()
 const flags = useCarFlags()
-const url = useUrlFilters('cars', { q, brand, kind, yearFrom, yearTo, maxRm, sort, pref: prefId, hide }, { sort: 'closing' })
+const url = useUrlFilters('cars', { q, brand, kind, yearFrom, yearTo, maxRm, sort, pref: prefId, hide, feat, ftext }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
 // ── Est. import price (shows over the photo when the card is hovered) ──
@@ -191,7 +215,13 @@ async function fetchOnePrice(from: number) {
 }
 async function fetchPage(from: number) {
   if (kind.value === 'one_price') return fetchOnePrice(from)
-  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mfg_month,mileage_km,venue,start_price_jpy,photos,bid_deadline,engine_cc,transmission', { count: 'exact' }).gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true)
+  // one embedded join per chosen feature (all of them must be on the car); the text search runs on the sheet text
+  const emb = hasTier('member') ? featKeys.value.map((_, i) => `, f${i}:lot_features!inner(key)`).join('') : ''
+  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mfg_month,mileage_km,venue,start_price_jpy,photos,bid_deadline,engine_cc,transmission' + emb, { count: 'exact' }).gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true)
+  if (hasTier('member')) {
+    featKeys.value.forEach((k, i) => { query = query.eq(`f${i}.key`, k) })
+    if (ftext.value.trim()) query = query.textSearch('search', ftext.value.trim(), { config: 'simple', type: 'websearch' })
+  }
   const ap = activePref.value
   if (ap) {
     if (ap.brands?.length) query = query.in('brand', ap.brands.map((b: string) => b.toUpperCase()))
@@ -216,6 +246,35 @@ async function fetchPage(from: number) {
   loadCardPrices(data || [])
   return data || []
 }
+// ── Find by feature (Member plan): what is on the car, read from its auction sheet. The cars page filters on it; the cards do not show it, the car page does ──
+const featKeys = computed(() => feat.value.split(',').filter(Boolean))
+const nFeat = computed(() => featKeys.value.length)
+const fOpen = ref(false), fLoad = ref(false), fErr = ref(''), draft = ref(new Set<string>()), dText = ref(''), dFind = ref('')
+const featRows = useState<{ key: string; brand: string }[] | null>('cars-feature-rows', () => null)
+async function openFeat() {
+  fOpen.value = true; fErr.value = ''; dFind.value = ''; draft.value = new Set(featKeys.value); dText.value = ftext.value
+  if (featRows.value) return
+  fLoad.value = true
+  try {
+    const rows: { key: string; brand: string }[] = []
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await db.from('lot_features').select('key,lots!inner(bid_deadline,brand,my_eligible)').gt('lots.bid_deadline', new Date().toISOString()).eq('lots.my_eligible', true).range(from, from + 999)
+      if (error) throw error
+      for (const r of (data || []) as any[]) rows.push({ key: r.key, brand: r.lots?.brand })
+      if ((data || []).length < 1000) break
+    }
+    featRows.value = rows
+  } catch (e: any) { fErr.value = e.message } finally { fLoad.value = false }
+}
+const chips = computed(() => {
+  const c = new Map<string, number>()
+  for (const r of featRows.value || []) { if (brand.value && r.brand !== brand.value) continue; c.set(r.key, (c.get(r.key) || 0) + 1) }
+  const f = dFind.value.trim().toLowerCase()
+  return [...c.entries()].filter(([k]) => CATALOG.some((d) => d.key === k)).map(([key, n]) => ({ key, n, label: featureLabel(key) })).filter((x) => !f || x.label.toLowerCase().includes(f) || draft.value.has(x.key)).sort((a, b) => b.n - a.n)
+})
+function toggleDraft(k: string) { const s = new Set(draft.value); s.has(k) ? s.delete(k) : s.add(k); draft.value = s }
+async function applyFeat() { feat.value = [...draft.value].join(','); ftext.value = dText.value.trim(); fOpen.value = false; await reload() }
+async function clearFeat() { feat.value = ''; ftext.value = ''; await reload() }
 // "Hide viewed": the cars opened before are left out; the page loads more by itself until it has a screenful
 const shown = computed(() => (hide.value ? cars.value.filter((c) => !viewed.has(c.id)) : cars.value))
 let autoMore = 0
@@ -279,6 +338,17 @@ onMounted(async () => {
   .car:hover .estov > .ev { transition-delay: .24s; } .car:hover .estov > .es { transition-delay: .32s; }
 }
 @media (hover: none) { .estov { display: none; } }
+.featbtn { display: inline-flex; align-items: center; gap: 6px; } .featbtn svg { width: 15px; height: 15px; } .featbtn.on { border-color: var(--ac); color: var(--ac2); }
+.fx { display: none; background: var(--ac); color: #1a0b05; border-radius: 999px; width: 18px; height: 18px; font-size: 10px; font-weight: 800; place-items: center; line-height: 1; }
+.featbtn:hover .fx, .fx:focus { display: inline-grid; } .featbtn:hover .fcount, .featbtn:has(.fx:focus) .fcount { display: none; }
+@media (hover: none) { .fx { display: inline-grid; } .fcount { display: none; } }
+.fcount { background: var(--ac); color: #1a0b05; border-radius: 999px; font-size: 11px; font-weight: 700; padding: 1px 7px; }
+.lnkbtn { background: none; border: 0; padding: 0; color: var(--ac2); cursor: pointer; text-decoration: underline; font: inherit; }
+.mbg { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .62); display: grid; place-items: center; padding: 16px; }
+.modal { width: min(660px, 100%); max-height: 86vh; display: flex; flex-direction: column; gap: 10px; }
+.mhead { display: flex; justify-content: space-between; align-items: center; } .mhead h2 { margin: 0; } .x { background: none; border: 0; color: var(--mu); font-size: 18px; cursor: pointer; }
+.mbody { overflow: auto; min-height: 120px; flex: 1; padding: 2px 0; } .chip.tag small { opacity: .7; }
+.mfoot { display: flex; justify-content: space-between; gap: 10px; }
 .cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; }
 .cur button.on { background: var(--ac); color: #000; }
