@@ -1,5 +1,5 @@
 <template>
-  <span class="flags">
+  <span class="flags" :class="{ accent }">
     <span class="fl" :class="{ on: docket }" :title="docket ? 'Customs docket found: the import cost is worked out' : 'No customs docket yet'" :aria-label="docket ? 'Docket found' : 'No docket yet'">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/><path d="M9 13h6M9 17h4"/></svg>
     </span>
@@ -10,7 +10,7 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{ docket?: boolean; review?: boolean }>()
+defineProps<{ docket?: boolean; review?: boolean; accent?: boolean }>()      // accent: both icons light up in the app's accent colour (aim cards)
 </script>
 
 <style scoped>
@@ -19,4 +19,5 @@ defineProps<{ docket?: boolean; review?: boolean }>()
 .fl svg { width: 16px; height: 16px; display: block; }
 .fl.on { opacity: 1; color: var(--ok, #1f9d55); background: color-mix(in srgb, var(--ok, #1f9d55) 14%, transparent); border-color: color-mix(in srgb, var(--ok, #1f9d55) 40%, transparent); }
 .fl.warn.on { color: var(--warn, #d98a00); background: color-mix(in srgb, var(--warn, #d98a00) 16%, transparent); border-color: color-mix(in srgb, var(--warn, #d98a00) 45%, transparent); }
+.accent .fl.on, .accent .fl.warn.on { color: var(--ac); background: color-mix(in srgb, var(--ac) 16%, transparent); border-color: color-mix(in srgb, var(--ac) 50%, transparent); }
 </style>

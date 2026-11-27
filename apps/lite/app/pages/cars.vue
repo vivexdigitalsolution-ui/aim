@@ -15,17 +15,19 @@
         <option value="year_desc">Newest year</option><option value="km_asc">Lowest mileage</option>
       </select>
       <button class="btn" @click="reload">Search</button>
+      <label class="hidev"><input type="checkbox" :checked="!!hide" @change="hide = ($event.target as HTMLInputElement).checked ? 1 : 0; reload()" /> Hide viewed</label>
       <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
     </div>
     <div v-if="rate" class="muted small" style="margin: 8px 2px 0">Rate used: ¥1 = RM {{ rate }}</div>
 
     <div v-if="err" class="err" style="margin-top: 12px">{{ err }}</div>
-    <div class="muted small" style="margin: 12px 2px">{{ loading ? 'Loading ...' : total + ' car' + (total === 1 ? '' : 's') }}</div>
+    <div class="muted small" style="margin: 12px 2px">{{ loading ? 'Loading ...' : total + ' car' + (total === 1 ? '' : 's') }}<template v-if="hide && !loading && shown.length < cars.length"> · {{ cars.length - shown.length }} viewed hidden</template></div>
 
     <div class="grid cars">
-      <NuxtLink v-for="c in cars" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/car/${c.id}`" class="card car">
+      <NuxtLink v-for="c in shown" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/car/${c.id}`" class="card car" :class="{ seen: viewed.has(c.id) }" @click="viewed.mark(c.id)">
         <div class="ph"><img v-if="c.photos?.[0] && !broken.has(c.id)" :src="c.photos[0]" loading="lazy" alt="" @error="broken.add(c.id)" /><span v-else>no photo</span>
           <span v-if="c.venue" class="glass loc">{{ c.venue }}</span>
+          <span v-if="viewed.has(c.id)" class="glass vw"><RailIcon name="eye" />Viewed</span>
           <span class="glass tm" :class="glassCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span>
           <button v-if="!isStaff" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from favourites' : 'Add to favourites'" @click.prevent.stop="star(c.id, !!c.op)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
         <div class="body">
@@ -51,12 +53,13 @@
         </div>
       </NuxtLink>
     </div>
-    <div v-if="!loading && !cars.length" class="card muted">No car matches. Try another make or a higher price.</div>
+    <div v-if="!loading && !shown.length" class="card muted">{{ cars.length ? 'You have already viewed every car on this page. Press Show more, or untick Hide viewed.' : 'No car matches. Try another make or a higher price.' }}</div>
     <button v-if="cars.length < total" class="btn ghost" style="margin-top: 16px" :disabled="loading" @click="more">Show more ({{ total - cars.length }} left)</button>
   </div>
 </template>
 
 <script setup lang="ts">
+import { watch as vueWatch } from 'vue'
 import { closesInfo, closingTimeText, docketPool, calcDuty, dutyMonth, offerPricing, type Docket, type DutyRate } from '@aim/core'
 const db = useDb()
 const now = useNow()
@@ -66,9 +69,10 @@ const { isStaff } = useAuth()
 const broken = reactive(new Set<string>())      // photos that no longer load: show the grey box instead of a broken-image icon
 function clearQ() { q.value = ''; reload() }
 async function star(id: string, op = false) { try { await watch.toggle(id, op) } catch (e: any) { err.value = e.message } }
-const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), kind = ref('bidding'), maxRm = ref<number | null>(null), sort = ref('closing')
+const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), kind = ref('bidding'), maxRm = ref<number | null>(null), sort = ref('closing'), hide = ref(0)
+const viewed = useViewed()
 const flags = useCarFlags()
-const url = useUrlFilters('lite-cars', { q, brand, kind, yearFrom, yearTo, maxRm, sort }, { sort: 'closing' })
+const url = useUrlFilters('lite-cars', { q, brand, kind, yearFrom, yearTo, maxRm, sort, hide }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
 
@@ -171,11 +175,17 @@ async function fetchPage(from: number) {
   loadCardPrices(data || [])
   return data || []
 }
-async function reload() { url.save(); loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
+// the cars shown: with "Hide viewed" ticked, the ones opened before are left out (the page then loads more by itself until it has a screenful)
+const shown = computed(() => (hide.value ? cars.value.filter((c) => !viewed.has(c.id)) : cars.value))
+let autoMore = 0
+vueWatch([shown, loading], async () => {
+  if (hide.value && !loading.value && shown.value.length < 12 && cars.value.length < total.value && autoMore < 6) { autoMore++; await more() }
+})
+async function reload() { autoMore = 0; url.save(); loading.value = true; err.value = ''; try { cars.value = await fetchPage(0) } catch (e: any) { err.value = e.message } finally { loading.value = false } }
 async function more() { loading.value = true; try { cars.value = [...cars.value, ...(await fetchPage(cars.value.length))] } catch (e: any) { err.value = e.message } finally { loading.value = false } }
 
 onMounted(async () => {
-  loadCur(); url.restore(); watch.load().catch(() => {})
+  loadCur(); url.restore(); viewed.load(); watch.load().catch(() => {})
   try {
     await loadRate()
     const { data } = await db.from('lots').select('brand').gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true).limit(3000)
@@ -199,6 +209,9 @@ onMounted(async () => {
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .glass { position: absolute; z-index: 1; max-width: calc(100% - 64px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; font-weight: 700; line-height: 1.3; padding: 2px 8px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .35); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 .glass.loc { top: 8px; left: 8px; background: rgba(255, 255, 255, .34); color: #0b1b33; text-shadow: 0 0 3px rgba(255, 255, 255, .85); }
+.glass.vw { right: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; background: rgba(255, 255, 255, .34); color: #0b1b33; text-shadow: 0 0 3px rgba(255, 255, 255, .85); } .glass.vw svg { width: 12px; height: 12px; }
+.car.seen .ph img { opacity: .86; } .car.seen .name, .car.seen .ev { color: var(--mu); }
+.hidev { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--mu); cursor: pointer; white-space: nowrap; } .hidev input { width: 16px; height: 16px; }
 .glass.tm { left: 8px; bottom: 8px; background: rgba(13, 22, 40, .34); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
 .glass.tm.warn { background: rgba(255, 180, 30, .5); color: #2b1d00; text-shadow: 0 0 3px rgba(255, 255, 255, .6); } .glass.tm.off { background: rgba(13, 22, 40, .3); color: #eef2f8; }
 .star svg { width: 19px; height: 19px; display: block; }

@@ -84,6 +84,7 @@ const specs = computed(() => {
   ] as [string, string | null][]).filter((r) => r[1])
 })
 onMounted(async () => {
+  useViewed().mark(route.params.id as string)      // lite cars page: "Viewed" badge
   try { const c = localStorage.getItem('cars-currency'); if (c === 'RM' || c === 'JPY') cur.value = c } catch { /* private mode */ }
   try {
     await loadRate().catch(() => {})

@@ -230,6 +230,7 @@ async function useDocket(d: Docket) {
 }
 
 onMounted(async () => {
+  useViewed().mark(route.params.id as string)      // cars page: the title of a car already opened turns accent
   try { const c = localStorage.getItem('cars-currency'); if (c === 'RM' || c === 'JPY') cur.value = c } catch { /* private mode */ }
   try {
     await Promise.all([loadRate().catch(() => {}), watch.load().catch(() => {}), recs.load().catch(() => {})])

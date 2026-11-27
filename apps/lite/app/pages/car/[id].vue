@@ -26,7 +26,12 @@
           <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }} · {{ closingTimeText(car.bid_deadline) }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
           <div class="row wrap" style="gap: 10px; justify-content: space-between; align-items: center">
-            <div><div class="muted small">Start price</div><div class="price" style="margin-top: 0">{{ money(car.start_price_jpy) }}</div></div>
+            <div v-if="estTop != null">
+              <div class="muted small" title="Estimated import price at the suggested bid (what cars like this usually sell for)">Est. import price</div>
+              <div class="price" style="margin-top: 0">RM {{ Math.round(estTop).toLocaleString('en-US') }}</div>
+              <div class="sp2">Start price <span>{{ money(car.start_price_jpy) }}</span></div>
+            </div>
+            <div v-else><div class="muted small">Start price</div><div class="price" style="margin-top: 0">{{ money(car.start_price_jpy) }}</div></div>
             <div class="cur" role="group" aria-label="Currency"><button :class="{ on: cur === 'RM' }" @click="setCur('RM')">RM</button><button :class="{ on: cur === 'JPY' }" @click="setCur('JPY')">¥</button></div>
           </div>
           <div v-if="car.start_price_jpy > 0" class="muted small">{{ yen(car.start_price_jpy) }} at ¥1 = RM {{ rate }}. The final price is set at the auction.</div>
@@ -199,6 +204,11 @@ async function saveFees() {
   if (!error) bd.value = { ...bd.value, port_myr: Number(portIn.value || 0), inland_myr: Number(inlandIn.value || 0), ap_fee_myr: Number(apFeeIn.value || 0) }
   feeBusy.value = false
 }
+// the estimate at the top: the import price at the SUGGESTED bid (the same figure as on the cars page), with the fees and rate shown below
+const estTop = computed(() => {
+  if (!bd.value || !recBid.value) return null
+  return offerPricing({ historyJpy: recBid.value.price_jpy, rate: rateUsed.value, dutyMyr: dutyMyr.value, portMyr: Number(portIn.value || 0), inlandMyr: Number(inlandIn.value || 0), apFeeMyr: Number(apFeeIn.value || 0) }).importMyr
+})
 const pricing = computed(() => offerPricing({ historyJpy: bodyJpy.value > 0 ? Math.round(bodyJpy.value) : null, rate: rateUsed.value, dutyMyr: dutyMyr.value, portMyr: Number(portIn.value || 0), inlandMyr: Number(inlandIn.value || 0), apFeeMyr: Number(apFeeIn.value || 0) }))
 function useSuggested() { if (recBid.value) bidInput.value = fromJpy(recBid.value.price_jpy) }
 // switching RM / yen converts what is already typed, so the same bid and price stay the same
@@ -265,6 +275,8 @@ async function cancel() {
   catch (e: any) { msgOk.value = false; msg.value = e.message } finally { busy.value = false }
 }
 
+const viewed = useViewed()
+onMounted(() => viewed.mark(route.params.id as string))      // the cars page then shows a Viewed badge on this car
 onMounted(async () => {
   try {
     loadCur(); watch.load().catch(() => {})
@@ -300,6 +312,7 @@ onMounted(async () => {
 .dk { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .sheet { width: 100%; border-radius: 8px; margin-top: 10px; }
 .price { font-size: 28px; font-weight: 800; margin-top: 4px; }
+.sp2 { font-size: 13px; color: var(--mu); margin-top: 2px; } .sp2 span { color: var(--tx); font-weight: 500; }
 .fld { display: grid; gap: 5px; color: var(--mu); font-size: 13px; margin-top: 10px; } .fld input { width: 100%; }
 .amt { display: inline-block; width: 110px; text-align: right; padding-right: 9px; box-sizing: border-box; } .feecell { white-space: nowrap; } .feecell span { color: var(--mu); margin-right: 6px; } .ratebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; } .rateinp { width: 120px; }
 .yn { margin-left: 8px; font-size: 12.5px; color: var(--mu2); } .feecell .amt { color: var(--tx); margin-right: 0; }
