@@ -15,6 +15,7 @@
           <h2>Auction sheet</h2>
           <a :href="car.sheet_url" target="_blank" rel="noopener"><img :src="car.sheet_url" class="sheet" loading="lazy" alt="Auction sheet" /></a>
         </div>
+        <PosterCard v-if="isLite && isStaff" :car="car" one-price :est="calc?.importMyr ?? null" style="margin-top: 14px; display: block" />
       </div>
 
       <div class="grid" style="align-content: start">
