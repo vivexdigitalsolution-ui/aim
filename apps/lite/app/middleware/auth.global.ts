@@ -11,5 +11,5 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // dealers' own pages: staff place the dealers' bids in the Bid queue, they have no favourites or orders of their own
   if (['/orders', '/watchlist'].some((p) => to.path.startsWith(p)) && isStaff.value) return navigateTo('/')
   // dealer-office pages: staff only (the server enforces it too)
-  if (['/bids', '/aps', '/offer', '/targets'].some((p) => to.path.startsWith(p)) && !isStaff.value) return navigateTo('/')
+  if (['/bids', '/aps', '/offer', '/targets', '/cif'].some((p) => to.path.startsWith(p)) && !isStaff.value) return navigateTo('/')
 })

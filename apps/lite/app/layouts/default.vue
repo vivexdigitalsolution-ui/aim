@@ -70,7 +70,6 @@ const items = computed<Item[]>(() => isStaff.value ? [
   { to: '/orders', label: 'My orders', icon: 'orders', primary: true },
   { to: '/calculator', label: 'Calculator', icon: 'calc', primary: true },
   { to: '/watchlist', label: 'Favourites', icon: 'heart' },
-  { to: '/cif', label: 'CIF rates', icon: 'table' },
   { to: '/about', label: 'About PAW-J', icon: 'info' },
 ])
 const hasMore = computed(() => items.value.some((i) => !i.primary))     // phone: 4 icons + More (staff and dealers alike); the rest sits in the drawer

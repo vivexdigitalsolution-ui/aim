@@ -1,7 +1,7 @@
 <template>
   <div>
     <h1>Import calculator</h1>
-    <p class="sub">Work out what a Japan car costs landed in Malaysia, or the highest price you can pay for a target margin. Customs docket, duty, agent fee, port, inland and AP fee are added for you.</p>
+    <p class="sub">Work out what a Japan car costs landed in Malaysia, or the highest price you can pay for a target margin. Customs docket, duty, CIF, port, carrier fee and AP fee are added for you.</p>
 
     <div v-if="status && !status.allowed" class="card" style="border-color: var(--ac)">
       <b>{{ status.reason || 'You have used your calculation.' }}</b>
@@ -47,7 +47,7 @@
             <label class="f">¥1 = RM<NumInput v-model="rate" decimal /></label>
             <label class="f">AP fee (RM)<NumInput v-model="apFee" /></label>
             <label class="f">Port clearance (RM)<NumInput v-model="port" /></label>
-            <label class="f">Inland transfer (RM)<NumInput v-model="inland" /></label>
+            <label class="f">Carrier fee (RM)<NumInput v-model="inland" /></label>
             <label class="f">Recon / prep (RM)<NumInput v-model="recon" /></label>
           </div>
         </details>
@@ -64,10 +64,10 @@
           <div v-if="result.maxBid != null" class="big">Highest price to pay: <b>¥{{ result.maxBid.toLocaleString('en-US') }}</b><small class="muted note2">(RM {{ myr(result.maxBid * rate) }}, in ¥5,000 steps)</small></div>
           <table class="spec">
             <tr><td>Car price</td><td class="r">RM {{ myr(result.p.bodyMyr) }}<small class="yen">¥{{ result.bodyJpy.toLocaleString('en-US') }}</small></td></tr>
-            <tr><td>Agent fee &amp; shipping</td><td class="r">RM {{ myr(result.p.agentMyr) }}<small class="yen">¥{{ (result.p.agentJpy || 0).toLocaleString('en-US') }}</small></td></tr>
+            <tr><td>CIF</td><td class="r">RM {{ myr(result.p.agentMyr) }}<small class="yen">¥{{ (result.p.agentJpy || 0).toLocaleString('en-US') }}</small></td></tr>
             <tr><td>Customs value (docket ¥{{ (result.duty.docketAmountForeign || 0).toLocaleString('en-US') }}, {{ result.duty.band }})</td><td class="r">RM {{ myr(result.duty.customsValueMyr) }}</td></tr>
             <tr><td>Customs duty (× {{ result.duty.multiplier }})</td><td class="r">RM {{ myr(result.duty.dutyMyr) }}</td></tr>
-            <tr><td>Port clearance + inland</td><td class="r">RM {{ myr(port + inland) }}</td></tr>
+            <tr><td>Port clearance + carrier fee</td><td class="r">RM {{ myr(port + inland) }}</td></tr>
             <tr><td>AP fee</td><td class="r">RM {{ myr(apFee) }}</td></tr>
             <tr class="sum"><td><b>Landed price</b></td><td class="r"><b>RM {{ myr(result.p.importMyr) }}</b></td></tr>
             <tr v-if="recon"><td>Recon / prep</td><td class="r">RM {{ myr(recon) }}</td></tr>
@@ -92,7 +92,7 @@ const search = ref(''), docket = ref<Docket | null>(null)
 const year = ref<number>(thisYear - 3), month = ref(6), vtype = ref<'car' | 'non_car'>('car')
 const mode = ref<'landed' | 'maxbid'>('landed')
 const bodyJpy = ref(0), sellMyr = ref(0), targetPct = ref(12)
-const rate = ref(0), apFee = ref(10500), port = ref(2500), inland = ref(250), recon = ref(3000)
+const rate = ref(0), apFee = ref(0), port = ref(0), inland = ref(0), recon = ref(3000)
 const result = ref<any>(null)
 const myr = (n: number | null | undefined) => (n == null ? '–' : Math.round(n).toLocaleString('en-US'))
 const limitText = computed(() => status.value?.period === 'once' ? 'The Free plan includes one calculation.' : status.value?.period ? `Your plan includes ${status.value.uses} calculation(s) per ${status.value.period}.` : '')
@@ -116,7 +116,9 @@ onMounted(async () => {
     const { data, error } = await db.rpc('calculator_reference')
     if (error) throw error
     ref_.value = { dockets: (data.dockets || []).map((d: any) => ({ ...d, amt_12m_24m: n(d.amt_12m_24m), amt_24m_36m: n(d.amt_24m_36m), amt_36m_48m: n(d.amt_36m_48m), amt_48m_60m: n(d.amt_48m_60m), amt_60m_plus: n(d.amt_60m_plus) })), rates: (data.rates || []).map((r: any) => ({ ...r, multiplier: Number(r.multiplier) })), currencies: data.currencies || [] }
-    rate.value = Number(data.jpy_rate) || 0; port.value = Number(data.port_myr); inland.value = Number(data.inland_myr); apFee.value = Number(data.ap_fee_myr)
+    rate.value = Number(data.jpy_rate) || 0
+    const lf = (await db.rpc('import_fees_lite')).data      // lite has its own defaults (0 until staff set them)
+    port.value = Number(lf?.effective.port_myr) || 0; inland.value = Number(lf?.effective.inland_myr) || 0; apFee.value = Number(lf?.effective.ap_fee_myr) || 0
   } catch (e: any) { err.value = /calculator_limit/.test(e.message) ? 'Your plan has no calculations left.' : e.message } finally { loading.value = false }
 })
 const n = (v: unknown) => (v === null || v === undefined ? null : Number(v))

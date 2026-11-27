@@ -19,10 +19,10 @@
 
     <div v-if="isStaff || profile?.role === 'ap_holder'" class="card" style="margin-bottom: 16px">
       <h2>{{ isStaff ? 'Import costs: default for every AP holder' : 'My import costs' }}</h2>
-      <p class="muted small">{{ isStaff ? 'Port clearance, inland transfer and AP fee added to the import price of every car. AP holders start from these and can set their own.' : 'Added to the import price of every car and in the calculator. Change them here, or directly in the import price breakdown of any car. Leave a box empty to use the team default (shown inside the box).' }}</p>
+      <p class="muted small">{{ isStaff ? 'Port clearance, ' + L.inland.toLowerCase() + ' and AP fee added to the import price of every car. AP holders start from these and can set their own.' : 'Added to the import price of every car and in the calculator. Change them here, or directly in the import price breakdown of any car. Leave a box empty to use the team default (shown inside the box).' }}</p>
       <div class="grid3">
         <label class="f">Port clearance (RM)<NumInput v-model="fees.port" :placeholder="isStaff ? '' : String(shared.port_myr)" /></label>
-        <label class="f">Inland transfer (RM)<NumInput v-model="fees.inland" :placeholder="isStaff ? '' : String(shared.inland_myr)" /></label>
+        <label class="f">{{ L.inland }} (RM)<NumInput v-model="fees.inland" :placeholder="isStaff ? '' : String(shared.inland_myr)" /></label>
         <label class="f">AP fee (RM)<NumInput v-model="fees.apFee" :placeholder="isStaff ? '' : String(shared.ap_fee_myr)" /></label>
       </div>
       <div v-if="msgF" :class="okF ? 'okmsg' : 'err'" style="margin-top: 10px">{{ msgF }}</div>
@@ -30,7 +30,7 @@
     </div>
 
     <div v-if="isStaff" class="card" style="margin-bottom: 16px">
-      <h2>Agent fee &amp; shipping: default table for every AP holder</h2>
+      <h2>{{ L.agent }}: default table for every AP holder</h2>
       <p class="muted small">What you charge to bring in a car, by the car price in yen (the same table as the CIF rates page). The Import calculator uses it for everyone who has not kept their own table. A car priced below "To" pays the fee; an empty "To" means that price and above. Untick "On" to stop offering a band.</p>
       <div v-if="!cif.length" class="muted small" style="margin: 8px 0">No bands yet. <a href="#" @click.prevent="addBand">Add the first band</a></div>
       <div v-for="(r, i) in cif" :key="r.id || 'n' + i" class="crow">
@@ -46,9 +46,9 @@
     </div>
 
     <div v-if="profile?.role === 'ap_holder'" class="card" style="margin-bottom: 16px">
-      <h2>My agent fee &amp; shipping</h2>
-      <p class="muted small">The calculator adds an agent fee &amp; shipping (in yen) to the car price. By default it uses our standard table. If your own supplier charges differently, enter your rates here and the calculator uses them instead. Each row: cars priced below the yen amount pay that fee; the last row (empty amount) is for every car above.</p>
-      <div v-if="!tiers.length" style="margin: 10px 0"><div class="muted small" style="margin-bottom: 8px">Now using: our standard table.</div><button class="btn" @click="startTiers">Set my own agent fee &amp; shipping</button></div>
+      <h2>My {{ L.agent }}</h2>
+      <p class="muted small">The calculator adds the {{ L.agent }} (in yen) to the car price. By default it uses our standard table. If your own supplier charges differently, enter your rates here and the calculator uses them instead. Each row: cars priced below the yen amount pay that fee; the last row (empty amount) is for every car above.</p>
+      <div v-if="!tiers.length" style="margin: 10px 0"><div class="muted small" style="margin-bottom: 8px">Now using: our standard table.</div><button class="btn" @click="startTiers">Set my own {{ L.agent }}</button></div>
       <div v-else>
         <div v-for="(t, i) in tiers" :key="i" class="trow">
           <span class="muted small">Car price below</span>
@@ -98,16 +98,21 @@ async function pushOn() { pushBusy.value = true; pushErr.value = ''; try { await
 async function pushOff() { pushBusy.value = true; try { await push.disable() } catch (e: any) { pushErr.value = e.message } finally { pushBusy.value = false } }
 // ── import costs: staff set the team default (calc_presets), an AP holder keeps their own (empty = team default) ──
 const fees = reactive<{ port: number | string | null; inland: number | string | null; apFee: number | string | null }>({ port: null, inland: null, apFee: null })
-const shared = reactive({ port_myr: 2500, inland_myr: 250, ap_fee_myr: 10500 })
+const isLite = useRuntimeConfig().public.appKind === 'lite'
+// lite (PAW-J Partner): its own wording, its own shared defaults (all 0 until staff set them) kept apart from the full app's
+const L = isLite ? { inland: 'Carrier fee', agent: 'CIF' } : { inland: 'Inland transfer', agent: 'Agent fee & shipping' }
+const FEE_KEYS = isLite ? ['lite_port_myr', 'lite_inland_myr', 'lite_ap_fee_myr'] : ['offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr']
+const FEE_DEF = isLite ? [0, 0, 0] : [2500, 250, 10500]
+const shared = reactive({ port_myr: FEE_DEF[0]!, inland_myr: FEE_DEF[1]!, ap_fee_myr: FEE_DEF[2]! })
 const busyF = ref(false), msgF = ref(''), okF = ref(false)
 const numOrNull = (v: unknown) => (v === '' || v === null || v === undefined || Number.isNaN(Number(v)) ? null : Number(v))
 async function loadFees() {
   if (isStaff.value) {
-    const { data } = await db.from('calc_presets').select('preset_key,amount').in('preset_key', ['offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr'])
+    const { data } = await db.from('calc_presets').select('preset_key,amount').in('preset_key', FEE_KEYS)
     const m = Object.fromEntries((data || []).map((r: any) => [r.preset_key, Number(r.amount)]))
-    fees.port = m.offer_port_myr ?? 2500; fees.inland = m.offer_inland_myr ?? 250; fees.apFee = m.offer_ap_fee_myr ?? 10500
+    fees.port = m[FEE_KEYS[0]!] ?? FEE_DEF[0]!; fees.inland = m[FEE_KEYS[1]!] ?? FEE_DEF[1]!; fees.apFee = m[FEE_KEYS[2]!] ?? FEE_DEF[2]!
   } else if (profile.value?.role === 'ap_holder') {
-    const { data } = await db.rpc('import_fees')
+    const { data } = await db.rpc(isLite ? 'import_fees_lite' : 'import_fees')
     if (data) { Object.assign(shared, data.shared); fees.port = data.mine.port_myr; fees.inland = data.mine.inland_myr; fees.apFee = data.mine.ap_fee_myr }
   }
 }
@@ -115,7 +120,7 @@ async function saveFees() {
   busyF.value = true; msgF.value = ''
   try {
     if (isStaff.value) {
-      const rows = [['offer_port_myr', fees.port], ['offer_inland_myr', fees.inland], ['offer_ap_fee_myr', fees.apFee]].map(([preset_key, v]) => ({ preset_key, amount: numOrNull(v) }))
+      const rows = [[FEE_KEYS[0], fees.port], [FEE_KEYS[1], fees.inland], [FEE_KEYS[2], fees.apFee]].map(([preset_key, v]) => ({ preset_key, amount: numOrNull(v) }))
       if (rows.some((r) => r.amount == null || (r.amount as number) < 0)) throw new Error('Fill in all three amounts (0 or more).')
       const { error } = await db.from('calc_presets').upsert(rows, { onConflict: 'preset_key' })
       if (error) throw error
@@ -187,7 +192,7 @@ async function saveTiers() {
     if (ups.some((u, i) => i > 0 && u <= ups[i - 1]!)) throw new Error('The yen amounts must go up from one row to the next.')
     const { error } = await db.rpc('save_my_agent_tiers', { p_tiers: rows })
     if (error) throw error
-    okT.value = true; msgT.value = 'Saved. The calculator now uses your own agent fee & shipping table.'
+    okT.value = true; msgT.value = 'Saved. The calculator now uses your own ' + L.agent + ' table.'
   } catch (e: any) { okT.value = false; msgT.value = e.message } finally { busyT.value = false }
 }
 async function useAimTable() {

@@ -30,6 +30,7 @@
           <div v-if="car.price_jpy > 0" class="muted small">{{ cur === 'JPY' ? rm(car.price_jpy) : '¥' + car.price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
           <div v-else-if="car.price_reveal" class="muted small">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
           <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span></div>
+          <div v-if="!(isLite && isStaff)" class="row wrap" style="gap: 8px; margin-top: 10px; justify-content: flex-start"><button class="btn ghost sm" :class="{ starred: watching }" @click="star">{{ watching ? (isLite ? '♥ In your favourites' : '★ On your watchlist') : (isLite ? '♡ Add to favourites' : '☆ Watch this car') }}</button></div>
           <p class="muted small" style="margin-top: 10px">One price cars are sold at the listed price to the first buyer. Ask our team to buy one for you.</p>
         </div>
 
@@ -63,7 +64,11 @@ import { fmtMytDateTime } from '@aim/core'
 const db = useDb()
 const route = useRoute()
 const { rate, loadRate, rm } = useRate()
-const { hasTier } = useAuth()
+const { hasTier, isStaff } = useAuth()
+const isLite = useRuntimeConfig().public.appKind === 'lite'
+const watch = useWatch()
+const watching = computed(() => !!car.value && watch.has(car.value.id))
+async function star() { try { await watch.toggle(car.value.id, true) } catch (e: any) { err.value = e.message } }
 const car = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
 const cur = ref<'RM' | 'JPY'>('RM')
 const shown = (jpy: number) => (cur.value === 'JPY' ? '¥' + Math.round(jpy).toLocaleString('en-US') : rm(jpy))
@@ -82,6 +87,7 @@ onMounted(async () => {
   try { const c = localStorage.getItem('cars-currency'); if (c === 'RM' || c === 'JPY') cur.value = c } catch { /* private mode */ }
   try {
     await loadRate().catch(() => {})
+    watch.load().catch(() => {})
     const { data, error } = await db.from('one_price_lots').select('*').eq('id', route.params.id as string).maybeSingle()
     if (error) throw error
     car.value = data
@@ -96,6 +102,7 @@ onMounted(async () => {
 .sheet { width: 100%; border-radius: 8px; display: block; margin-top: 8px; }
 .price { font-size: 26px; font-weight: 800; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 8px; } .spec td { padding: 7px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); } .r { text-align: right; }
+.starred { color: #e0452b; border-color: #e0452b; }
 .review { border-color: var(--warn); background: var(--warnbg); color: var(--warn); } .review .small { margin-top: 4px; }
 @media (max-width: 860px) { .op { grid-template-columns: 1fr; } }
 </style>

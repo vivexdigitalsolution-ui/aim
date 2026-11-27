@@ -7,6 +7,7 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   css: ['~/assets/lite.css'],
   build: { transpile: ['@aim/core'] },
+  runtimeConfig: { public: { appKind: 'lite' } },      // the shared pages (My account, the import price box) read this to show the lite wording and lite defaults
   app: {
     head: {
       title: 'PAW-J Partner',

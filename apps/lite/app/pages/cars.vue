@@ -25,11 +25,11 @@
     <div class="grid cars">
       <NuxtLink v-for="c in cars" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/car/${c.id}`" class="card car">
         <div class="ph"><img v-if="c.photos?.[0] && !broken.has(c.id)" :src="c.photos[0]" loading="lazy" alt="" @error="broken.add(c.id)" /><span v-else>no photo</span>
-          <button v-if="!isStaff && !c.op" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from favourites' : 'Add to favourites'" @click.prevent.stop="star(c.id)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
+          <button v-if="!isStaff" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from favourites' : 'Add to favourites'" @click.prevent.stop="star(c.id, !!c.op)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
         <div class="body">
           <div class="plabel">{{ c.op ? 'One price' : 'Start price' }}</div>
           <div class="price">{{ c.op && !(c.start_price_jpy > 0) ? 'Not open yet' : money(c.start_price_jpy) }}</div>
-          <div class="namerow"><div class="name">{{ c.brand }} {{ c.model }}</div><CarFlags :docket="c.op ? !!c.docket_id : flags.docket(c.id)" :review="c.op ? !!c.needs_review : flags.review(c.id)" /></div>
+          <div class="namerow"><div class="name">{{ carTitle(c) }}</div><CarFlags :docket="c.op ? !!c.docket_id : flags.docket(c.id)" :review="c.op ? !!c.needs_review : flags.review(c.id)" /></div>
           <div class="muted small">{{ [c.mfg_month && c.mfg_year ? c.mfg_year + '/' + String(c.mfg_month).padStart(2, '0') : c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
           <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="chipCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span></div>
         </div>
@@ -49,19 +49,20 @@ const watch = useWatch()
 const { isStaff } = useAuth()
 const broken = reactive(new Set<string>())      // photos that no longer load: show the grey box instead of a broken-image icon
 function clearQ() { q.value = ''; reload() }
-async function star(id: string) { try { await watch.toggle(id) } catch (e: any) { err.value = e.message } }
+async function star(id: string, op = false) { try { await watch.toggle(id, op) } catch (e: any) { err.value = e.message } }
 const q = ref(''), brand = ref(''), yearFrom = ref(0), yearTo = ref(0), kind = ref('bidding'), maxRm = ref<number | null>(null), sort = ref('closing')
 const flags = useCarFlags()
 const url = useUrlFilters('lite-cars', { q, brand, kind, yearFrom, yearTo, maxRm, sort }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
+const listBack = useListRestore('lite-cars', () => cars.value.length, () => total.value, more)      // Back from a car returns to the same place in the list
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
 const closes = (iso: string) => closesInfo(iso, now.value).text
 const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; return c === 'late' || c === 'soon' ? 'warn' : c === 'unknown' || c === 'closed' ? '' : 'ac' }
 
 /** One price cars (a fixed price, no bidding): same card shape as a bidding car */
 async function fetchOnePrice(from: number) {
-  let query = db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id', { count: 'exact' }).gt('deadline', new Date().toISOString())
+  let query = db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission', { count: 'exact' }).gt('deadline', new Date().toISOString())
   if (brand.value) query = query.eq('brand', brand.value)
   const t = q.value.trim().replace(/[,()%]/g, ' ')
   if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)
@@ -77,7 +78,7 @@ async function fetchOnePrice(from: number) {
 }
 async function fetchPage(from: number) {
   if (kind.value === 'one_price') return fetchOnePrice(from)
-  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mfg_month,mileage_km,venue,start_price_jpy,photos,bid_deadline', { count: 'exact' })
+  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mfg_month,mileage_km,venue,start_price_jpy,photos,bid_deadline,engine_cc,transmission', { count: 'exact' })
     .gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true)
   if (brand.value) query = query.eq('brand', brand.value)
   const t = q.value.trim().replace(/[,()%]/g, ' ')
@@ -104,6 +105,7 @@ onMounted(async () => {
     brands.value = [...new Set((data || []).map((r: any) => r.brand))].sort() as string[]
   } catch (e: any) { err.value = e.message }
   await reload()
+  await listBack.restore()
 })
 </script>
 
@@ -112,8 +114,8 @@ onMounted(async () => {
 .maxp { width: 150px; }
 .sbox { position: relative; flex: 1; min-width: 180px; display: flex; } .sbox input { width: 100%; padding-right: 36px; }
 .clr { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--s3); color: var(--mu); font-size: 18px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0; } .clr:hover { background: var(--line); color: var(--tx); }
-.cars { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.car { padding: 0; overflow: hidden; color: inherit; transition: box-shadow .2s, transform .2s; display: flex; flex-direction: column; }
+.cars { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); row-gap: 0; }
+.car { padding: 0; overflow: hidden; color: inherit; transition: box-shadow .2s, transform .2s; display: grid; grid-template-rows: subgrid; grid-row: span 6; row-gap: 0; margin-bottom: 16px; }
 .car:hover { box-shadow: 0 8px 24px rgba(20, 30, 60, .1); transform: translateY(-2px); }
 .ph { aspect-ratio: 4 / 3; background: #e9edf3; display: grid; place-items: center; color: var(--mu2); font-size: 12px; overflow: hidden; }
 .ph { position: relative; }
@@ -124,11 +126,15 @@ onMounted(async () => {
 .cur { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .cur button { background: transparent; border: 0; color: inherit; padding: 6px 14px; cursor: pointer; font-weight: 600; }
 .cur button.on { background: var(--ac); color: #fff; }
-.body { padding: 12px 14px 14px; }
+.body { display: contents; }
+.body > * { padding-left: 14px; padding-right: 14px; }
+.plabel { grid-row: 2; padding-top: 12px; } .price { grid-row: 3; }
+.namerow { grid-row: 4; align-items: flex-start; } .car > .body > .row:last-child { grid-row: 6; padding-bottom: 14px; }
+.car > .body > .muted.small { grid-row: 5; padding-top: 4px; }
 .plabel { font-size: 11.5px; color: var(--mu); line-height: 1.2; }
 .price { font-size: 19px; font-weight: 800; }
 .name { font-weight: 600; margin: 2px 0; }
-.namerow { display: flex; align-items: center; justify-content: space-between; gap: 8px; } .namerow .name { min-width: 0; }
+.namerow { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; } .namerow .name { min-width: 0; }
 @media (max-width: 760px) {
   .cars { grid-template-columns: 1fr 1fr; gap: 10px; }
   /* the filters on a phone: search on its own row, then two equal halves per row */

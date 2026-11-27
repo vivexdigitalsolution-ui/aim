@@ -34,12 +34,12 @@
       <NuxtLink v-for="c in cars" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/cars/${c.id}`" class="card car">
         <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span>
           <button v-if="isStaff && !c.op" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
-          <button v-if="!c.op" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id)"><StarIcon :filled="watch.has(c.id)" /></button></div>
+          <button class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id, !!c.op)"><StarIcon :filled="watch.has(c.id)" /></button></div>
         <div class="body">
           <div class="plabel">{{ c.op ? 'One price' : 'Start price' }}</div>
           <div class="price">{{ c.op && !(c.start_price_jpy > 0) ? 'Not open yet' : money(c.start_price_jpy) }}</div>
           <div v-if="!c.op && marginOf(c.id) != null" class="mg" :class="marginOf(c.id)! >= 0 ? 'up' : 'down'">Margin {{ money(marginOf(c.id)!, 'myr') }}</div>
-          <div class="namerow"><div class="name">{{ c.brand }} {{ c.model }}</div><CarFlags :docket="c.op ? !!c.docket_id : flags.docket(c.id)" :review="c.op ? !!c.needs_review : flags.review(c.id)" /></div>
+          <div class="namerow"><div class="name">{{ carTitle(c) }}</div><CarFlags :docket="c.op ? !!c.docket_id : flags.docket(c.id)" :review="c.op ? !!c.needs_review : flags.review(c.id)" /></div>
           <div class="muted small">{{ [c.mfg_month && c.mfg_year ? c.mfg_year + '/' + String(c.mfg_month).padStart(2, '0') : c.mfg_year, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.grade ? 'Grade ' + c.grade : null].filter(Boolean).join(' · ') }}</div>
           <div class="row" style="margin-top: 8px"><span class="chip">{{ c.venue }}</span><span class="chip" :class="chipCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span></div>
         </div>
@@ -82,7 +82,7 @@ function money(v: number | null | undefined, unit: 'jpy' | 'myr' = 'jpy') {
   const myr = unit === 'jpy' ? v * rate.value : v
   return rate.value > 0 || unit === 'myr' ? 'RM ' + Math.round(myr).toLocaleString('en-US') : '—'
 }
-async function star(id: string) { try { await watch.toggle(id) } catch (e: any) { err.value = e.message } }
+async function star(id: string, op = false) { try { await watch.toggle(id, op) } catch (e: any) { err.value = e.message } }
 // the margin at the usual winning price (staff and Member plan); the cars page shows only this one number
 const marginMap = computed(() => {
   const m = new Map<string, number>()
@@ -97,6 +97,7 @@ const flags = useCarFlags()
 const url = useUrlFilters('cars', { q, brand, kind, yearFrom, yearTo, maxRm, sort, pref: prefId }, { sort: 'closing' })
 const cars = ref<any[]>([]), total = ref(0), loading = ref(true), err = ref(''), brands = ref<string[]>([])
 const PAGE = 24
+const listBack = useListRestore('aim-cars', () => cars.value.length, () => total.value, more)      // Back from a car returns to the same place in the list
 const years = Array.from({ length: 12 }, (_, i) => new Date().getFullYear() - i)
 const left = (iso: string) => timeLeft(iso, now.value).label
 const closes = (iso: string) => closesInfo(iso, now.value).text
@@ -104,7 +105,7 @@ const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; ret
 
 /** One price cars (a fixed price, no bidding): same card shape as a bidding car */
 async function fetchOnePrice(from: number) {
-  let query = db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id', { count: 'exact' }).gt('deadline', new Date().toISOString())
+  let query = db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission', { count: 'exact' }).gt('deadline', new Date().toISOString())
   if (brand.value) query = query.eq('brand', brand.value)
   const t = q.value.trim().replace(/[,()%]/g, ' ')
   if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)
@@ -120,7 +121,7 @@ async function fetchOnePrice(from: number) {
 }
 async function fetchPage(from: number) {
   if (kind.value === 'one_price') return fetchOnePrice(from)
-  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mfg_month,mileage_km,venue,start_price_jpy,photos,bid_deadline', { count: 'exact' }).gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true)
+  let query = db.from('lots').select('id,brand,model,grade,mfg_year,mfg_month,mileage_km,venue,start_price_jpy,photos,bid_deadline,engine_cc,transmission', { count: 'exact' }).gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true)
   const ap = activePref.value
   if (ap) {
     if (ap.brands?.length) query = query.in('brand', ap.brands.map((b: string) => b.toUpperCase()))
@@ -160,24 +161,29 @@ onMounted(async () => {
     brands.value = [...new Set((data || []).map((r: any) => r.brand))].sort() as string[]
   } catch (e: any) { err.value = e.message }
   await reload()
+  await listBack.restore()
 })
 </script>
 
 <style scoped>
 .filters { display: flex; flex-wrap: wrap; gap: 10px; }
-.cars { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-.car { padding: 0; overflow: hidden; color: inherit; text-decoration: none; transition: border-color .2s; display: flex; flex-direction: column; }
+.cars { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); row-gap: 0; }
+.car { padding: 0; overflow: hidden; color: inherit; text-decoration: none; transition: border-color .2s; display: grid; grid-template-rows: subgrid; grid-row: span 7; row-gap: 0; margin-bottom: 16px; }
 .car:hover { border-color: var(--ac); }
 .ph { aspect-ratio: 4 / 3; background: var(--s2); display: grid; place-items: center; color: var(--mu2); font-size: 12px; overflow: hidden; }
 .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.body { padding: 12px 14px 14px; }
+.body { display: contents; }
+.body > * { padding-left: 14px; padding-right: 14px; }
+.plabel { grid-row: 2; padding-top: 12px; } .price { grid-row: 3; } .mg { grid-row: 4; }
+.namerow { grid-row: 5; align-items: flex-start; } .car > .body > .row:last-child { grid-row: 7; padding-bottom: 14px; }
+.car > .body > .muted.small { grid-row: 6; padding-top: 4px; }
 .price { font-size: 19px; font-weight: 800; }
 .name { font-weight: 600; margin: 2px 0; }
 .ph { position: relative; }
 .star { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(0,0,0,.55); color: #fff; padding: 0; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .star :deep(svg) { width: 19px; height: 19px; }
 .star.on { color: var(--ac); }
-.namerow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 0; } .namerow .name { margin: 0; min-width: 0; }
+.namerow { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: 2px 0; } .namerow .name { margin: 0; min-width: 0; }
 .prefs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .rec { position: absolute; top: 8px; left: 8px; border: 0; border-radius: 16px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; font-weight: 600; padding: 6px 10px; cursor: pointer; }
 .rec.on { background: var(--ac); color: #000; }

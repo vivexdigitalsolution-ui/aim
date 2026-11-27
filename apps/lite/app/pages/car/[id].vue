@@ -51,17 +51,23 @@
           <template v-else>
             <label class="fld">Car price ({{ unit }})<NumInput v-model="bodyInput" /></label>
             <div class="muted small">{{ priceBasis }}</div>
+            <div class="ratebar">
+              <label class="muted small" for="rateIn">Exchange rate ¥1 = RM</label>
+              <NumInput id="rateIn" v-model="rateIn" decimal class="fee rateinp" aria-label="Exchange rate, RM for ¥1" />
+              <button class="btn ghost sm" title="Round the rate up to 3 decimals, e.g. 0.026465 becomes 0.027" @click="roundRate">Round up</button>
+              <button v-if="customRate" class="btn ghost sm" @click="customRate = null">Back to {{ rate }}</button>
+            </div>
             <table v-if="pricing.importMyr != null" class="spec">
-              <tr><td>Car price</td><td class="r">{{ rmf(pricing.bodyMyr) }}</td></tr>
-              <tr><td>Agent fee &amp; shipping</td><td class="r">{{ rmf(pricing.agentMyr) }}</td></tr>
-              <tr><td>Customs duty</td><td class="r">{{ rmf(Number(bd.duty_myr)) }}</td></tr>
+              <tr><td>Car price<span v-if="pricing.bodyJpy != null" class="yn">¥{{ Math.round(pricing.bodyJpy).toLocaleString('en-US') }}</span></td><td class="r feecell"><span>{{ sym }}</span><span class="amt">{{ amt(pricing.bodyMyr) }}</span></td></tr>
+              <tr><td>CIF<span v-if="pricing.agentJpy != null" class="yn">¥{{ Math.round(pricing.agentJpy).toLocaleString('en-US') }}</span></td><td class="r feecell"><span>{{ sym }}</span><span class="amt">{{ amt(pricing.agentMyr) }}</span></td></tr>
+              <tr><td>Customs duty</td><td class="r feecell"><span>{{ sym }}</span><span class="amt">{{ amt(dutyMyr) }}</span></td></tr>
               <tr><td>Port clearance</td><td class="r feecell"><span>RM</span><NumInput v-model="portIn" class="fee" aria-label="Port clearance in RM" /></td></tr>
-              <tr><td>Inland transfer</td><td class="r feecell"><span>RM</span><NumInput v-model="inlandIn" class="fee" aria-label="Inland transfer in RM" /></td></tr>
+              <tr><td>Carrier fee</td><td class="r feecell"><span>RM</span><NumInput v-model="inlandIn" class="fee" aria-label="Carrier fee in RM" /></td></tr>
               <tr><td>AP fee</td><td class="r feecell"><span>RM</span><NumInput v-model="apFeeIn" class="fee" aria-label="AP fee in RM" /></td></tr>
-              <tr class="sum"><td><b>Import price</b></td><td class="r"><b>{{ rmf(pricing.importMyr) }}</b></td></tr>
+              <tr class="sum"><td><b>Import price</b></td><td class="r feecell"><span>{{ sym }}</span><b class="amt">{{ amt(pricing.importMyr) }}</b></td></tr>
             </table>
             <div class="feebar">
-              <span class="muted small">Port, inland and AP fee are yours to change: the import price recounts as you type.</span>
+              <span class="muted small">Port, carrier fee and AP fee are yours to change: the import price recounts as you type.</span>
               <span class="feeacts">
                 <button v-if="feesChanged" class="btn ghost sm" @click="resetFees">Reset</button>
                 <button v-if="!isStaff && feesChanged" class="btn sm" :disabled="feeBusy" @click="saveFees">Save as my default</button>
@@ -74,7 +80,7 @@
               <div><b>{{ docket.model }}</b> <span class="muted small">{{ docket.cc ? docket.cc + ' cc' : '' }} · edition {{ docket.year }}</span></div>
               <div v-if="dline?.jpy != null" class="muted small">Customs value ¥{{ dline.jpy.toLocaleString('en-US') }} for this age of car</div>
             </div>
-            <p class="muted small" style="margin-top: 8px">An estimate at ¥1 = RM {{ rate }}. It does not include your own prep or margin.</p>
+            <p class="muted small" style="margin-top: 8px">An estimate at ¥1 = RM {{ rateUsed }}. It does not include your own prep or margin.</p>
           </template>
         </div>
 
@@ -126,7 +132,7 @@
 
 <script setup lang="ts">
 import { watch as vueWatch } from 'vue'
-import { fmtMyt, offerPricing, docketLine, BID_STEP, type Docket, closesInfo, closingTimeText, isPlaceholderDeadline } from '@aim/core'
+import { fmtMyt, offerPricing, calcDuty, type DutyRate, docketLine, BID_STEP, type Docket, closesInfo, closingTimeText, isPlaceholderDeadline } from '@aim/core'
 
 const db = useDb()
 const route = useRoute()
@@ -143,13 +149,45 @@ async function star() { try { await watch.toggle(car.value.id) } catch (e: any) 
 const recBid = ref<{ price_jpy: number; sales: number; basis: string } | null>(null), bd = ref<any>(null), costDone = ref(false)
 const features = ref<any[]>([])
 const selfCalc = ref(false)
-const bodyInput = ref(0), priceBasis = ref('')
+const bodyJpy = ref(0), priceBasis = ref('')      // the car price is kept in YEN, so switching RM / ¥ never changes it
+const customRate = ref<number | null>(null)      // a rate typed in the breakdown (e.g. the rate you really pay); empty = the live rate
+const rateUsed = computed(() => (customRate.value && customRate.value > 0 ? customRate.value : rate.value))
+const rateIn = computed<number | null>({ get: () => rateUsed.value || null, set: (v) => { customRate.value = v && v > 0 && v !== rate.value ? v : null } })
+const roundRate = () => { rateIn.value = Math.ceil(rateUsed.value * 1000 - 1e-9) / 1000 }      // 0.026465 -> 0.027
+const bodyInput = computed<number | null>({
+  get: () => (bodyJpy.value > 0 ? (cur.value === 'JPY' ? Math.round(bodyJpy.value) : Math.round(bodyJpy.value * rateUsed.value)) : null),
+  set: (v) => { bodyJpy.value = !v ? 0 : cur.value === 'JPY' ? v : rateUsed.value > 0 ? v / rateUsed.value : 0 },
+})
+// Customs duty with a typed rate: the docket (yen) is converted at the rate, loaded and added to the standard fare, so the duty is NOT in proportion to the rate.
+// The customs value is worked out at the live rate and at the typed rate with the same rules as the calculator; the duty (customs value x the car's own multiplier) follows it.
+const dutyRef = ref<{ rates: DutyRate[]; currencies: any[] } | null>(null)
+vueWatch(customRate, async (v) => {
+  if (!v || dutyRef.value) return
+  try { const { data } = await db.rpc('car_duty_reference'); if (data) dutyRef.value = { rates: (data.rates || []).map((r: any) => ({ ...r, multiplier: Number(r.multiplier) })), currencies: data.currencies || [] } } catch { /* the duty then stays at the live rate */ }
+})
+const dutyMyr = computed(() => {
+  if (!bd.value) return null
+  const base = Number(bd.value.duty_myr), d = docket.value, c = car.value, ref = dutyRef.value
+  if (!customRate.value || !(rate.value > 0) || !d || !c || !ref || (d.currency_code && d.currency_code !== 'JPY')) return base
+  // the registration date that gives the same age the saved duty was worked out with (the sheet's month is sometimes unreadable, the age is always saved)
+  const age = bd.value.age_months, t = new Date().getFullYear() * 12 + new Date().getMonth() - Number(age)
+  const year = age != null ? Math.floor(t / 12) : c.first_reg_year || c.mfg_year, month = age != null ? (t % 12) + 1 : c.mfg_month || c.first_reg_month
+  if (!year || !month) return base
+  const standardFare = ref.currencies.find((x: any) => x.code === (d.currency_code || 'JPY'))?.standard_fare_myr ?? undefined
+  const at = (r: number, vehicleType: 'car' | 'non_car') => calcDuty({ docket: d, mfgYear: year, mfgMonth: month, rate: r, rates: ref.rates, standardFare, vehicleType, cc: d.cc ? undefined : c.engine_cc || undefined }).dutyMyr
+  // the saved duty was worked out for this car's own vehicle type (Saloon or Not): take the type whose duty at the live rate is closest to it, then work the duty out afresh at the typed rate
+  const types = (['car', 'non_car'] as const).map((t) => ({ live: at(rate.value, t), typed: at(customRate.value!, t) })).filter((x) => x.live != null && x.typed != null)
+  if (!types.length) return base
+  return types.sort((a, b) => Math.abs(a.live! - base) - Math.abs(b.live! - base))[0]!.typed
+})
 const money2 = (jpy: number) => (cur.value === 'JPY' ? yen(jpy) : rm(jpy) + ' · ' + yen(jpy))
 const rmf = (n: number | null | undefined) => fmtMoney(n)
 const num = (v: unknown) => (v === null || v === undefined ? null : Number(v))
 const docket = computed<Docket | null>(() => (bd.value?.docket ? { ...bd.value.docket, amt_12m_24m: num(bd.value.docket.amt_12m_24m), amt_24m_36m: num(bd.value.docket.amt_24m_36m), amt_36m_48m: num(bd.value.docket.amt_36m_48m), amt_48m_60m: num(bd.value.docket.amt_48m_60m), amt_60m_plus: num(bd.value.docket.amt_60m_plus) } : null))
 const dline = computed(() => (docket.value && car.value ? docketLine(docket.value, car.value.mfg_year, car.value.mfg_month || car.value.first_reg_month) : null))
-// port clearance, inland transfer and AP fee (RM): start from the AP holder's own default (or the team's), can be changed here and saved
+const sym = 'RM'      // the breakdown is always in RM: the RM / ¥ switch at the top only changes the Car price box
+const amt = (n: number | null | undefined) => (n == null ? '–' : Math.round(n).toLocaleString('en-US'))      // the number alone: the RM sits in its own column so every line lines up
+// port clearance, carrier fee and AP fee (RM): start from the AP holder's own default (or the team's), can be changed here and saved
 const portIn = ref<number | null>(0), inlandIn = ref<number | null>(0), apFeeIn = ref<number | null>(0)
 const feeBusy = ref(false), feeMsg = ref(''), feeOk = ref(false)
 const feesChanged = computed(() => !!bd.value && (Number(portIn.value || 0) !== Number(bd.value.port_myr) || Number(inlandIn.value || 0) !== Number(bd.value.inland_myr) || Number(apFeeIn.value || 0) !== Number(bd.value.ap_fee_myr)))
@@ -161,22 +199,26 @@ async function saveFees() {
   if (!error) bd.value = { ...bd.value, port_myr: Number(portIn.value || 0), inland_myr: Number(inlandIn.value || 0), ap_fee_myr: Number(apFeeIn.value || 0) }
   feeBusy.value = false
 }
-const pricing = computed(() => offerPricing({ historyJpy: bodyInput.value > 0 && (cur.value === 'JPY' || rate.value > 0) ? (cur.value === 'JPY' ? Math.round(bodyInput.value) : Math.round(bodyInput.value / rate.value)) : null, rate: rate.value, dutyMyr: bd.value ? Number(bd.value.duty_myr) : null, portMyr: Number(portIn.value || 0), inlandMyr: Number(inlandIn.value || 0), apFeeMyr: Number(apFeeIn.value || 0) }))
+const pricing = computed(() => offerPricing({ historyJpy: bodyJpy.value > 0 ? Math.round(bodyJpy.value) : null, rate: rateUsed.value, dutyMyr: dutyMyr.value, portMyr: Number(portIn.value || 0), inlandMyr: Number(inlandIn.value || 0), apFeeMyr: Number(apFeeIn.value || 0) }))
 function useSuggested() { if (recBid.value) bidInput.value = fromJpy(recBid.value.price_jpy) }
 // switching RM / yen converts what is already typed, so the same bid and price stay the same
 vueWatch(cur, (now, was) => {
   const toJpy = (v: number) => (was === 'JPY' ? v : rate.value > 0 ? v / rate.value : 0)
   const conv = (v: number | null, step: number) => { if (!v) return v; const jpy = toJpy(v); return now === 'JPY' ? Math.round(jpy / step) * step : Math.round((jpy * rate.value) / 1000) * 1000 }
   bidInput.value = conv(bidInput.value, BID_STEP)
-  bodyInput.value = conv(bodyInput.value, 1000) || 0
 })
 async function loadCost(lot: any) {
   const [r, b] = await Promise.all([db.rpc('recommended_bid', { p_lot_id: lot.id }), db.rpc('ap_lot_breakdown', { p_lot_id: lot.id })])
   if (!r.error && r.data) recBid.value = r.data
-  if (!b.error && b.data) { bd.value = b.data; resetFees() }
+  if (!b.error && b.data) {
+    bd.value = b.data
+    const lf = (await db.rpc('import_fees_lite')).data      // lite has its own shared defaults (0 until staff set them); the dealer's own saved figures still win
+    if (lf) bd.value = { ...bd.value, port_myr: lf.effective.port_myr, inland_myr: lf.effective.inland_myr, ap_fee_myr: lf.effective.ap_fee_myr }
+    resetFees()
+  }
   costDone.value = true
   const base = recBid.value?.price_jpy || (lot.start_price_jpy > 0 ? lot.start_price_jpy : 0)
-  bodyInput.value = base ? fromJpy(base) : 0
+  bodyJpy.value = base || 0
   priceBasis.value = recBid.value ? '(the suggested bid; change it to try another price)' : lot.start_price_jpy > 0 ? '(the starting price; change it to try another price)' : '(type the price you expect)'
 }
 const car = ref<any>(null), open = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
@@ -259,7 +301,8 @@ onMounted(async () => {
 .sheet { width: 100%; border-radius: 8px; margin-top: 10px; }
 .price { font-size: 28px; font-weight: 800; margin-top: 4px; }
 .fld { display: grid; gap: 5px; color: var(--mu); font-size: 13px; margin-top: 10px; } .fld input { width: 100%; }
-.feecell { white-space: nowrap; } .feecell span { color: var(--mu); margin-right: 6px; }
+.amt { display: inline-block; width: 110px; text-align: right; padding-right: 9px; box-sizing: border-box; } .feecell { white-space: nowrap; } .feecell span { color: var(--mu); margin-right: 6px; } .ratebar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 4px; } .rateinp { width: 120px; }
+.yn { margin-left: 8px; font-size: 12.5px; color: var(--mu2); } .feecell .amt { color: var(--tx); margin-right: 0; }
 .fee { width: 110px; height: 34px; text-align: right; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; }
 .feebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 8px; } .feeacts { display: inline-flex; gap: 8px; }
 .spec { width: 100%; border-collapse: collapse; margin-top: 8px; } .spec td { padding: 6px 0; border-bottom: 1px solid var(--line); } .spec td:first-child { color: var(--mu); width: 42%; }

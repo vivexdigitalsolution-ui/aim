@@ -23,7 +23,7 @@ export function useMarginBoard() {
   const db = useDb()
   const { isStaff } = useAuth()
   const { load: loadRef } = useReference()
-  const fees = useState('margin-fees', () => ({ portMyr: DEFAULT_PORT_MYR, inlandMyr: DEFAULT_INLAND_MYR, apFeeMyr: DEFAULT_AP_FEE_MYR }))
+  const fees = useState('margin-fees', () => ({ portMyr: 0, inlandMyr: 0, apFeeMyr: 0 }))
   const lots = useState<BoardLot[]>('margin-lots', () => [])
   const rate = useState<number>('margin-rate', () => 0)
   const marketAsOf = useState<string | null>('margin-asof', () => null)
@@ -39,14 +39,14 @@ export function useMarginBoard() {
       const ref = await loadRef()
       rate.value = ref.fx['JPY']?.rate || 0
       // the Offer report's own settings, so staff see the same numbers as the report
-      const pr = await db.from('calc_presets').select('preset_key,amount').in('preset_key', ['offer_port_myr', 'offer_inland_myr', 'offer_ap_fee_myr'])
+      const pr = await db.from('calc_presets').select('preset_key,amount').in('preset_key', ['lite_port_myr', 'lite_inland_myr', 'lite_ap_fee_myr'])
       const g = (k: string) => Number((pr.data || []).find((r: any) => r.preset_key === k)?.amount)
-      fees.value = { portMyr: g('offer_port_myr') >= 0 ? g('offer_port_myr') : DEFAULT_PORT_MYR, inlandMyr: g('offer_inland_myr') >= 0 ? g('offer_inland_myr') : DEFAULT_INLAND_MYR, apFeeMyr: g('offer_ap_fee_myr') >= 0 ? g('offer_ap_fee_myr') : DEFAULT_AP_FEE_MYR }
+      fees.value = { portMyr: g('lite_port_myr') >= 0 ? g('lite_port_myr') : 0, inlandMyr: g('lite_inland_myr') >= 0 ? g('lite_inland_myr') : 0, apFeeMyr: g('lite_ap_fee_myr') >= 0 ? g('lite_ap_fee_myr') : 0 }
     } else {
       const r = await db.rpc('ap_jpy_rate')
       if (r.error) throw r.error
       rate.value = Number(r.data) || 0
-      fees.value = { portMyr: 0, inlandMyr: 0, apFeeMyr: DEFAULT_AP_FEE_MYR }   // port + inland are inside the one cost number the server gives an AP
+      fees.value = { portMyr: 0, inlandMyr: 0, apFeeMyr: 0 }   // port + inland are inside the one cost number the server gives an AP
     }
 
     const open: any[] = []

@@ -7,14 +7,14 @@
     <div v-if="loading" class="muted">Loading ...</div>
     <div v-else-if="!cars.length" class="card muted">Nothing starred yet. <NuxtLink to="/cars" class="ac">Browse the cars</NuxtLink> and press the star on the ones you like.</div>
     <div v-else class="grid cars">
-      <NuxtLink v-for="c in cars" :key="c.id" :to="`/cars/${c.id}`" class="card car">
+      <NuxtLink v-for="c in cars" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/cars/${c.id}`" class="card car">
         <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /></div>
         <div style="min-width: 0">
           <b>{{ c.brand }} {{ c.model }}</b>
           <div class="muted small">{{ [c.mfg_year, c.grade, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.venue].filter(Boolean).join(' · ') }}</div>
           <div class="small" style="margin-top: 4px"><span class="chip" :class="chipCls(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span> <span class="ac">{{ rm(c.start_price_jpy) }}</span></div>
         </div>
-        <button class="btn ghost sm" title="Remove from the watchlist" @click.prevent="remove(c.id)"><StarIcon filled style="display: inline-block; vertical-align: -0.2em; margin-right: 4px" />Remove</button>
+        <button class="btn ghost sm" title="Remove from the watchlist" @click.prevent="remove(c.id, !!c.op)"><StarIcon filled style="display: inline-block; vertical-align: -0.2em; margin-right: 4px" />Remove</button>
       </NuxtLink>
     </div>
     <p v-if="gone" class="muted small" style="margin-top: 12px">{{ gone }} starred car{{ gone === 1 ? ' has' : 's have' }} already closed and left the list.</p>
@@ -26,7 +26,7 @@ import { timeLeft, closesInfo } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
-const { ids, load, toggle } = useWatch()
+const { ids, opIds, load, toggle } = useWatch()
 const { loadRate, rm } = useRate()
 const cars = ref<any[]>([]), loading = ref(true), err = ref(''), gone = ref(0)
 const left = (iso: string) => timeLeft(iso, now.value).label
@@ -41,10 +41,16 @@ async function show() {
     if (error) throw error
     out.push(...(data || []))
   }
-  cars.value = out.sort((a, b) => a.bid_deadline.localeCompare(b.bid_deadline))
-  gone.value = ids.value.length - cars.value.length
+  // One price cars the dealer starred (their own table, migration 58)
+  const ops: any[] = []
+  for (let i = 0; i < opIds.value.length; i += 100) {
+    const { data } = await db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mileage_km,venue,photos,price_jpy,deadline').in('id', opIds.value.slice(i, i + 100)).gt('deadline', new Date().toISOString())
+    ops.push(...(data || []).map((r: any) => ({ ...r, op: true, grade: r.auction_grade, start_price_jpy: r.price_jpy, bid_deadline: r.deadline })))
+  }
+  cars.value = [...out, ...ops].sort((a, b) => a.bid_deadline.localeCompare(b.bid_deadline))
+  gone.value = ids.value.length + opIds.value.length - cars.value.length
 }
-async function remove(id: string) { try { await toggle(id); cars.value = cars.value.filter((c) => c.id !== id) } catch (e: any) { err.value = e.message } }
+async function remove(id: string, op = false) { try { await toggle(id, op); cars.value = cars.value.filter((c) => c.id !== id) } catch (e: any) { err.value = e.message } }
 onMounted(async () => { try { await loadRate().catch(() => {}); await show() } catch (e: any) { err.value = e.message } finally { loading.value = false } })
 </script>
 

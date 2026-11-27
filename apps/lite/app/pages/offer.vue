@@ -1,7 +1,7 @@
 <template>
   <div>
     <h1>Offer report</h1>
-    <p class="sub">The cars you picked with <b>＋ Recommend</b> on the Cars page. Send this list to AP holders who are not our customers yet: each car shows the body price, agent fee and shipping, and the import price. They add their own margin.</p>
+    <p class="sub">The cars you picked with <b>＋ Recommend</b> on the Cars page. Send this list to AP holders who are not our customers yet: each car shows the body price, the CIF, and the import price. They add their own margin.</p>
 
     <div v-if="err" class="err" style="margin-bottom: 10px">{{ err }}</div>
     <div v-if="msg" class="okmsg" style="margin-bottom: 10px">{{ msg }}</div>
@@ -15,7 +15,7 @@
         <button class="btn ghost" @click="printPage">Print / save as PDF</button>
         <button class="btn ghost" :disabled="busy" @click="saveBatch">Save this offer</button>
         <button class="btn ghost" :disabled="busy" @click="clearAll">Clear the list</button>
-        <span class="muted small">¥1 = RM {{ board.rate.value }} · port RM {{ board.fees.value.portMyr }} + inland RM {{ board.fees.value.inlandMyr }} + AP fee RM {{ board.fees.value.apFeeMyr }}</span>
+        <span class="muted small">¥1 = RM {{ board.rate.value }} · port RM {{ board.fees.value.portMyr }} + carrier fee RM {{ board.fees.value.inlandMyr }} + AP fee RM {{ board.fees.value.apFeeMyr }}</span>
       </div>
 
       <div class="grid offer">
@@ -26,7 +26,7 @@
             <div class="muted small">{{ [r.lot.mfg_year, r.lot.mileage_km != null ? r.lot.mileage_km.toLocaleString('en-US') + ' km' : null, r.lot.grade ? 'Grade ' + r.lot.grade : null, r.lot.venue].filter(Boolean).join(' · ') }}</div>
             <table v-if="r.p.importMyr != null" class="spec">
               <tr><td>Body price</td><td class="r">RM {{ myr(r.p.bodyMyr) }}</td></tr>
-              <tr><td>Agent fee &amp; shipping</td><td class="r">RM {{ myr(r.p.agentMyr) }}</td></tr>
+              <tr><td>CIF</td><td class="r">RM {{ myr(r.p.agentMyr) }}</td></tr>
               <tr class="sum"><td><b>Import price</b></td><td class="r"><b>RM {{ myr(r.p.importMyr) }}</b></td></tr>
             </table>
             <div v-else class="warnbox">No price yet: {{ r.why }}</div>
@@ -76,7 +76,7 @@ async function clearAll() {
 }
 function text() {
   const ok = rows.value.filter((r) => r.p.importMyr != null)
-  return [title.value, '', ...ok.map((r, i) => `${i + 1}. ${r.lot.brand} ${r.lot.model} ${r.lot.mfg_year || ''}${r.lot.grade ? ' · grade ' + r.lot.grade : ''}${r.lot.mileage_km != null ? ' · ' + r.lot.mileage_km.toLocaleString('en-US') + ' km' : ''}\n   Body RM ${myr(r.p.bodyMyr)} + agent & shipping RM ${myr(r.p.agentMyr)} = import price RM ${myr(r.p.importMyr)}`), '', 'Import price includes duty, port clearance, inland transfer and AP fee. Add your own margin.'].join('\n')
+  return [title.value, '', ...ok.map((r, i) => `${i + 1}. ${r.lot.brand} ${r.lot.model} ${r.lot.mfg_year || ''}${r.lot.grade ? ' · grade ' + r.lot.grade : ''}${r.lot.mileage_km != null ? ' · ' + r.lot.mileage_km.toLocaleString('en-US') + ' km' : ''}\n   Body RM ${myr(r.p.bodyMyr)} + CIF RM ${myr(r.p.agentMyr)} = import price RM ${myr(r.p.importMyr)}`), '', 'Import price includes duty, port clearance, carrier fee and AP fee. Add your own margin.'].join('\n')
 }
 async function copyText() { try { await navigator.clipboard.writeText(text()); copied.value = true; setTimeout(() => (copied.value = false), 2000) } catch { err.value = 'Could not copy. Select the cars and copy by hand.' } }
 function printPage() { window.print() }

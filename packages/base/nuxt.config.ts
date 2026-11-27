@@ -4,6 +4,7 @@ export default defineNuxtConfig({
   ssr: false,
   runtimeConfig: {
     public: {
+      appKind: 'full',
       supabaseUrl: process.env.NUXT_PUBLIC_SUPABASE_URL || '',
       supabaseKey: process.env.NUXT_PUBLIC_SUPABASE_KEY || '',
       // Google FCM (phone and browser notifications): Firebase console > Project settings > Your apps (Web). Empty = notifications show as "not set up yet".
