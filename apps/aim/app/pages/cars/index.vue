@@ -41,6 +41,7 @@
           <span class="gl tm" :class="glassCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span>
           <button v-if="isStaff && !c.op" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
           <button class="star" :class="{ on: watch.has(c.id), low: isStaff && !c.op }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id, !!c.op)"><StarIcon :filled="watch.has(c.id)" /></button>
+          <span v-if="impOf(c)?.kind === 'amt'" class="gl estchip">Est. RM {{ Math.round(impOf(c)!.myr!).toLocaleString('en-US') }}</span>
           <div v-if="impOf(c)?.kind === 'amt'" class="estov" aria-hidden="true">
             <span class="el">Est. import price</span>
             <b class="ev">RM {{ Math.round(impOf(c)!.myr!).toLocaleString('en-US') }}</b>
@@ -337,7 +338,8 @@ onMounted(async () => {
   .car:hover .estov > * { opacity: 1; transform: none; transition: opacity .3s ease .16s, transform .4s cubic-bezier(.215, .61, .355, 1) .16s; }
   .car:hover .estov > .ev { transition-delay: .24s; } .car:hover .estov > .es { transition-delay: .32s; }
 }
-@media (hover: none) { .estov { display: none; } }
+.estchip { display: none; }
+@media (hover: none) { .estov { display: none; } .estchip { display: block; left: auto; right: 8px; bottom: 8px; max-width: 52%; color: var(--ac2); font-weight: 700; } .gl.tm { max-width: 44%; } }
 .featbtn { display: inline-flex; align-items: center; gap: 6px; } .featbtn svg { width: 15px; height: 15px; } .featbtn.on { border-color: var(--ac); color: var(--ac2); }
 .fx { display: none; background: var(--ac); color: #1a0b05; border-radius: 999px; width: 18px; height: 18px; font-size: 10px; font-weight: 800; place-items: center; line-height: 1; }
 .featbtn:hover .fx, .fx:focus { display: inline-grid; } .featbtn:hover .fcount, .featbtn:has(.fx:focus) .fcount { display: none; }
@@ -354,6 +356,6 @@ onMounted(async () => {
 .cur button.on { background: var(--ac); color: #000; }
 .plabel { font-size: 11.5px; color: var(--mu); line-height: 1.2; }
 .mg { font-size: 13px; font-weight: 700; margin: 2px 0; }
-@media (max-width: 760px) { .cars { grid-template-columns: 1fr 1fr; gap: 10px; } .filters input, .filters select { flex: 1 1 140px; } }
+@media (max-width: 760px) { .pills { flex-wrap: wrap; } .cars { grid-template-columns: 1fr 1fr; gap: 10px; } .filters input, .filters select { flex: 1 1 140px; } }
 @media (max-width: 460px) { .cars { grid-template-columns: 1fr; } }
 </style>

@@ -55,7 +55,7 @@ onMounted(async () => { try { await loadRate().catch(() => {}); await show() } c
 </script>
 
 <style scoped>
-.cars { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.cars { grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr)); }
 .car { display: grid; grid-template-columns: 92px 1fr auto; gap: 12px; align-items: center; text-decoration: none; color: inherit; }
 .ph { border-radius: 8px; background: var(--s2); aspect-ratio: 4 / 3; overflow: hidden; } .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
 </style>

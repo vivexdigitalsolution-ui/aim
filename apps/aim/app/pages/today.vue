@@ -92,7 +92,7 @@ onMounted(async () => { try { await load(); apFeeMyr.value = fees.value.apFeeMyr
 .inp .r { text-align: right; padding-right: 30px; }
 .setcard { margin-bottom: 14px; display: grid; gap: 10px; } .setcard .note { margin: 0; }
 .ttl { margin: 0 0 2px; font-size: 17px; line-height: 1.25; }
-.cars { grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); }
+.cars { grid-template-columns: repeat(auto-fill, minmax(min(420px, 100%), 1fr)); }
 .car { display: grid; grid-template-columns: 150px 1fr; gap: 12px; color: inherit; text-decoration: none; transition: border-color .2s; }
 .car:hover { border-color: var(--ac); }
 .ph { border-radius: 10px; background: var(--s2); display: grid; place-items: center; color: var(--mu2); font-size: 11px; min-height: 90px; overflow: hidden; align-self: start; }

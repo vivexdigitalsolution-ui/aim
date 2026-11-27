@@ -287,7 +287,14 @@ onMounted(async () => {
 .review { border-color: var(--warn); background: var(--warnbg); color: var(--warn); } .review .small { margin-top: 4px; }
 .toprow { display: flex; justify-content: space-between; align-items: stretch; gap: 12px; } .toprow > div:first-child { min-width: 0; } .estb { flex: none; }
 .spec.bk td:first-child { width: auto; white-space: nowrap; } .spec.bk td.r { width: 1%; white-space: nowrap; }
-@media (max-width: 400px) { .spec.bk td:first-child { white-space: normal; } }
+.two > div { min-width: 0; }
+@media (max-width: 560px) {
+  .spec.bk td:first-child { white-space: normal; }
+  .toprow { flex-wrap: wrap; } .price { font-size: 24px; }
+  .estb { width: 100%; flex-direction: row; justify-content: space-between; align-items: center; }
+  .ratebar { flex-wrap: wrap; } .inbox.wide.grow { flex: 1 1 100%; } .ratebar .btn { width: 100%; }
+  .feebar { flex-direction: column; align-items: stretch; } .feeacts { justify-content: flex-end; }
+}
 .gicon { width: 15px; height: 15px; flex: none; }
 .yn { margin-left: 8px; font-size: 12.5px; color: var(--mu2); }
 .rmsmall { font-size: 14px; font-weight: 500; }
