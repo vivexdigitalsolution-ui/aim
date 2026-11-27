@@ -1,10 +1,10 @@
 // The car "poster" (a promo slide for WhatsApp / social media) of one auction car, drawn on a canvas so the same picture can be saved as a JPG, copied or printed to PDF.
-// Ported from CarzNexus (Nexus > Sourcing > Recon > Poster); the colours are PAW-J blue here (the ACCENT constants below).
+// Ported from CarzNexus (Nexus > Sourcing > Recon > Poster), for PublicGo: the PublicGo orange, logo, email and website of the CarzNexus poster.
 //
 //   title    year brand model (the page's own title)          photos   3 x 3 grid: the cover takes columns 1-2 / rows 1-2, five more fill the rest
 //   specs    year, mileage, engine / fuel, transmission / drive, colour, lot
 //   note     selling points (typed)                              price    A Slide: MARKET PRICE struck through, then OUR PRICE with the saving; B Slide: one SELLING PRICE
-//   footer   one option: show the PAW-J footer with the phone / WhatsApp number
+//   footer   one option: show the PublicGo footer: logo, message us, the phone / WhatsApp number, email and website
 
 export interface PosterCar {
   title: string                 // e.g. LEXUS NX350H F SPORT 2.5 (A) 2025
@@ -18,25 +18,26 @@ export interface PosterCar {
   transmission?: string | null
   drive?: string | null
   color?: string | null
-  lotRef?: string | null        // shown as LOT in the spec grid
+  chassis?: string | null       // shown as CHASSIS in the spec grid (typed by the user; filled from the sheet when it is known)
 }
 
 export interface PosterOptions {
   kind: 'b2c' | 'b2b'           // 'b2c' = A Slide (customer: market price, our price, saving, footer); 'b2b' = B Slide (broker: one selling price, no footer)
-  footer: boolean               // the PAW-J footer with the phone number
+  footer: boolean               // the PublicGo footer: logo, message us, phone / WhatsApp, email and website
   note?: string                 // selling points, shown above the price
   marketPrice?: number | null   // RM, struck through on the A Slide when it is higher than the posting price
   postingPrice?: number | null  // RM, the price on the poster
   phone?: string                // WhatsApp / phone number shown in the footer
 }
 
-const SITE = 'www.paw-j.com', COMPANY = 'PAW-J'
+// PublicGo contact details (the same as the CarzNexus poster / PublicGo paper form); the logo is a copy kept in this app's public folder
+const SITE = 'www.publicgo.my', EMAIL = 'publicgomy.adv@gmail.com', COMPANY = 'PUBLICGO', LOGO_URL = '/publicgo/logo-landscape.svg'
 const W = 1080, PAD = 40, GAP = 10
 const CELL_W = (W - 2 * PAD - 2 * GAP) / 3
 const CELL_H = 245
 const GRID_H = 3 * CELL_H + 2 * GAP
-const ACCENT = '#3b8cf5', ACCENT_DARK = '#1f4f9a', INK = '#0a111a', PANEL = '#101b27', MUTED = '#9aa7b4'
-const BOX_1 = '#4c97f7', BOX_2 = '#2268b8', BOX_3 = '#164a8a'
+const ACCENT = '#f58a1f', ACCENT_DARK = '#c2530a', INK = '#0a111a', PANEL = '#101b27', MUTED = '#9aa7b4'
+const BOX_1 = '#ff9a2e', BOX_2 = '#f2780c', BOX_3 = '#c9560a'
 const FONT = '"Segoe UI", "Helvetica Neue", Arial, sans-serif'
 
 const rm = (n: number) => `RM ${Math.round(n).toLocaleString('en-MY')}`
@@ -91,7 +92,7 @@ const CELL_PHOTO = [0, 1, 3, 2, 5, 4]
 export async function renderPoster(d: PosterCar, opts: PosterOptions): Promise<HTMLCanvasElement> {
   const b2b = opts.kind === 'b2b'
   const footer = !b2b && opts.footer
-  const pics = await Promise.all(CELL_PHOTO.map((i) => loadImage(d.photos[i] || null)))
+  const [logo, ...pics] = await Promise.all([footer ? loadImage(LOGO_URL) : Promise.resolve(null), ...CELL_PHOTO.map((i) => loadImage(d.photos[i] || null))])
 
   // ── text ──
   const title = up(d.title) || 'CAR FOR SALE'
@@ -184,7 +185,7 @@ export async function renderPoster(d: PosterCar, opts: PosterOptions): Promise<H
     ['ENGINE / FUEL', [engine, up(d.fuel)].filter(Boolean).join(' / ') || '—'],
     ['TRANSMISSION / DRIVE', [up(d.transmission), up(d.drive)].filter(Boolean).join(' / ') || '—'],
     ['COLOUR', up(d.color) || '—'],
-    ['LOT', d.lotRef ? up(d.lotRef) : '—'],
+    ['CHASSIS', d.chassis ? up(d.chassis) : '—'],
   ]
   const sw = (W - 2 * PAD) / 3
   ctx.strokeStyle = ACCENT_DARK; ctx.lineWidth = 2; ctx.strokeRect(PAD + 1, specTop + 1, W - 2 * PAD - 2, specH - 2)
@@ -234,7 +235,7 @@ export async function renderPoster(d: PosterCar, opts: PosterOptions): Promise<H
     const x0 = cx - (pw + gap + nw) / 2
     ctx.textAlign = 'left'; ctx.fillText(text, x0, base)
     if (nego) {
-      ctx.font = `800 ${nSize}px ${FONT}`; ctx.letterSpacing = '3px'; ctx.fillStyle = '#e8f1ff'
+      ctx.font = `800 ${nSize}px ${FONT}`; ctx.letterSpacing = '3px'; ctx.fillStyle = '#fff3e0'
       ctx.fillText('NEGO', x0 + pw + gap, base); ctx.letterSpacing = '0px'
     }
     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0
@@ -268,25 +269,31 @@ export async function renderPoster(d: PosterCar, opts: PosterOptions): Promise<H
     else { ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; fitFont(ctx, 'ASK FOR PRICE', '900', 104, 44, 820); ctx.fillText('ASK FOR PRICE', W / 2, priceTop + 140) }
   }
 
-  // ── footer: the company name on the left, then "message us for details", the phone / WhatsApp number and the website ──
+  // ── footer: the PublicGo logo on the left, then "message us for details", the phone / WhatsApp number typed in the poster window, email and website ──
   if (footer) {
     ctx.fillStyle = '#05080c'; ctx.fillRect(0, footTop, W, FOOTER_H)
     ctx.fillStyle = ACCENT; ctx.fillRect(0, footTop, W, 4)
     const LOGO_W = 300
-    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'
-    fitFont(ctx, COMPANY, '800', 54, 24, LOGO_W)
-    ctx.fillText(COMPANY, PAD + LOGO_W / 2, footTop + FOOTER_H / 2 + 6)
-    ctx.fillStyle = MUTED; ctx.font = `600 15px ${FONT}`; ctx.letterSpacing = '4px'
-    ctx.fillText('PARTNER', PAD + LOGO_W / 2, footTop + FOOTER_H / 2 + 34); ctx.letterSpacing = '0px'
+    const area = { x: PAD, y: footTop + 22, w: LOGO_W, h: FOOTER_H - 44 }
+    if (logo) {
+      const sc = Math.min(area.w / logo.width, area.h / logo.height)
+      const lw = logo.width * sc, lh = logo.height * sc
+      ctx.drawImage(logo, area.x + (area.w - lw) / 2, area.y + (area.h - lh) / 2, lw, lh)
+    } else {
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'
+      fitFont(ctx, COMPANY, '800', 34, 18, area.w)
+      ctx.fillText(COMPANY, area.x + area.w / 2, footTop + FOOTER_H / 2 + 10)
+    }
     ctx.fillStyle = ACCENT_DARK; ctx.fillRect(PAD + LOGO_W + 28, footTop + 26, 2, FOOTER_H - 52)
     const tx = PAD + LOGO_W + 58, tw = W - PAD - tx
     const phone = (opts.phone ?? '').trim()
+    const contact = [EMAIL, SITE].filter(Boolean).join('    |    ')
     ctx.textAlign = 'left'
     ctx.fillStyle = '#fff'; ctx.font = `800 30px ${FONT}`; ctx.letterSpacing = '2px'
     ctx.fillText('MESSAGE US FOR DETAILS', tx, footTop + (phone ? 56 : 66)); ctx.letterSpacing = '0px'
     if (phone) { ctx.fillStyle = ACCENT; fitFont(ctx, phone, '800', 40, 22, tw); ctx.fillText(phone, tx, footTop + 102) }
-    ctx.fillStyle = '#d7dee6'; fitFont(ctx, SITE, '600', 21, 13, tw)
-    ctx.fillText(SITE, tx, footTop + (phone ? 134 : 108))
+    ctx.fillStyle = '#d7dee6'; fitFont(ctx, contact, '600', 21, 13, tw)
+    ctx.fillText(contact, tx, footTop + (phone ? 134 : 108))
   }
   void INK
   return canvas
