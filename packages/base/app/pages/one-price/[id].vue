@@ -15,7 +15,7 @@
           <h2>Auction sheet</h2>
           <a :href="car.sheet_url" target="_blank" rel="noopener"><img :src="car.sheet_url" class="sheet" loading="lazy" alt="Auction sheet" /></a>
         </div>
-        <PosterCard v-if="isLite && isStaff" :car="car" one-price :est="calc?.importMyr ?? null" style="margin-top: 14px; display: block" />
+        <PosterCard v-if="isLite && isStaff" :car="{ ...car, model: fullName, grade: car.auction_grade }" one-price :est="calc?.importMyr ?? null" style="margin-top: 14px; display: block" />
       </div>
 
       <div class="grid" style="align-content: start">
@@ -25,7 +25,7 @@
         </div>
         <div class="card">
           <div class="muted small">{{ car.venue }} · One price</div>
-          <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
+          <h1 style="margin-top: 4px">{{ car.brand }} {{ fullName }}</h1>
           <template v-if="isLite">
           <div class="toprow">
             <div v-if="car.price_jpy > 0 && calc?.importMyr != null">
@@ -80,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { fmtMytDateTime } from '@aim/core'
+import { fmtMytDateTime, trimmedName } from '@aim/core'
 
 const db = useDb()
 const route = useRoute()
@@ -99,6 +99,7 @@ const car = ref<any>(null), loading = ref(true), err = ref(''), pi = ref(0)
 const cur = ref<'RM' | 'JPY'>('RM')
 function setCur(c: 'RM' | 'JPY') { cur.value = c; try { localStorage.setItem('cars-currency', c) } catch { /* private mode */ } }
 const shown = (jpy: number) => (cur.value === 'JPY' ? '¥' + Math.round(jpy).toLocaleString('en-US') : rm(jpy))
+const fullName = computed(() => trimmedName(car.value?.model, car.value?.grade))      // "ALPHARD" + the trim "Z"
 const photos = computed<string[]>(() => (Array.isArray(car.value?.photos) ? car.value.photos : []))
 const feats = computed<any[]>(() => (Array.isArray(car.value?.features) ? car.value.features.filter((f: any) => f && f.label) : []))
 const specs = computed(() => {

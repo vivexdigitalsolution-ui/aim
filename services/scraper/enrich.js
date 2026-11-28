@@ -16,6 +16,7 @@
  *   node enrich.js --features      re-read only the cars that have no features read from the sheet (text match only, or none)
  *   node enrich.js --force         redo cars that were already done (the first ones by deadline: add --limit or --model)
  *   node enrich.js --force --model "GT-R"   redo only the cars whose model name contains this text
+ *   node enrich.js --source asnet --limit 3   only One price cars from this source (asnet or uss)
  *   node enrich.js --dry           show what it would do, change nothing, no AI call
  *
  * Needs ANTHROPIC_API_KEY in scraper/.env. Without it the run stops before touching anything.
@@ -35,7 +36,9 @@ const FORCE = process.argv.includes('--force') || FEATURES
 const DRY = process.argv.includes('--dry')
 const LIMIT = parseInt(arg('--limit') || '100', 10)
 const MODEL = arg('--model')
-const ONLY = (arg('--only') || '').toLowerCase().replace(/[^a-z]/g, '')       // '' = both
+const SOURCE = (arg('--source') || '').toLowerCase()                          // '' = both; asnet / uss = One price cars of that source only
+if (process.argv.includes('--source') && !['asnet', 'uss'].includes(SOURCE)) { console.log('--source needs asnet or uss'); process.exit(1) }
+const ONLY = SOURCE ? 'oneprice' : (arg('--only') || '').toLowerCase().replace(/[^a-z]/g, '')       // '' = both
 if (ONLY && !['bid', 'oneprice'].includes(ONLY)) { console.log('--only needs bid or oneprice'); process.exit(1) }
 
 // what a read fills in: same column names in lots and one_price_lots
@@ -92,6 +95,7 @@ async function onePriceRows(limit) {
   const now = new Date().toISOString()
   let q = supabase.from('one_price_lots').select('*')
   q = hasSource ? q.or(`deadline.gt."${now}",and(source.eq.asnet,deadline.is.null)`) : q.gt('deadline', now)
+  if (SOURCE) q = q.eq('source', SOURCE)
   q = q.order('deadline', { ascending: true, nullsFirst: false }).limit(limit)
   if (!FORCE) q = q.is('enriched_at', null)
   if (MODEL) q = q.ilike('model', '%' + MODEL + '%')
@@ -105,10 +109,11 @@ async function onePriceRows(limit) {
   return data
 }
 
-/** a One price row in the shape the sheet read expects */
-function asLot(o) {
+/** a One price row in the shape the sheet read expects. An ASNET car carries its trim in the name and is matched strictly (exact_only). */
+function asLot(o, ref) {
+  const strict = o.source === 'asnet'
   return {
-    id: o.id, brand: o.brand, model: o.model, maker_code: o.maker_code, car_code: o.car_code, model_code: o.model_code, grade: o.auction_grade, interior_grade: null,
+    id: o.id, brand: o.brand, model: strict ? ref.duty.trimmedName(o.model, o.grade) : o.model, exact_only: strict, maker_code: o.maker_code, car_code: o.car_code, model_code: o.model_code, grade: o.auction_grade, interior_grade: null,
     mfg_year: o.mfg_year, mfg_month: o.mfg_month, mileage_km: o.mileage_km, engine_cc: o.engine_cc, transmission: o.transmission, drive: o.drive, fuel: o.fuel,
     equipment: o.equipment, notes: o.grade ? `Variant (Japanese listing): ${o.grade}` : null, inspector_report: null, sheet_url: o.sheet_url, photos: o.photos, seats: o.seats, sales_points: null,
   }
@@ -134,7 +139,7 @@ async function copyFromBid(o) {
 
 async function enrichOnePrice(o, ref) {
   if (!FORCE && await copyFromBid(o)) { stats.copied++; return { copied: true } }
-  const r = await enrichLot({ lot: asLot(o), ref, ask: claude.ask, imageBlock: claude.imageBlock })
+  const r = await enrichLot({ lot: asLot(o, ref), ref, ask: claude.ask, imageBlock: claude.imageBlock })
   const dec = r.decided?.decision
   const up = await supabase.from('one_price_lots').update({
     ...r.patch, enriched_at: new Date().toISOString(), enrich_note: r.notes.join('; ') || null,

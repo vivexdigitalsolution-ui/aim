@@ -52,7 +52,7 @@ function dropGuesses(read) {
 }
 
 const READ_SYSTEM = `You read one used Japanese auction car for a Malaysian importer. You get the auction sheet image(s) and the scraped listing text.
-THE SHEET IS THE ONLY TRUTH. A value counts only when it is printed or written on the sheet (or in the scraped text). If a box is blank, not printed, cut off or cannot be read, the value is null (false or an empty list for flags). Never guess, assume, infer, estimate or fill in a value from what the model usually has, from the listing year, from a slash or a pattern, or from anything not shown. Example: the first-registration box shows "R5 / 月" with no month number: first_reg_month is null, not 5. Put the blank field in uncertain.
+THE SHEET IS THE ONLY TRUTH. A value counts only when it is printed or written on the sheet (or in the scraped text). If a box is blank, not printed, cut off or cannot be read, the value is null (false or an empty list for flags). Never guess, assume, infer, estimate or fill in a value from what the model usually has, from the listing year, from a slash or a pattern, or from anything not shown. Put a blank field in uncertain.
 Rules:
 - Only give a value you can read on the sheet or that is certain; otherwise null. Never guess a chassis code or a date. The ONE exception is the first-registration MONTH: see the rule below, a best guess is wanted there.
 - model_code is the full code with its prefix (3BA-AGH40W), not the chassis number.

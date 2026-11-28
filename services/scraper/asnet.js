@@ -31,6 +31,7 @@ const { readAllPages } = require('./lib/asnet/read')
 const { inspect } = require('./lib/asnet/inspect')
 const { codeMatches } = require('./lib/filters')
 const { saveCar, removeGone } = require('./lib/asnet/save')
+const { findPhotos, withoutRepeats, inGroups } = require('./lib/asnet/photos')
 
 const has = (n) => process.argv.includes(n)
 const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : null }
@@ -39,7 +40,8 @@ const MAX_PAGES = Number(arg('--pages') || 50)
 const MAX_CARS = Number(arg('--max-cars') || 0)      // 0 = no limit
 // sold cars are removed only in a run of the saved targets: a one-off search (--maker) may be narrower than what was saved before
 const REMOVES = has('--from-db') && !MAX_CARS
-const MAX_PHOTOS = Math.max(1, parseInt(process.env.MAX_PHOTOS || '5', 10))
+// ASNET has its own limit (MAX_PHOTOS in .env is for the USS pictures): by default every picture of the car is kept
+const MAX_PHOTOS = Math.max(1, parseInt(process.env.ASNET_MAX_PHOTOS || '60', 10))
 const OUT = path.join(__dirname, 'out')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -129,11 +131,19 @@ async function open() {
   return { browser, page }
 }
 
+/** @returns the picture, or null when it does not exist; any other trouble is tried three times, then thrown */
 async function fetchImg(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36', Referer: 'https://www.asnet.jp/' } })
-  if (res.status === 404) return null
-  if (!res.ok) throw new Error('HTTP ' + res.status)
-  return Buffer.from(await res.arrayBuffer())
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36', Referer: 'https://www.asnet.jp/' }, signal: AbortSignal.timeout(30000) })
+      if (res.status === 404) return null
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      return Buffer.from(await res.arrayBuffer())
+    } catch (e) {
+      if (attempt >= 3) throw e
+      await sleep(2000 * attempt)
+    }
+  }
 }
 
 /** true only when the photo host clearly says "not found"; a network error or any other answer keeps the saved photos */
@@ -141,7 +151,7 @@ async function isGone(url) {
   try { return (await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(15000) })).status === 404 } catch { return false }
 }
 
-/** Photos of one ASNET car: f front, r rear, i interior, then extras z..a; o = the auction sheet. Same URL pattern the old scraper confirmed. */
+/** All pictures of one ASNET car, found from its cover's link (lib/asnet/photos.js says how they are named). */
 async function photosFor(thumbUrl, lotKey, keepOnError) {
   const { uploadImage, deleteObjects, buildR2Key } = require('./lib/r2')
   const m = String(thumbUrl || '').match(/^https:\/\/img[ms]\.asnet2\.com\/ASDATA\/(\w+)\/[MS]\/(\w+)\/(\w+)[a-zA-Z]\.jpg$/)
@@ -150,16 +160,19 @@ async function photosFor(thumbUrl, lotKey, keepOnError) {
   const keys = [], photos = []
   let sheet = null
   const shrink = (b, w, q) => sharp(b).rotate().resize({ width: w, withoutEnlargement: true }).jpeg({ quality: q, mozjpeg: true }).toBuffer()
+  const small = (b) => sharp(b).rotate().resize(32, 32, { fit: 'fill' }).removeAlpha().toColourspace('srgb').raw().toBuffer()
+  const put = async (ending, data, width, quality) => {
+    const key = buildR2Key(lotKey, ending === 'o' ? 'sheet' : ending)
+    const up = await uploadImage(key, await shrink(data, width, quality))
+    keys.push(key)
+    return up.url
+  }
   try {
-    for (const s of ['o', 'f', 'r', 'i', ...'zyxwvutsrqpnmlkjhgedcba'.split('')]) {
-      if (s !== 'o' && photos.length >= MAX_PHOTOS) break
-      const buf = await fetchImg(`${base}${s}.jpg`)
-      if (!buf) continue
-      const key = buildR2Key(lotKey, s === 'o' ? 'sheet' : s)
-      const up = await uploadImage(key, await shrink(buf, s === 'o' ? 1600 : 1280, s === 'o' ? 80 : 72))
-      keys.push(key)
-      if (s === 'o') sheet = up.url; else photos.push(up.url)
-    }
+    const sheetData = await fetchImg(`${base}o.jpg`)
+    const found = (await withoutRepeats(await findPhotos((ending) => fetchImg(`${base}${ending}.jpg`)), small)).slice(0, MAX_PHOTOS)
+    // everything is downloaded before the first upload, so a failed download leaves storage untouched
+    if (sheetData) sheet = await put('o', sheetData, 1600, 80)
+    photos.push(...await inGroups(found, (p) => put(p.ending, p.data, 1280, 72)))
   } catch (e) { if (!keepOnError) await deleteObjects(keys); return { photos: [], sheet: null, keys: [], error: e.message } }
   return { photos, sheet, keys, error: photos.length ? null : 'no photos found' }
 }

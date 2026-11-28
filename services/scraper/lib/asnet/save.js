@@ -7,7 +7,8 @@
  * The rules:
  *   - only a row marked source = 'asnet' is ever changed or deleted. A new car is INSERTED (never upserted).
  *   - a saved car only gets its listing fields refreshed: what the sheet reading filled in (year, mileage, chassis ...) is left alone.
- *   - saved photos are fetched again when the photo host answers 404 for the cover or the auction sheet (old photos are removed from storage).
+ *   - saved photos are fetched again when the photo host answers 404 for the cover or the auction sheet (old photos are removed from storage),
+ *     or when the saved list holds one picture twice (saved by the earlier reading, which also missed pictures).
  *   - the same lot number showing a clearly different car is a new car: the old row goes (with its favourites and poster).
  */
 
@@ -44,7 +45,8 @@ async function saveCar({ db, car, write, fetchPhotos, isGone, removePhotos }) {
   const old = owner === 'ours' ? found.data : null
   const replace = !!old && isOtherCar(old, car)
   const hasPhotos = !replace && Array.isArray(old?.photos) && old.photos.length > 0
-  const repair = hasPhotos && (await isGone(old.photos[0]) || (!!old.sheet_url && await isGone(old.sheet_url)))
+  const doubled = hasPhotos && new Set(old.photos).size < old.photos.length
+  const repair = hasPhotos && (doubled || await isGone(old.photos[0]) || (!!old.sheet_url && await isGone(old.sheet_url)))
 
   let fresh = null
   if (!hasPhotos || repair) {

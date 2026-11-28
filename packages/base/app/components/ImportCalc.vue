@@ -31,7 +31,7 @@
         <span v-if="vtNote" class="muted small">{{ vtNote }}</span>
       </div>
 
-      <label v-if="!knownMonth" class="f">Month first registered (the sheet does not say)
+      <label v-if="!knownMonth" class="f">Month first registered (not filled in yet: check the sheet)
         <select v-model.number="monthPick"><option :value="0">Choose the month</option><option v-for="m in 12" :key="m" :value="m">{{ m }}</option></select>
       </label>
       <div v-for="w in duty?.warnings || []" :key="w" class="warnbox" style="margin-top: 8px">{{ w }}</div>

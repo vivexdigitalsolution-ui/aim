@@ -2,8 +2,9 @@
 
 /**
  * lib/asnet/inspect.js — "node asnet.js --inspect": records how the real result page behaves, so the reading rules are written from facts.
- * It only reads: one search, one press of Next. Saved into out/asnet-inspect/ (not committed):
+ * It only reads: one search, one press of Next, one car opened. Saved into out/asnet-inspect/ (not committed):
  *   report.json   how many rows there are second by second (waiting, then scrolling), the page buttons, and what Next set off
+ *   detail.html   the opened car's window (its photo links are also listed in report.json under "detail")
  *   page.html     the result page, without the top bar (member name) and without form tokens or typed values
  *   scripts/      the site's own scripts, which say what the buttons do
  */
@@ -78,6 +79,28 @@ async function inspect(page, outDir) {
       return copy.outerHTML
     })
     fs.writeFileSync(path.join(dir, 'page.html'), html)
+
+    // one car's own window: the list only gives the first photo's link, the full gallery is here
+    stage = 'detail'
+    try {
+      const opened = await page.evaluate(() => {
+        const row = document.querySelector('tr[data-key]'), link = row?.querySelector('a.showDetail')
+        if (!link) return null
+        link.scrollIntoView({ block: 'center' }); link.click()
+        return { thumbnail: row.querySelector('td.carPhoto img')?.getAttribute('src') || null }
+      })
+      if (!opened) throw new Error('no car link in the first row')
+      await page.waitForFunction(() => /asnet2\.com/.test(document.querySelector('#detail_view')?.innerHTML || ''), null, { timeout: 90000, polling: 1000 })
+      await sleep(page, 10000)      // the pictures arrive after the window
+      const detail = await page.evaluate(() => {
+        const copy = document.querySelector('#detail_view').cloneNode(true)
+        copy.querySelectorAll('input[type=hidden], input[type=password], input[type=text], input[type=email], textarea').forEach((e) => { e.removeAttribute('value'); e.textContent = '' })
+        return copy.outerHTML
+      })
+      fs.writeFileSync(path.join(dir, 'detail.html'), detail)
+      report.detail = { thumbnail: opened.thumbnail, photo_links: [...new Set(detail.match(/https?:\/\/img\w*\.asnet2\.com\/[^"'()\s<>]+/g) || [])] }
+      console.log(`  car opened: ${report.detail.photo_links.length} photo link(s)`)
+    } catch (e) { report.detail = { error: e.message.split('\n')[0] }; console.log('  car not opened: ' + report.detail.error) }
 
     // the site's own script files, asked for by the page itself
     const sources = await page.evaluate(() => [...document.scripts].map((s) => s.src).filter((u) => u && new URL(u).hostname.endsWith('asnet.jp')))

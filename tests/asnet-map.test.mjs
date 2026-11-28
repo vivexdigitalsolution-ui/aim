@@ -187,5 +187,48 @@ ok(!s.searched && /AA-Bid is still ticked/.test(s.error), 'a box that stays tick
 s = await search({ checkboxUseAA: { checked: false } })
 ok(!s.searched && /AA-One Price box not found/.test(s.error), 'a missing box stops the search')
 
+// ── photos: the same car number with another ending ──
+const { findPhotos, withoutRepeats } = require('../services/scraper/lib/asnet/photos.js')
+const server = (have) => { const asked = []; return { asked, get: async (e) => { asked.push(e); return have.includes(e) ? Buffer.from(e) : null } } }
+let srv = server(['o', 'f', 'r', 'z', 'x', 'm', 's16', 's17', 's23', 's41', 's43'])
+let got = (await findPhotos(srv.get)).map((x) => x.ending)
+ok(got.join() === 'f,r,z,x,m,s16,s17,s23,s41,s43', 'letters then numbers, with gaps, past 40; the sheet is not a photo')
+ok(new Set(srv.asked).size === srv.asked.length && !srv.asked.includes('o'), 'no ending is asked for twice')
+srv = server(['f', 'sp1', 'sp2', 'sp21'])
+got = (await findPhotos(srv.get)).map((x) => x.ending)
+ok(got.join() === 'f,sp1,sp2,sp21' && !srv.asked.includes('s21') && !srv.asked.includes('sp61'), 'the sp names are found; a series stops after 20 empty numbers')
+let broke = null
+try { await findPhotos(async (e) => { if (e === 's5') throw new Error('HTTP 500'); return null }) } catch (e) { broke = e.message }
+ok(broke === 'HTTP 500', 'a picture that cannot be checked fails the car instead of being skipped')
+const shots = [{ ending: 'f', data: Buffer.from([10, 10, 10]) }, { ending: 'r', data: Buffer.from([90, 90, 90]) }, { ending: 'z', data: Buffer.from([11, 12, 11]) }]
+ok((await withoutRepeats(shots, async (b) => b)).map((x) => x.ending).join() === 'f,r', 'the same shot listed twice is kept once')
+const again = await run({ slot: { ...ours, photos: ['f', 'r', 'i', 'r'] } })
+ok(again.res.repaired === true && again.log.fetched[0] === true && again.log.updates[0].photos[0] === 'new-f', 'a saved car with one picture twice gets its pictures again, keeping the old ones if that fails')
+
+// ── an ASNET car's name is its model and whole trim; its docket needs the whole name and the chassis code ──
+const { trimmedName, exactDocket } = await import('../packages/core/src/variant.ts')
+const names = [
+  [['ALPHARD', 'Z'], 'ALPHARD Z'], [['ALPHARD', 'Z MOONROOF'], 'ALPHARD Z MOONROOF'], [['ALPHARD', 'S ■SR ■JBL'], 'ALPHARD S ■SR ■JBL'],
+  [['ALPHARD', null], 'ALPHARD'], [['ALPHARD', 'ALPHARD Z'], 'ALPHARD Z'], [['RX', 'RX350 F SPORT'], 'RX350 F SPORT'], [['CIVIC TYPE R', 'CIVIC TYPE R'], 'CIVIC TYPE R'],
+]
+for (const [[m, g], want] of names) ok(trimmedName(m, g) === want, `name of ${m} + ${g} = ${want}`)
+const dk = (model, id) => ({ id, brand: 'TOYOTA', model, cc: 2493, currency_code: 'JPY', year: 2026 })
+const dockets = [dk('ALPHARD Z (3BA-AGH40W)/(3BA-AGH45W)', 'z'), dk('ALPHARD G SIDE LIFT UP TILT SEAT (3BA-AGH40W)', 'g'), dk('ALPHARD S C PACKAGE (3BA-AGH40W)', 'sc')]
+const pick = (name, extra = {}) => exactDocket(dockets, { brand: 'TOYOTA', model: name, model_code: '3BA-AGH40W', engine_cc: 2500, transmission: 'AT', ...extra })
+ok(pick('ALPHARD Z').docket?.id === 'z' && pick('ALPHARD Z', { model_code: 'AGH40W' }).docket?.id === 'z', 'the whole name and the chassis code match: picked')
+for (const n of ['ALPHARD Z MOONROOF', 'ALPHARD Z SUNROOF', 'ALPHARD G', 'ALPHARD', 'ALPHARD Z■SR', 'ALPHARD Zプレミア', 'ALPHARD EXECUTIVE LOUNGE']) {
+  const r = pick(n)
+  ok(!r.docket && r.candidates.length === 3, `"${n}" is not guessed: a person picks`)
+}
+ok(pick('ALPHARD S_C PACKAGE').docket?.id === 'sc', 'only spacing differs (S_C PACKAGE / S C PACKAGE): the same name')
+ok(!pick('ALPHARD Z', { model_code: '3BA-GGH30W' }).docket, 'the same name with another chassis code: not picked')
+ok(!exactDocket([...dockets, dk('ALPHARD Z (3BA-AGH40W)', 'z2')], { brand: 'TOYOTA', model: 'ALPHARD Z', model_code: '3BA-AGH40W', engine_cc: 2500 }).docket, 'two dockets with the same name: a person picks')
+const { decideLot } = require('../services/scraper/lib/lotdecision.js')
+const core = await import('../packages/core/src/index.ts')
+let asked = 0
+const decide = (model) => decideLot({ lot: { brand: 'TOYOTA', model, engine_cc: 2500, transmission: 'AT', exact_only: true }, code: '3BA-AGH40W', ref: { duty: core, dockets }, ask: async () => { asked++; return { data: {} } } })
+const hit = await decide('ALPHARD Z'), miss = await decide('ALPHARD Z MOONROOF')
+ok(hit.decision.status === 'trusted' && hit.decision.docket.id === 'z' && miss.decision.status === 'review' && !miss.decision.docket && !asked, 'an ASNET car: exact = used, anything else = review, and Claude is not asked to pick')
+
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

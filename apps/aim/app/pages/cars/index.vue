@@ -89,7 +89,7 @@
 
 <script setup lang="ts">
 import { watch as vueWatch } from 'vue'
-import { featureLabel, CATALOG, timeLeft, closesInfo, closingTimeText, docketPool, calcDuty, dutyMonth, offerPricing, type Docket, type DutyRate } from '@aim/core'
+import { trimmedName, featureLabel, CATALOG, timeLeft, closesInfo, closingTimeText, docketPool, calcDuty, dutyMonth, offerPricing, type Docket, type DutyRate } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -198,7 +198,7 @@ const glassCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; re
 
 /** One price cars (a fixed price, no bidding): same card shape as a bidding car */
 async function fetchOnePrice(from: number) {
-  let query = openOffers(db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission', { count: 'exact' }))
+  let query = openOffers(db.from('one_price_lots').select('id,brand,model,grade,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission', { count: 'exact' }))
   if (brand.value) query = query.eq('brand', brand.value)
   const t = q.value.trim().replace(/[,()%]/g, ' ')
   if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)
@@ -210,7 +210,7 @@ async function fetchOnePrice(from: number) {
   const { data, error, count } = await query.order(col, { ascending: asc, nullsFirst: false }).range(from, from + PAGE - 1)
   if (error) throw error
   total.value = count || 0
-  const rows = (data || []).map((r: any) => ({ ...r, op: true, grade: r.auction_grade, start_price_jpy: r.price_jpy, bid_deadline: r.deadline }))
+  const rows = (data || []).map((r: any) => ({ ...r, op: true, model: trimmedName(r.model, r.grade), grade: r.auction_grade, start_price_jpy: r.price_jpy, bid_deadline: r.deadline }))
   loadCardPrices(rows)
   return rows
 }

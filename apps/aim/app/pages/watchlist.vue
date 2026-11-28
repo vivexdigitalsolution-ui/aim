@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { timeLeft, closesInfo } from '@aim/core'
+import { trimmedName, timeLeft, closesInfo } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
@@ -44,8 +44,8 @@ async function show() {
   // One price cars the dealer starred (their own table, migration 58)
   const ops: any[] = []
   for (let i = 0; i < opIds.value.length; i += 100) {
-    const { data } = await openOffers(db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mileage_km,venue,photos,price_jpy,deadline').in('id', opIds.value.slice(i, i + 100)))
-    ops.push(...(data || []).map((r: any) => ({ ...r, op: true, grade: r.auction_grade, start_price_jpy: r.price_jpy, bid_deadline: r.deadline })))
+    const { data } = await openOffers(db.from('one_price_lots').select('id,brand,model,grade,auction_grade,mfg_year,mileage_km,venue,photos,price_jpy,deadline').in('id', opIds.value.slice(i, i + 100)))
+    ops.push(...(data || []).map((r: any) => ({ ...r, op: true, model: trimmedName(r.model, r.grade), grade: r.auction_grade, start_price_jpy: r.price_jpy, bid_deadline: r.deadline })))
   }
   cars.value = [...out, ...ops].sort((a, b) => (a.bid_deadline || '9').localeCompare(b.bid_deadline || '9'))
   gone.value = ids.value.length + opIds.value.length - cars.value.length

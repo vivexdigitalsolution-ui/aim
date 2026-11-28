@@ -6,6 +6,8 @@
  *   trusted   -> rule and AI chose the same docket: used
  *   review    -> they differ / only one picked / the AI did not run: NOT used, a person checks
  *   none      -> no docket
+ * A lot marked exact_only (ASNET cars) is matched strictly instead (core exactDocket): the whole name and the chassis code must be the
+ * docket's, otherwise it is for a person to pick. Claude is not asked. A docket a person confirmed still comes first.
  * Claude only chooses among the dockets the rule already narrowed (core docketPool); an empty list costs no AI call.
  * Pure of the database except saveDecision() / saveFeatures(). `ask` is lib/claude.ask (or a fake).
  */
@@ -15,6 +17,11 @@ async function decideLot({ lot, code, ref, ask }) {
   const car = { brand: lot.brand, model: lot.model, model_code: code, engine_cc: lot.engine_cc, transmission: lot.transmission, seats: lot.seats }
   const key = C.confirmKey(car)
   const confirmed = ref.confirmations?.get(key) || null
+  if (lot.exact_only && !confirmed) {
+    const x = C.exactDocket(ref.dockets, car)
+    const decision = { status: x.docket ? 'trusted' : x.candidates.length ? 'review' : 'none', docket: x.docket, reason: x.reason }
+    return { decision, ruleDocket: x.docket, ruleReason: x.reason, ai: null, aiError: null, key }
+  }
   const g = C.guessDocket(ref.dockets, { ...car, family: ref.families?.get(lot.maker_code + '|' + lot.car_code) || null, sheet_text: [lot.sales_points, lot.notes, lot.notes_en, lot.inspector_report, lot.inspector_report_en, lot.equipment].filter(Boolean).join(' ') })
   let ai = null, aiError = null
   if (!confirmed) {
