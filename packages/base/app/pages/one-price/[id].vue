@@ -24,7 +24,7 @@
           <div class="small">Some details of this car could not be read clearly from the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you decide.</div>
         </div>
         <div class="card">
-          <div class="muted small">{{ car.venue }} · One price</div>
+          <div class="muted small">{{ car.venue }}<template v-if="isStaff"> · <b title="Where this car was found (staff only)">{{ car.source === 'asnet' ? 'ASNET' : 'USS' }}</b></template> · One price</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ fullName }}</h1>
           <template v-if="isLite">
           <div class="toprow">

@@ -24,7 +24,7 @@
           <div class="small">Some details of this car could not be read clearly from the sheet and may be wrong<template v-if="car.review_note"> ({{ car.review_note }})</template>. Please check the sheet before you bid.</div>
         </div>
         <div class="card">
-          <div class="muted small">{{ car.venue }} · lot {{ car.lot_no }} · {{ car.auction_date }} · {{ closingTimeText(car.bid_deadline) }}</div>
+          <div class="muted small">{{ car.venue }}<template v-if="isStaff"> · <b title="Where this car was found (staff only)">{{ car.source === 'asnet' ? 'ASNET' : 'USS' }}</b></template> · lot {{ car.lot_no }} · {{ car.auction_date }} · {{ closingTimeText(car.bid_deadline) }}</div>
           <h1 style="margin-top: 4px">{{ car.brand }} {{ car.model }}</h1>
           <div class="row wrap" style="gap: 10px; justify-content: space-between; align-items: center">
             <div v-if="estTop != null">
