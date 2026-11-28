@@ -28,16 +28,27 @@
           </div>
         </div>
         <div v-if="bd.upcoming.value.length" class="coming">
-          <div class="muted small">Coming auction days (cars open for bidding)</div>
+          <div class="row wrap between">
+            <div class="muted small">Coming auction days (bidding cars and One price offers)</div>
+            <div class="legend"><span><i class="lw" />Bidding</span><span><i class="lone" />One price</span></div>
+          </div>
           <div v-for="u in bd.upcoming.value" :key="u.date" class="cday">
-            <div class="muted small">{{ bd.label(u.date) }} · {{ u.cars }} open cars · {{ u.venues.length }} venue{{ u.venues.length === 1 ? '' : 's' }}</div>
+            <div class="muted small">{{ bd.label(u.date) }} · {{ nf(u.cars) }} bidding · {{ nf(u.one) }} One price · {{ u.venues.length }} venue{{ u.venues.length === 1 ? '' : 's' }}</div>
             <div class="venues">
-              <div v-for="v in u.venues" :key="v.name" class="vrow">
+              <div v-for="v in u.venues" :key="v.name" class="vrow wide">
                 <span class="vn">{{ v.name }}</span>
-                <span class="bar"><i :style="{ width: Math.max(2, Math.round((v.cars / u.venues[0]!.cars) * 100)) + '%' }" /></span>
-                <span class="muted small vc">{{ v.cars }} car{{ v.cars === 1 ? '' : 's' }}</span>
+                <span class="bar stackbar" :title="v.name + ': ' + v.cars + ' bidding, ' + v.one + ' One price'"><i v-if="v.cars" :style="{ width: part(v.cars, u) }" /><i v-if="v.one" class="one" :style="{ width: part(v.one, u) }" /></span>
+                <span class="muted small vc">{{ [v.cars ? nf(v.cars) + ' bidding' : null, v.one ? nf(v.one) + ' One price' : null].filter(Boolean).join(' · ') }}</span>
               </div>
             </div>
+          </div>
+        </div>
+        <div v-if="asnetOpen != null" class="coming">
+          <div class="muted small">ASNET (One price, all places together)</div>
+          <div class="vrow wide">
+            <span class="vn">ASNET</span>
+            <span class="bar stackbar"><i v-if="asnetOpen" class="one" style="width: 100%" /></span>
+            <span class="muted small vc">{{ nf(asnetOpen) }} One price</span>
           </div>
         </div>
       </div>
@@ -125,7 +136,9 @@ import { timeLeft, isPlaceholderDeadline } from '@aim/core'
 
 const db = useDb()
 const now = useNow()
-const bd = useBiddingDay()
+const bd = useBiddingDay({ onePrice: true })
+// a venue's two parts are drawn against the busiest venue of that day (both together)
+const part = (n: number, u: { venues: { cars: number; one: number }[] }) => Math.max(1, (n / Math.max(1, ...u.venues.map((v) => v.cars + v.one))) * 100) + '%'
 const board = useMarginBoard()
 const { level: sysLevel, label: sysLabel, load: loadStatus, runs } = useSystemStatus()
 const err = ref(''), marginLoading = ref(true)
@@ -135,7 +148,7 @@ const nf = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleStri
 const ago = (iso: string) => { const h = (Date.now() - new Date(iso).getTime()) / 3600_000; return h < 1 ? 'just now' : h < 24 ? Math.round(h) + ' h ago' : Math.round(h / 24) + ' d ago' }
 const myt = (iso: string) => new Date(new Date(iso).getTime() + 8 * 3600_000).toISOString().slice(0, 10)
 
-const c = reactive({ open: 0, closing24: 0, pendingBids: 0, review: 0, flagged: null as number | null, oneUnread: null as number | null, pendingAps: 0, requests: 0, enrichErr: 0, activeAps: 0, enrichDone: 0, oneOpen: 0 })
+const c = reactive({ open: 0, closing24: 0, pendingBids: 0, review: 0, flagged: null as number | null, oneUnread: null as number | null, asnet: null as number | null, pendingAps: 0, requests: 0, enrichErr: 0, activeAps: 0, enrichDone: 0, oneOpen: 0 })
 const openCars = computed(() => c.open)
 const enrichDone = computed(() => c.enrichDone)
 const enrichLeft = computed(() => Math.max(0, c.open - c.enrichDone) + (c.oneUnread || 0))
@@ -149,8 +162,11 @@ const bestCars = ref<any[]>([])
 // one number per day for the line graph of each card (table kpi_daily, migration 50; the card shows no line until the table exists and has 2 days)
 const hist = ref<any[]>([])
 const series = (f: string) => hist.value.map((r) => r[f])
+// bidding and One price together (one_price_open comes with migration 64; until it has run the line shows the bidding cars only)
+const openSeries = computed(() => hist.value.map((r) => (r.open_cars == null ? null : r.open_cars + (r.one_price_open || 0))))
+const asnetOpen = computed(() => c.asnet)
 const kpis = computed(() => [
-  { label: 'Open cars', value: nf(c.open), sub: bd.day.cars ? `${bd.day.cars} on ${bd.dateLabel.value}` : 'for bidding', series: series('open_cars') },
+  { label: 'Open cars', value: nf(c.open + c.oneOpen), sub: `${nf(c.open)} bidding · ${nf(c.oneOpen)} One price`, series: openSeries.value },
   { label: 'Bids waiting to place', value: nf(c.pendingBids), sub: c.pendingBids ? 'AP holders are waiting' : 'Nothing waiting', series: series('pending_bids') },
   { label: 'Closing in 24 hours', value: nf(c.closing24), sub: 'open cars', series: series('closing_24h') },
   { label: 'Active AP holders', value: nf(c.activeAps), sub: c.pendingAps ? `${c.pendingAps} waiting for approval` : 'None waiting', series: series('active_aps') },
@@ -187,7 +203,7 @@ const head = async (q: any) => { const r = await q; return r.error ? null : (r.c
 async function loadCounts() {
   const nowIso = new Date().toISOString(), in24 = new Date(Date.now() + 24 * 3600_000).toISOString()
   const open = () => db.from('lots').select('id', { count: 'exact', head: true }).gt('bid_deadline', nowIso).eq('my_eligible', true)
-  const [o, c24, pb, rv, fl, ou, pa, rq, ee, aa, ed, oo, t1, t2, t3] = await Promise.all([
+  const [o, c24, pb, rv, fl, ou, pa, rq, ee, aa, ed, oo, as, t1, t2, t3] = await Promise.all([
     head(open()), db.from('lots').select('bid_deadline').gt('bid_deadline', nowIso).lt('bid_deadline', in24).eq('my_eligible', true).limit(5000).then((r: any) => (r.error ? null : (r.data || []).filter((x: any) => !isPlaceholderDeadline(x.bid_deadline)).length)),
     head(db.from('bids').select('id', { count: 'exact', head: true }).eq('status', 'pending')),
     head(db.from('lot_docket_decisions').select('lot_id', { count: 'exact', head: true }).eq('status', 'review')),
@@ -199,9 +215,10 @@ async function loadCounts() {
     head(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'ap_holder').eq('status', 'active')),
     head(open().not('enriched_at', 'is', null)),
     head(openOffers(db.from('one_price_lots').select('id', { count: 'exact', head: true }))),
+    head(openOffers(db.from('one_price_lots').select('id', { count: 'exact', head: true }).eq('source', 'asnet'))),
     ...['bid', 'one_price', 'history'].map((t) => head(db.from('scrape_targets').select('id', { count: 'exact', head: true }).eq('lot_type', t).eq('enabled', true))),
   ])
-  Object.assign(c, { open: o || 0, closing24: c24 || 0, pendingBids: pb || 0, review: rv || 0, flagged: fl, oneUnread: ou, pendingAps: pa || 0, requests: rq || 0, enrichErr: ee || 0, activeAps: aa || 0, enrichDone: ed || 0, oneOpen: oo || 0 })
+  Object.assign(c, { open: o || 0, closing24: c24 || 0, pendingBids: pb || 0, review: rv || 0, flagged: fl, oneUnread: ou, pendingAps: pa || 0, requests: rq || 0, enrichErr: ee || 0, activeAps: aa || 0, enrichDone: ed || 0, oneOpen: oo || 0, asnet: as })
   targets.value = [{ n: t1 || 0, label: 'Bidding' }, { n: t2 || 0, label: 'One price' }, { n: t3 || 0, label: 'History' }]
 }
 const oneOpen = computed(() => c.oneOpen)
@@ -273,6 +290,10 @@ onMounted(async () => {
 .vrow { display: grid; grid-template-columns: 130px minmax(0, 1fr) 150px; gap: 12px; align-items: center; } .vn { font-weight: 500; } .vc { text-align: right; font-variant-numeric: tabular-nums; }
 .coming { border-top: 1px solid var(--line); margin: 6px 0 14px; padding-top: 12px; display: grid; gap: 8px; }
 .cday { border-top: 1px solid var(--line); padding-top: 10px; } .cday .venues { margin: 8px 0 6px; }
+.vrow.wide { grid-template-columns: 130px minmax(0, 1fr) 210px; }
+/* One price: a lighter shade of the accent colour, beside the bidding part */
+.bar.stackbar { display: flex; } .bar.stackbar i { flex: none; max-width: 100%; border-radius: 0; } .bar.stackbar i + i { flex: 0 1 auto; } .bar.stackbar i:last-child { border-radius: 0 5px 5px 0; }      /* square where the two meet, round where the colour ends */
+.bar i.one, .legend i.lone { background: color-mix(in srgb, var(--ac) 65%, #fff); }
 .bar { height: 9px; border-radius: 5px; background: var(--s3); overflow: hidden; } .bar i { display: block; height: 100%; background: var(--ac); border-radius: 5px; }
 .att { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
 .att small { display: block; } .att b { font-weight: 500; }
@@ -292,7 +313,7 @@ onMounted(async () => {
 @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .clock { font-size: 32px; }
-  .vrow { grid-template-columns: 86px minmax(0, 1fr); } .vc { grid-column: 1 / -1; text-align: left; margin-top: -6px; }
+  .vrow, .vrow.wide { grid-template-columns: 86px minmax(0, 1fr); } .vc { grid-column: 1 / -1; text-align: left; margin-top: -6px; }
   .perf { grid-template-columns: repeat(2, minmax(0, 1fr)); } .chart, .axis { gap: 4px; }
 }
 </style>

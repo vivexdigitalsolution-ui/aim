@@ -6,10 +6,42 @@
  * A closing time of exactly 23:59 Japan time is a placeholder (the site had no time yet): it is ignored completely (no countdown, no car count, no venue row).
  * The page refreshes by itself: the clock ticks every second, the data reloads every minute and at once when the countdown ends or the Japan date changes.
  */
-export interface DayVenue { name: string; cars: number; closesAt: string | null }
-export interface UpcomingDay { date: string; cars: number; venues: { name: string; cars: number }[] }
+// One price rows name their venue in Japanese, bidding rows in English
+const VENUE_EN: Record<string, string> = {
+  東京: 'Tokyo', 横浜: 'Yokohama', 名古屋: 'Nagoya', '名古屋＆北陸': 'Nagoya＆Hokuriku', 北陸: 'Hokuriku', 大阪: 'Osaka', 札幌: 'Sapporo', 新潟: 'Niigata', 東北: 'Tohoku', 神戸: 'Kobe', 福岡: 'Fukuoka',
+  九州: 'Kyushu', 静岡: 'Shizuoka', 岡山: 'Okayama', 群馬: 'Gunma', 四国: 'Shikoku', 埼玉: 'Saitama', 'R-名古屋': 'R-Nagoya', 'HAA神戸': 'HAA Kobe',
+}
 
-export function useBiddingDay() {
+/**
+ * The coming auction days, each venue with its bidding cars and its open One price cars. A One price offer has no auction day of its own:
+ * it ends before the venue's auction, so it goes to that venue's first auction day on or after the day it ends (Japan date).
+ * A venue with no bidding car listed goes to the day after its offers end.
+ */
+export function comingDays(bids: { venue: string; auction_date: string }[], offers: { venue: string; deadline: string }[]): UpcomingDay[] {
+  const days = new Map<string, Map<string, { cars: number; one: number }>>()
+  const at = (date: string, venue: string) => {
+    const d = days.get(date) || days.set(date, new Map()).get(date)!
+    return d.get(venue) || d.set(venue, { cars: 0, one: 0 }).get(venue)!
+  }
+  const auctions = new Map<string, Set<string>>()
+  for (const r of bids) { at(r.auction_date, r.venue).cars++; (auctions.get(r.venue) || auctions.set(r.venue, new Set()).get(r.venue)!).add(r.auction_date) }
+  for (const o of offers) {
+    const venue = VENUE_EN[o.venue] || o.venue
+    const ends = new Date(new Date(o.deadline).getTime() + 9 * 3600_000).toISOString().slice(0, 10)
+    const next = [...(auctions.get(venue) || [])].sort().find((d) => d >= ends)
+    at(next || new Date(new Date(ends + 'T00:00:00Z').getTime() + 86400_000).toISOString().slice(0, 10), venue).one++
+  }
+  return [...days.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([date, v]) => {
+    const venues = [...v.entries()].map(([name, n]) => ({ name, ...n })).sort((a, b) => b.cars + b.one - (a.cars + a.one))
+    return { date, cars: venues.reduce((a, x) => a + x.cars, 0), one: venues.reduce((a, x) => a + x.one, 0), venues }
+  })
+}
+
+export interface DayVenue { name: string; cars: number; closesAt: string | null }
+export interface UpcomingDay { date: string; cars: number; one: number; venues: { name: string; cars: number; one: number }[] }
+
+/** opts.onePrice: the coming days also carry each venue's open USS One price cars (the staff dashboard). */
+export function useBiddingDay(opts: { onePrice?: boolean } = {}) {
   const db = useDb()
   const day = reactive({ mode: 'none' as 'today' | 'closed' | 'none', date: '', at: null as string | null, cars: 0, venues: [] as DayVenue[], next: null as { date: string; cars: number } | null })
   const upcoming = ref<UpcomingDay[]>([])      // the auction days after today: cars per venue (every open car, also those whose closing time is not known yet)
@@ -18,11 +50,25 @@ export function useBiddingDay() {
   const jstDate = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10)
   let loadedFor = ''
 
+  // the database answers 1,000 rows at most, however many are asked for: read on until a short answer
+  async function every(query: () => any): Promise<any[]> {
+    const out: any[] = []
+    for (let from = 0; from < 50000; from += 1000) {
+      const { data, error } = await query().order('id').range(from, from + 999)
+      if (error) throw error
+      out.push(...(data || []))
+      if ((data || []).length < 1000) break
+    }
+    return out
+  }
+
   async function loadUpcoming(todayJst: string) {
-    const { data } = await db.from('lots').select('venue,auction_date').gt('bid_deadline', new Date().toISOString()).eq('my_eligible', true).gt('auction_date', todayJst).order('auction_date').limit(5000)
-    const days = new Map<string, Map<string, number>>()
-    for (const r of (data || []) as any[]) { const d = days.get(r.auction_date) || days.set(r.auction_date, new Map()).get(r.auction_date)!; d.set(r.venue, (d.get(r.venue) || 0) + 1) }
-    upcoming.value = [...days.entries()].slice(0, 5).map(([date, v]) => ({ date, cars: [...v.values()].reduce((a, b) => a + b, 0), venues: [...v.entries()].map(([name, cars]) => ({ name, cars })).sort((a, b) => b.cars - a.cars) }))
+    const nowIso = new Date().toISOString()
+    const [bids, offers] = await Promise.all([
+      every(() => db.from('lots').select('venue,auction_date').gt('bid_deadline', nowIso).eq('my_eligible', true).gt('auction_date', todayJst)),
+      opts.onePrice ? every(() => db.from('one_price_lots').select('venue,deadline').eq('source', 'uss').gt('deadline', nowIso)) : Promise.resolve([] as any[]),
+    ])
+    upcoming.value = comingDays(bids, offers).slice(0, 5)
   }
 
   async function load() {
@@ -30,7 +76,7 @@ export function useBiddingDay() {
     loadedFor = todayJst
     loadUpcoming(todayJst).catch(() => {})
     // only cars with a REAL closing time count
-    const realOn = async (date: string) => (((await db.from('lots').select('venue,bid_deadline').gt('bid_deadline', nowIso).eq('my_eligible', true).eq('auction_date', date).limit(3000)).data || []) as any[]).filter((r) => !placeholder(r.bid_deadline))
+    const realOn = async (date: string) => (await every(() => db.from('lots').select('venue,bid_deadline').gt('bid_deadline', nowIso).eq('my_eligible', true).eq('auction_date', date))).filter((r) => !placeholder(r.bid_deadline))
     const rows = await realOn(todayJst)
     if (rows.length) {
       const by = new Map<string, { cars: number; at: string | null }>()
@@ -45,8 +91,8 @@ export function useBiddingDay() {
     }
     // nothing open today: Closed. Look up the next auction day only to tell which one comes.
     let next: { date: string; cars: number } | null = null
-    const nxt = await db.from('lots').select('auction_date').gt('bid_deadline', nowIso).eq('my_eligible', true).gt('auction_date', todayJst).order('auction_date').limit(3000)
-    const dates = [...new Set(((nxt.data || []) as any[]).map((r) => r.auction_date as string))].slice(0, 5)
+    const nxt = await every(() => db.from('lots').select('auction_date').gt('bid_deadline', nowIso).eq('my_eligible', true).gt('auction_date', todayJst))
+    const dates = [...new Set(nxt.map((r) => r.auction_date as string))].sort().slice(0, 5)
     for (const d of dates) { const r = await realOn(d); if (r.length) { next = { date: d, cars: r.length }; break } }
     Object.assign(day, { mode: 'closed', date: todayJst, at: null, cars: 0, venues: [], next })
   }
