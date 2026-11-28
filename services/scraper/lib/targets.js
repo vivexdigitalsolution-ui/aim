@@ -37,7 +37,7 @@ async function ensureHistory() {
   const history = new Map(all.filter((t) => t.lot_type === 'history').map((t) => [key(t), t]))
   const on = [], add = new Map()
   for (const t of all) {
-    if (!t.enabled || t.lot_type === 'history') continue
+    if (!t.enabled || t.lot_type === 'history' || t.source === 'asnet') continue      // ASNET has no sold history to read
     const h = history.get(key(t))
     if (h) { if (!h.enabled) on.push(h.id) } else add.set(key(t), t)
   }

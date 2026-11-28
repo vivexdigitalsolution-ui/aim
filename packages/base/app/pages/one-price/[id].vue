@@ -38,7 +38,7 @@
           </div>
           <div v-if="car.price_jpy > 0" class="muted small">{{ cur === 'JPY' ? rm(car.price_jpy) : '¥' + car.price_jpy.toLocaleString('en-US') }}<template v-if="rate"> at ¥1 = RM {{ rate }}</template></div>
           <div v-else-if="car.price_reveal" class="muted small">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
-          <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span></div>
+          <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span v-if="car.deadline" class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span></div>
           </template>
           <template v-else>
           <div class="toprow">
@@ -49,7 +49,7 @@
             <div v-if="car.price_jpy > 0 && calc?.importMyr != null" class="estb" title="Estimated import price at the One price: the car, agent fee and shipping, duty, port, inland and AP fee"><span>Est. import price</span><b>RM {{ Math.round(calc.importMyr).toLocaleString('en-US') }}</b></div>
           </div>
           <div v-if="!(car.price_jpy > 0) && car.price_reveal" class="muted small" style="margin-top: 4px">The price opens {{ fmtMytDateTime(car.price_reveal) }} MYT.</div>
-          <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span><span v-if="rateNow > 0" class="chip ac" title="Exchange rate used on this page (change it in the breakdown)">¥1 = RM {{ rateNow }}</span></div>
+          <div class="row wrap" style="gap: 6px; margin-top: 10px; justify-content: flex-start"><span v-if="car.deadline" class="chip ac">offer ends {{ fmtMytDateTime(car.deadline) }} MYT</span><span v-if="rateNow > 0" class="chip ac" title="Exchange rate used on this page (change it in the breakdown)">¥1 = RM {{ rateNow }}</span></div>
           </template>
           <div v-if="!(isLite && isStaff)" :class="isLite ? 'row wrap' : 'actrow'" :style="isLite ? 'gap: 8px; margin-top: 10px; justify-content: flex-start' : ''"><button class="btn ghost sm" :class="{ starred: watching, wstar: !isLite, fav: isLite }" @click="star"><StarIcon v-if="!isLite" :filled="watching" /><svg v-else viewBox="0 0 24 24" :fill="watching ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20.5S4.5 16 3 11a4.7 4.7 0 0 1 9-2.3A4.7 4.7 0 0 1 21 11c-1.5 5-9 9.5-9 9.5z" /></svg>{{ watching ? (isLite ? 'In your favourites' : 'On your watchlist') : (isLite ? 'Add to favourites' : 'Watch this car') }}</button><button v-if="isStaff && !isLite" class="btn ghost sm" :class="{ starred: recs?.has(car.id) }" @click="recommend">{{ recs?.has(car.id) ? '✔ Recommended' : '＋ Recommend this car' }}</button></div>
           <p class="muted small" style="margin-top: 10px">One price cars are sold at the listed price to the first buyer. Ask our team to buy one for you.</p>
@@ -71,7 +71,7 @@
         <div v-if="feats.length && hasTier('member')" class="card">
           <h2>On this car</h2>
           <div class="row wrap" style="gap: 6px; margin-top: 8px; justify-content: flex-start">
-            <span v-for="f in feats" :key="f.key" class="chip" :class="f.source === 'aftermarket' ? 'warn' : f.source === 'factory' ? 'ok' : ''" :title="f.evidence || ''">{{ f.label }}<small v-if="f.source === 'aftermarket'"> · aftermarket</small></span>
+            <span v-for="f in feats" :key="f.key" class="chip" :title="f.evidence || ''">{{ f.label }}</span>
           </div>
         </div>
       </div>

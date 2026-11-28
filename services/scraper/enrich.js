@@ -87,7 +87,12 @@ async function enrichBid(lot, ref) {
 // ── One price cars ────────────────────────────────────────────────────────────
 
 async function onePriceRows(limit) {
-  let q = supabase.from('one_price_lots').select('*').gt('deadline', new Date().toISOString()).order('deadline').limit(limit)
+  // open = the offer has not ended, or the car has no end date (ASNET: it is removed once no longer listed). The soonest ending come first.
+  const hasSource = !(await supabase.from('one_price_lots').select('source').limit(1)).error      // false until migration 63 has run
+  const now = new Date().toISOString()
+  let q = supabase.from('one_price_lots').select('*')
+  q = hasSource ? q.or(`deadline.gt."${now}",and(source.eq.asnet,deadline.is.null)`) : q.gt('deadline', now)
+  q = q.order('deadline', { ascending: true, nullsFirst: false }).limit(limit)
   if (!FORCE) q = q.is('enriched_at', null)
   if (MODEL) q = q.ilike('model', '%' + MODEL + '%')
   if (FEATURES) {

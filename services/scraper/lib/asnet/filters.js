@@ -21,7 +21,7 @@
  *   page.evaluate() to avoid Playwright's visibility check which times out.
  */
 
-const { waitForList, NoResultsError } = require('./page')
+const { waitForList, loadsNewPage, NoResultsError } = require('./page')
 
 // ── Navigate to search page ───────────────────────────────────────────────────
 
@@ -43,13 +43,8 @@ async function applyFilters(page, target) {
 
   await page.waitForSelector('#IppatsuSearch_MultiForm_0__MakerCode', { timeout: 120000 })
 
-  // ── Lot type: uncheck AA-Bid and AA-One Price ──────────────────────────────
-  // These checkboxes are hidden inputs — use JS click on the label element
-  // to avoid Playwright visibility timeout. Only uncheck if lot_type = one_price.
-  if (!target.lot_type_filter || target.lot_type_filter === 'one_price') {
-    await uncheckLotTypeViaJS(page, 'checkboxUseAA',         'AA-Bid')
-    await uncheckLotTypeViaJS(page, 'checkboxUseAAOneprice', 'AA-One Price')
-  }
+  // ── Sale type: AS-One Price only (AS-One Price and AS-One Price 3stars/5stars stay ticked) ──
+  await uncheckAuctionTypes(page)
 
   // ── Make (required) ────────────────────────────────────────────────────────
   console.log('SET MAKER:', target.maker_code)
@@ -128,6 +123,9 @@ async function applyFilters(page, target) {
   // Fixed wait before clicking search — same as v1
   await page.waitForTimeout(3000)
 
+  // checked again right before the search: the form may tick a box back while it loads the model lists
+  await assertAuctionTypesOff(page)
+
   // ── Click search — same pattern as v1 ─────────────────────────────────────
   console.log('CLICK SEARCH')
   await page.click('.searchList')
@@ -135,37 +133,39 @@ async function applyFilters(page, target) {
   console.log('SEARCH DONE')
 
   // ── Set page size to 100 ───────────────────────────────────────────────────
-  await setPageSize(page)
+  // (--inspect leaves the page as the site gives it)
+  if (!target.keepPageSize) await setPageSize(page)
 
   console.log('FILTER COMPLETE')
 }
 
-// ── Uncheck lot type checkbox via JavaScript ──────────────────────────────────
+// ── Sale type checkboxes ─────────────────────────────────────────────────────
 // The checkboxes are hidden inputs styled with labels.
 // Playwright .check()/.uncheck() timeout on hidden elements.
 // Use JS to click the label, which is always visible and triggers the toggle.
 
-async function uncheckLotTypeViaJS(page, checkboxId, name) {
-  const wasUnchecked = await page.evaluate((id) => {
-    const checkbox = document.getElementById(id)
-    if (!checkbox) return false
-    if (!checkbox.checked) return true  // Already unchecked — nothing to do
+/** The two sale types that are NOT wanted. */
+const AUCTION_TYPES = { checkboxUseAA: 'AA-Bid', checkboxUseAAOneprice: 'AA-One Price' }
 
-    // Click the label to toggle the checkbox
-    const label = document.querySelector(`label[for="${id}"]`)
-    if (label) {
-      label.click()
-    } else {
-      checkbox.click()
+async function uncheckAuctionTypes(page) {
+  await page.evaluate((ids) => {
+    for (const id of ids) {
+      const checkbox = document.getElementById(id)
+      if (!checkbox || !checkbox.checked) continue
+      const label = document.querySelector(`label[for="${id}"]`)
+      if (label) label.click()
+      else checkbox.click()
     }
-    return true
-  }, checkboxId)
+  }, Object.keys(AUCTION_TYPES))
+  await assertAuctionTypesOff(page)
+  console.log('SALE TYPE: AA-Bid and AA-One Price are off')
+}
 
-  if (wasUnchecked) {
-    console.log(`UNCHECKED: ${name}`)
-  } else {
-    console.log(`NOT FOUND: ${name} checkbox`)
-  }
+/** Stops the search when a box is missing or still ticked: searching anyway would mix in cars of the wrong sale type. */
+async function assertAuctionTypesOff(page) {
+  const states = await page.evaluate((ids) => ids.map((id) => { const c = document.getElementById(id); return [id, c ? c.checked : null] }), Object.keys(AUCTION_TYPES))
+  const bad = states.filter(([, checked]) => checked !== false)
+  if (bad.length) throw new Error('sale type not set, search stopped: ' + bad.map(([id, checked]) => `${AUCTION_TYPES[id]} ${checked === null ? 'box not found' : 'is still ticked'}`).join(', '))
 }
 
 // ── Set page size to 100 ─────────────────────────────────────────────────────
@@ -182,15 +182,14 @@ async function setPageSize(page) {
       return
     }
 
-    // Changing page size triggers a full page navigation — same as search button
-    await Promise.all([
-      page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 60000 }),
-      page.selectOption('#pageSizeSelect', '100'),
-    ])
-    await waitForList(page)
+    // The page is complete here, so a shorter list means every car is already on it
+    const rows = await page.$$eval('tr[data-key]', (r) => r.length)
+    if (rows < 50) { console.log('PAGE SIZE: everything fits on one page'); return }
+    // choosing 100 sends the search again as a new page
+    await loadsNewPage(page, () => page.selectOption('#pageSizeSelect', '100'))
     console.log('PAGE SIZE SET TO 100')
   } catch (err) {
-    console.log('PAGE SIZE SELECT NOT FOUND — skipping:', err.message)
+    console.log('PAGE SIZE not changed:', err.message.split('\n')[0])
   }
 }
 

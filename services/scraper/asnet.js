@@ -1,16 +1,19 @@
 'use strict'
 
 /**
- * asnet.js — the ASNET list as a second source of cars for the `lots` table (the USS scrape stays as it is).
- * Built from the proven CarzNexus asnet-scraper (login, search form, list extract: lib/asnet/*). Setup and first run: docs/asnet-setup.md.
+ * asnet.js — ASNET's AS-One Price cars, saved as One price cars (table one_price_lots, source = 'asnet'). The USS scrape stays as it is.
+ * Built from the CarzNexus asnet-scraper (login, search form, list extract: lib/asnet/*). Setup and first run: docs/asnet-setup.md.
  *
  *   node asnet.js --probe                     list the ASNET brands and models of the models we already scrape (writes out/asnet-codes.json)
  *   node asnet.js --probe --all               the same for EVERY ASNET brand (slow)
  *   node asnet.js --maker 1010 --car 12345    DRY RUN: read one brand/model, print what would be saved, save nothing   (add --pages 2, --year-from 2021, --score-min 3.5)
- *   node asnet.js --from-codes                DRY RUN for every model in out/asnet-codes.json
- *   ... add --write to really save (cars, photos, the lots table). Without --write NOTHING is written and no photo is downloaded.
+ *   node asnet.js --from-db                   DRY RUN for the ASNET targets of the Scrape targets page
+ *   ... add --write to really save (cars and photos). Without --write NOTHING is written and no photo is downloaded.
+ *       --max-cars 3     save only the first 3 cars of each model (a small first test; nothing is removed)
+ *       --remove-many    allow removing more than half of a model's saved cars in one run
+ *   node asnet.js --inspect --maker 1010 --car 12345   record how the result page loads and what Next does (out/asnet-inspect/), saves no cars
  *
- * Duplicates: a car that came from another source the same auction day (same make, year, mileage, chassis code) is skipped, so a car never shows twice.
+ * A fixed-price car has no end date. It stays until a later --from-db --write run reads the WHOLE list of its model and no longer finds it.
  */
 
 require('dotenv').config()
@@ -23,13 +26,19 @@ const { login } = require('./lib/asnet/auth')
 const { goToSearchPage, applyFilters } = require('./lib/asnet/filters')
 const { goToNextPage, getPagingInfo } = require('./lib/asnet/page')
 const { extractRows } = require('./lib/asnet/extract')
-const { rowToLot, isDuplicate, nameKey } = require('./lib/asnet/map')
+const { rowToCar, exKey, isAsOne, nameKey, matchModels, onAsnet } = require('./lib/asnet/map')
+const { readAllPages } = require('./lib/asnet/read')
+const { inspect } = require('./lib/asnet/inspect')
 const { codeMatches } = require('./lib/filters')
+const { saveCar, removeGone } = require('./lib/asnet/save')
 
 const has = (n) => process.argv.includes(n)
 const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : null }
 const WRITE = has('--write')
 const MAX_PAGES = Number(arg('--pages') || 50)
+const MAX_CARS = Number(arg('--max-cars') || 0)      // 0 = no limit
+// sold cars are removed only in a run of the saved targets: a one-off search (--maker) may be narrower than what was saved before
+const REMOVES = has('--from-db') && !MAX_CARS
 const MAX_PHOTOS = Math.max(1, parseInt(process.env.MAX_PHOTOS || '5', 10))
 const OUT = path.join(__dirname, 'out')
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -40,33 +49,64 @@ async function options(page, sel) {
   return page.$$eval(sel + ' option', (os) => os.map((o) => ({ code: o.value, name: (o.textContent || '').trim() })).filter((o) => o.code && o.code !== '0' && o.name))
 }
 
-async function probe() {
-  const ours = new Map()   // nameKey(brand) -> Set(nameKey(model)) of the models the USS scrape already knows
-  if (!has('--all')) {
-    const { data, error } = await supabase.from('scraped_models').select('brand_name,model_name').limit(5000)
+/** Every row of a query (the database gives at most 1000 at a time). */
+async function readAll(query) {
+  const out = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await query().range(from, from + 999)
     if (error) throw new Error(error.message)
-    for (const r of data || []) { const k = nameKey(r.brand_name); (ours.get(k) || ours.set(k, new Set()).get(k)).add(nameKey(r.model_name)) }
-    console.log(`probe: ${ours.size} brand(s) and ${[...ours.values()].reduce((a, s) => a + s.size, 0)} model(s) already scraped from the other source`)
+    out.push(...data)
+    if (data.length < 1000) return out
+  }
+}
+
+/** Our models: every model switched on for USS, plus every model the USS scrape has found cars for. nameKey(brand) -> { brand, models } */
+async function ourModels() {
+  const targets = await readAll(() => supabase.from('scrape_targets').select('brand_name,model_name').eq('source', 'uss').eq('enabled', true).order('id'))
+  const scraped = await readAll(() => supabase.from('scraped_models').select('brand_name,model_name').order('maker_code').order('car_code'))
+  const out = new Map()
+  for (const r of [...targets, ...scraped]) {
+    const at = onAsnet(r.brand_name, r.model_name)
+    const k = nameKey(at.brand)
+    const b = out.get(k) || out.set(k, { brand: at.brand, models: new Map() }).get(k)
+    b.models.set(nameKey(at.model), at.model)
+  }
+  for (const b of out.values()) b.models = [...b.models.values()]
+  return out
+}
+
+async function probe() {
+  let ours = new Map()
+  if (!has('--all')) {
+    ours = await ourModels()
+    console.log(`probe: ${ours.size} brand(s) and ${[...ours.values()].reduce((a, b) => a + b.models.length, 0)} model(s) on the other source (switched on or already found)`)
   }
   const { browser, page } = await open()
   try {
     await goToSearchPage(page)
     const makers = await options(page, '#IppatsuSearch_MultiForm_0__MakerCode')
     console.log(`ASNET lists ${makers.length} brands`)
-    const out = []
+    const out = [], missing = []
     for (const m of makers) {
       if (!has('--all') && !ours.has(nameKey(m.name))) continue
       await page.selectOption('#IppatsuSearch_MultiForm_0__MakerCode', m.code)
       await sleep(2500)
       const cars = await options(page, '#IppatsuSearch_MultiForm_0__CarCode')
       const want = ours.get(nameKey(m.name))
-      const keep = has('--all') ? cars : cars.filter((c) => want?.has(nameKey(c.name)))
-      console.log(`  ${m.name} (${m.code}): ${cars.length} models on ASNET, ${keep.length} we want${want && !has('--all') ? ` of ${want.size}` : ''}`)
-      out.push({ maker_code: m.code, maker: m.name, cars: keep })
+      const match = has('--all') ? { keep: cars, missing: [] } : matchModels(m.name, want.models, cars)
+      const keep = match.keep
+      missing.push(...match.missing.map((n) => `${m.name} ${n}`))
+      console.log(`  ${m.name} (${m.code}): ${cars.length} models on ASNET, ${has('--all') ? `${keep.length} listed` : `${want.models.length - match.missing.length} of our ${want.models.length} found`}`)
+      out.push({ maker_code: m.code, maker: m.name, cars: keep, all_cars: cars })      // all_cars: every ASNET name, to compare the ones that did not match
+    }
+    if (!has('--all')) {
+      const listed = new Set(makers.map((m) => nameKey(m.name)))
+      for (const [k, b] of ours) if (!listed.has(k)) missing.push(...b.models.map((n) => `${b.brand} ${n}  (make name not on ASNET)`))
+      console.log(`\n${missing.length} of our models not found on ASNET:${missing.map((n) => '\n  - ' + n).join('')}`)
     }
     fs.mkdirSync(OUT, { recursive: true })
     const file = path.join(OUT, 'asnet-codes.json')
-    fs.writeFileSync(file, JSON.stringify({ made_at: new Date().toISOString(), makers: out }, null, 2))
+    fs.writeFileSync(file, JSON.stringify({ made_at: new Date().toISOString(), all_makers: makers, makers: out, not_found: missing }, null, 2))
     // the same list goes to the database: the Scrape targets page offers it as a pick list
     const rows = out.flatMap((m) => m.cars.map((c) => ({ maker_code: m.maker_code, maker: m.maker, car_code: c.code, car: c.name })))
     for (let i = 0; i < rows.length; i += 500) {
@@ -96,11 +136,16 @@ async function fetchImg(url) {
   return Buffer.from(await res.arrayBuffer())
 }
 
+/** true only when the photo host clearly says "not found"; a network error or any other answer keeps the saved photos */
+async function isGone(url) {
+  try { return (await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(15000) })).status === 404 } catch { return false }
+}
+
 /** Photos of one ASNET car: f front, r rear, i interior, then extras z..a; o = the auction sheet. Same URL pattern the old scraper confirmed. */
-async function photosFor(thumbUrl, lotNo) {
+async function photosFor(thumbUrl, lotKey, keepOnError) {
   const { uploadImage, deleteObjects, buildR2Key } = require('./lib/r2')
   const m = String(thumbUrl || '').match(/^https:\/\/img[ms]\.asnet2\.com\/ASDATA\/(\w+)\/[MS]\/(\w+)\/(\w+)[a-zA-Z]\.jpg$/)
-  if (!m) return { photos: [], sheet: null, error: 'cannot read the photo link: ' + thumbUrl }
+  if (!m) return { photos: [], sheet: null, keys: [], error: 'cannot read the photo link: ' + thumbUrl }
   const base = `https://imgl.asnet2.com/ASDATA/${m[1]}/L/${m[2]}/${m[3]}`
   const keys = [], photos = []
   let sheet = null
@@ -110,49 +155,143 @@ async function photosFor(thumbUrl, lotNo) {
       if (s !== 'o' && photos.length >= MAX_PHOTOS) break
       const buf = await fetchImg(`${base}${s}.jpg`)
       if (!buf) continue
-      const key = buildR2Key('asnet' + lotNo, s === 'o' ? 'sheet' : s)
+      const key = buildR2Key(lotKey, s === 'o' ? 'sheet' : s)
       const up = await uploadImage(key, await shrink(buf, s === 'o' ? 1600 : 1280, s === 'o' ? 80 : 72))
       keys.push(key)
       if (s === 'o') sheet = up.url; else photos.push(up.url)
     }
-  } catch (e) { await deleteObjects(keys); return { photos: [], sheet: null, error: e.message } }
-  return { photos, sheet, error: photos.length ? null : 'no photos found' }
+  } catch (e) { if (!keepOnError) await deleteObjects(keys); return { photos: [], sheet: null, keys: [], error: e.message } }
+  return { photos, sheet, keys, error: photos.length ? null : 'no photos found' }
+}
+
+/** When rows cannot be read: keep a few of them as the page shows them, so the reading rules can be corrected against the real page. */
+async function saveSample(page, rows) {
+  const html = await page.evaluate(() => ({
+    url: location.href,
+    pageSize: document.querySelector('#pageSizeSelect')?.outerHTML || null,
+    rows: [...document.querySelectorAll('tr[data-key]')].slice(0, 4).map((r) => r.outerHTML),
+  }))
+  fs.mkdirSync(OUT, { recursive: true })
+  const file = path.join(OUT, 'asnet-sample.json')
+  fs.writeFileSync(file, JSON.stringify({ made_at: new Date().toISOString(), read_as: rows.slice(0, 4), ...html }, null, 2))
+  return file
+}
+
+/** the staff page ticks scores: the site takes one lowest score, the list rows are then checked one by one */
+const wantedScore = (target, grade) => !target.scores?.length || target.scores.includes(String(grade || '').trim().toUpperCase())
+
+async function removeSold(target, seen, counters) {
+  const r = await removeGone({ db: supabase, target, seen, write: WRITE, allowMany: has('--remove-many') })
+  if (r.error) { counters.failed++; console.log('  sold cars not removed: ' + r.error); return }
+  if (!r.gone.length) return
+  if (r.blocked) { counters.removal_blocked++; console.log(`  NOT removed: ${r.gone.length} of ${r.saved} saved cars are missing, which looks wrong. Check the site; if they are really sold, run again with --remove-many`); return }
+  if (!WRITE) { console.log(`  would remove ${r.gone.length} car(s) no longer listed`); return }
+  counters.removed += r.removed
+  console.log(`  removed ${r.removed} car(s) no longer listed`)
+}
+
+/**
+ * When the next page does not show: keep what the page looks like (its paging buttons, how many rows) and what it asked the server for
+ * after the button was pressed, so the page turn can be corrected against the real site. No cookie or login detail is saved.
+ */
+function watchPageTurn(page) {
+  const asked = [], errors = []
+  let on = false
+  const note = (r) => { if (on && ['xhr', 'fetch', 'document'].includes(r.request().resourceType())) asked.push({ status: r.status(), method: r.request().method(), url: r.url().split('?')[0] }) }
+  const broke = (e) => { if (on) errors.push(String(e.message || e).slice(0, 300)) }      // an error in the site's own script can stop its button working
+  page.on?.('response', note)
+  page.on?.('pageerror', broke)
+  return {
+    start: () => { on = true; asked.length = 0; errors.length = 0 },
+    stop: () => { page.off?.('response', note); page.off?.('pageerror', broke) },
+    async save(wanted) {
+      try {
+        const html = await page.evaluate(() => ({
+          rows: document.querySelectorAll('tr[data-key]').length,
+          firstRow: document.querySelector('tr[data-key]')?.getAttribute('data-key') || null,
+          pageLinks: [...document.querySelectorAll('a[data-page]')].slice(0, 20).map((a) => {
+            const box = a.getBoundingClientRect(), over = box.width ? document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2) : null
+            return { html: a.outerHTML.slice(0, 300), inside: a.parentElement?.className || '', visible: a.getClientRects().length > 0, onTop: over ? (over === a || a.contains(over) ? 'itself' : over.outerHTML.slice(0, 200)) : 'off screen' }
+          }),
+          paging: [...new Set([...document.querySelectorAll('a[data-page]')].map((a) => a.closest('nav') || a.closest('ul')))].slice(0, 3).map((e) => e?.outerHTML.slice(0, 4000)),
+          pageSize: document.querySelector('#pageSizeSelect')?.value || null,
+          unitsLine: (document.body.innerText.match(/.{0,20}units\s*found.{0,40}/i) || [null])[0],
+        }))
+        fs.mkdirSync(OUT, { recursive: true })
+        const file = path.join(OUT, 'asnet-paging.json')
+        fs.writeFileSync(file, JSON.stringify({ made_at: new Date().toISOString(), wanted_page: wanted, asked, errors, ...html }, null, 2))
+        console.log('  what the page looked like is saved: ' + file)
+      } catch (e) { console.log('  page details not saved: ' + e.message) }
+    },
+  }
+}
+
+/** Opens the search form and searches. ASNET sometimes answers "The search timed out": the same search is asked again, twice at most. */
+async function search(page, target) {
+  for (let attempt = 1; ; attempt++) {
+    await goToSearchPage(page)
+    try { return await applyFilters(page, target) }
+    catch (e) {
+      if (!e.isSearchTimeout || attempt >= 3) throw e
+      console.log(`  ${e.message}: trying again in 20 seconds (${attempt + 1} of 3)`)
+      await sleep(20000)
+    }
+  }
 }
 
 async function scrapeTarget(page, target, counters) {
   console.log(`\n=== ${target.label} ===`)
-  await goToSearchPage(page)
-  await applyFilters(page, target)
-  let offset = 0
-  for (let p = 1; p <= MAX_PAGES; p++) {
-    const { current, total } = await getPagingInfo(page)
-    const rows = await extractRows(page, null, offset)
-    offset += rows.length
-    console.log(`\n[page ${current}/${total}] ${rows.length} rows`)
-    for (const row of rows) {
-      counters.seen++
-      const lot = rowToLot(row)
-      if (!lot) { counters.unusable++; console.log(`  skip: row without lot number, date or name`); continue }
-      if (!codeMatches(target, lot.model_code)) { counters.unusable++; console.log(`  skip: model code ${lot.model_code || '?'} is not on the target list`); continue }
-      const line = `${lot.venue} ${lot.auction_date} #${lot.lot_no} | ${lot.brand} ${lot.model} | ${lot.model_code || '-'} | ${lot.mfg_year || '?'} | ${lot.mileage_km ?? '?'} km | grade ${lot.grade || '?'} | ¥${lot.start_price_jpy ?? '?'} | ${row.auction_method || 'method ?'}`
-      // the same car from another source?
-      const { data: others } = await supabase.from('lots').select('ex_key,auction_date,brand,model_code,mfg_year,mileage_km').eq('auction_date', lot.auction_date).eq('brand', lot.brand).eq('mfg_year', lot.mfg_year ?? -1).neq('source', 'asnet')
-      if (isDuplicate(lot, others || [])) { counters.duplicate++; console.log(`  = ${line}   (already have it from the other source)`); continue }
-      if (!WRITE) { counters.would++; console.log(`  + ${line}`); continue }
-      const have = await supabase.from('lots').select('id,photos').eq('ex_key', lot.ex_key).eq('auction_date', lot.auction_date).maybeSingle()
-      let photos = have.data?.photos, sheet = null
-      if (!(Array.isArray(photos) && photos.length)) {
-        const r = await photosFor(row.thumbnail_url, lot.lot_no)
-        if (r.error) { counters.failed++; console.log(`  ! ${line}\n      photos: ${r.error}`); continue }
-        photos = r.photos; sheet = r.sheet
-      }
-      const rec = { ...lot, photos, ...(sheet ? { sheet_url: sheet } : {}) }
-      const { error } = await supabase.from('lots').upsert(rec, { onConflict: 'venue,auction_date,lot_no' })
-      if (error) { counters.failed++; console.log(`  ! ${line}\n      database: ${error.message}`); continue }
-      counters.saved++; console.log(`  ✓ ${line}`)
-    }
-    if (current >= total || !(await goToNextPage(page))) break
+  try { await search(page, target) }
+  catch (e) {
+    // the site's own "no vehicle was found" page: the model has nothing listed
+    if (!e.isNoResults) throw e
+    console.log('  no results')
+    if (REMOVES && target.car_code) await removeSold(target, new Set(), counters)
+    return
   }
+  const turn = watchPageTurn(page)
+  let list
+  try { list = await readAllPages({ page, site: { extractRows, getPagingInfo, goToNextPage }, maxPages: MAX_PAGES, log: (m) => console.log(m), onTurn: turn.start, onStuck: turn.save }) }
+  finally { turn.stop() }
+
+  const unread = list.rows.filter((r) => !rowToCar(r))
+  if (unread.length && !counters.sample) {
+    const gaps = ['lot_no', 'make', 'car_name'].map((k) => [k, unread.filter((r) => !r[k]).length]).filter(([, n]) => n)
+    console.log(`  ${unread.length} row(s) cannot be used. Missing: ${gaps.map(([k, n]) => `${k} on ${n}`).join(', ')}`)
+    try { counters.sample = await saveSample(page, unread); console.log(`  sample of these rows saved: ${counters.sample}`) } catch (e) { console.log('  sample not saved: ' + e.message) }
+  }
+
+  const seen = new Set()      // every car on the list, whether it is saved or not: it is still for sale
+  let done_ = 0
+  for (const row of list.rows) {
+    counters.seen++
+    const car = rowToCar(row)
+    // a row that cannot be read is still a listed car: with its lot number on the page it must not count as sold
+    if (!car) { counters.unusable++; if (row.lot_no) seen.add(exKey(row.lot_no)); continue }
+    if (seen.has(car.ex_key)) continue
+    seen.add(car.ex_key)
+    const line = `${car.venue} #${row.lot_no} | ${car.brand} ${car.model} ${car.grade || ''} | ${car.model_code || '-'} | ${car.mfg_year || '?'} | ${car.mileage_km ?? '?'} km | score ${car.auction_grade || '?'} | ¥${car.price_jpy ?? '?'} | ${row.auction_method || 'method ?'}`
+    if (!isAsOne(row.auction_method)) { counters.wrong_type++; console.log(`  x ${line}   (not AS-One Price: left out)`); continue }
+    if (!codeMatches(target, car.model_code)) { counters.filtered++; console.log(`  - ${line}   (model code not on the target list)`); continue }
+    if (!wantedScore(target, car.auction_grade)) { counters.filtered++; console.log(`  - ${line}   (score not ticked on the target)`); continue }
+    if (MAX_CARS && done_ >= MAX_CARS) continue
+    done_++
+    if (WRITE && !target.car_code) throw new Error('--write needs one model: add --car <code>')
+    const done = await saveCar({
+      db: supabase, car: { ...car, maker_code: target.maker_code, car_code: target.car_code }, write: WRITE, isGone,
+      fetchPhotos: (keepOnError) => photosFor(row.thumbnail_url, car.ex_key, keepOnError),
+      removePhotos: (keys) => require('./lib/r2').deleteObjects(keys),
+    })
+    counters[done.status]++
+    if (done.repaired) counters.repaired++
+    const mark = { would: '+', saved: '✓', updated: '↻', taken: '=', failed: '!' }[done.status]
+    console.log(`  ${mark} ${line}${done.repaired ? '   (missing photos fetched again)' : ''}${done.message ? `\n      ${done.message}` : ''}`)
+  }
+
+  console.log(list.complete ? `  whole list read: ${seen.size} car(s)` : `  list NOT fully read: ${list.why}`)
+  if (!REMOVES || !target.car_code) return
+  if (!list.complete) { counters.incomplete++; console.log('  no car is removed after an incomplete read'); return }
+  await removeSold(target, seen, counters)
 }
 
 async function main() {
@@ -165,28 +304,42 @@ async function main() {
   } else if (has('--from-db')) {
     // the targets set on the staff page "Scrape targets" (source = asnet)
     const supabase = require('./lib/db')
-    const { data, error } = await supabase.from('scrape_targets').select('*').eq('source', 'asnet').eq('lot_type', 'bid').eq('enabled', true).order('priority')
+    const { data, error } = await supabase.from('scrape_targets').select('*').eq('source', 'asnet').eq('lot_type', 'one_price').eq('enabled', true).order('priority')
     if (error) throw new Error('targets: ' + error.message)
     for (const r of data || []) {
-      const nums = (r.scores || []).map(Number).filter((n) => Number.isFinite(n))          // the ASNET form has one minimum score, so the lowest wanted score is used
-      targets.push({ label: r.label, maker_code: r.maker_code, car_code: r.car_code, model_codes: r.model_codes, year_from: r.year_from, score_min: nums.length ? Math.min(...nums) : r.score_min })
+      // the ASNET form has one minimum score, so the lowest ticked number is set there. R (repaired) has no number: with R ticked the site filter is left open
+      const nums = (r.scores || []).map(Number).filter((n) => Number.isFinite(n))
+      const open = (r.scores || []).includes('R')
+      targets.push({ label: r.label, maker_code: r.maker_code, car_code: r.car_code, model_codes: r.model_codes, year_from: r.year_from, scores: r.scores, score_min: open ? null : nums.length ? Math.min(...nums) : r.score_min })
     }
     console.log(`${targets.length} ASNET target(s) from the database`)
   } else if (arg('--maker')) {
     targets = [{ label: `maker ${arg('--maker')}${arg('--car') ? ' model ' + arg('--car') : ''}`, maker_code: arg('--maker'), car_code: arg('--car') || null, form_code: arg('--form') || null }]
   } else throw new Error('Say what to read: --probe, --maker <code> [--car <code>], or --from-codes')
   for (const t of targets) {
-    t.lot_type_filter = 'bid'
     t.year_from = arg('--year-from') ? Number(arg('--year-from')) : (t.year_from ?? null)
     t.score_min = arg('--score-min') ? Number(arg('--score-min')) : (t.score_min ?? null)
   }
   console.log(WRITE ? 'WRITE mode: cars and photos will be saved' : 'DRY RUN: nothing is saved (add --write to save)')
+  if (WRITE) {
+    const col = await supabase.from('one_price_lots').select('source').limit(1)
+    if (col.error) throw new Error('Run supabase/migrations/63_one_price_source.sql in the Supabase SQL Editor first: ' + col.error.message)
+  }
+  if (has('--inspect')) {
+    if (WRITE || !arg('--maker')) throw new Error('--inspect goes with --maker <code> [--car <code>] and never with --write')
+    const { browser, page } = await open()
+    try {
+      await search(page, { ...targets[0], keepPageSize: true })
+      await inspect(page, OUT)
+    } finally { await browser.close() }
+    return
+  }
   const { browser, page } = await open()
-  const counters = { seen: 0, would: 0, saved: 0, duplicate: 0, unusable: 0, failed: 0 }
+  const counters = { seen: 0, would: 0, saved: 0, updated: 0, repaired: 0, taken: 0, filtered: 0, wrong_type: 0, unusable: 0, removed: 0, incomplete: 0, removal_blocked: 0, failed: 0 }
   try {
     for (const t of targets) {
       try { await scrapeTarget(page, t, counters) }
-      catch (e) { if (e.isNoResults) console.log('  no results'); else { counters.failed++; console.log('  target failed: ' + e.message) } }
+      catch (e) { counters.failed++; console.log('  target failed: ' + e.message) }
     }
   } finally { await browser.close() }
   console.log('\n' + JSON.stringify(counters))

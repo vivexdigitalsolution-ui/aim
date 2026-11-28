@@ -11,7 +11,7 @@
         <div style="min-width: 0">
           <b>{{ c.brand }} {{ c.model }}</b>
           <div class="muted small">{{ [c.mfg_year, c.grade, c.mileage_km != null ? c.mileage_km.toLocaleString('en-US') + ' km' : null, c.venue].filter(Boolean).join(' · ') }}</div>
-          <div class="small" style="margin-top: 4px"><span class="chip" :class="chipCls(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span> <span class="muted">Start price</span> <b>{{ money(c.start_price_jpy) }}</b></div>
+          <div class="small" style="margin-top: 4px"><span v-if="c.bid_deadline" class="chip" :class="chipCls(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span> <span class="muted">Start price</span> <b>{{ money(c.start_price_jpy) }}</b></div>
         </div>
         <button class="btn ghost sm" title="Remove from favourites" @click.prevent="remove(c.id, !!c.op)"><RailIcon name="heart" filled class="hi" /> Remove</button>
       </NuxtLink>
@@ -42,10 +42,10 @@ async function show() {
   // One price cars the dealer starred (their own table, migration 58)
   const ops: any[] = []
   for (let i = 0; i < opIds.value.length; i += 100) {
-    const { data } = await db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mileage_km,venue,photos,price_jpy,deadline').in('id', opIds.value.slice(i, i + 100)).gt('deadline', new Date().toISOString())
+    const { data } = await openOffers(db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mileage_km,venue,photos,price_jpy,deadline').in('id', opIds.value.slice(i, i + 100)))
     ops.push(...(data || []).map((r: any) => ({ ...r, op: true, grade: r.auction_grade, start_price_jpy: r.price_jpy, bid_deadline: r.deadline })))
   }
-  cars.value = [...out, ...ops].sort((a, b) => a.bid_deadline.localeCompare(b.bid_deadline))
+  cars.value = [...out, ...ops].sort((a, b) => (a.bid_deadline || '9').localeCompare(b.bid_deadline || '9'))
   gone.value = ids.value.length + opIds.value.length - cars.value.length
 }
 async function remove(id: string, op = false) { try { await toggle(id, op); cars.value = cars.value.filter((c) => c.id !== id) } catch (e: any) { err.value = e.message } }

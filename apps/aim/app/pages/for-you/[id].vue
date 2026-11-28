@@ -22,7 +22,7 @@
         </div>
         <div v-if="car.features?.length" class="card">
           <h2>On this car</h2>
-          <div class="row wrap" style="gap: 6px; margin-top: 8px; justify-content: flex-start"><span v-for="f in car.features" :key="f.key" class="chip" :class="f.source === 'aftermarket' ? 'warn' : f.source === 'factory' ? 'ok' : ''">{{ f.label }}<small v-if="f.source === 'aftermarket'"> · aftermarket</small></span></div>
+          <div class="row wrap" style="gap: 6px; margin-top: 8px; justify-content: flex-start"><span v-for="f in car.features" :key="f.key" class="chip">{{ f.label }}</span></div>
         </div>
         <div class="card">
           <h2>Details</h2>

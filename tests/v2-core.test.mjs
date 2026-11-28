@@ -1,5 +1,5 @@
 // The new v2 core: docket decision (rule + AI compared), AI pick with a fake Claude, feature search, market stats and margin.   node tests/v2-core.test.mjs
-import { decideDocket, confirmKey, aiPickDocket, docketPool, guessDocket, normalizeFeatures, textFeatures, searchByFeatures, marketStats, percentileRank, confidence, margin, maxLandedFor, conservativeSell } from '../packages/core/src/index.ts'
+import { decideDocket, confirmKey, aiPickDocket, docketPool, guessDocket, normalizeFeatures, textFeatures, searchByFeatures, plainText, marketStats, percentileRank, confidence, margin, maxLandedFor, conservativeSell } from '../packages/core/src/index.ts'
 
 let fails = 0
 const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails++ }
@@ -48,23 +48,37 @@ ok(docketPool([hz, hzl, hg], lot).pool.length === 3, 'pool = every docket with t
 ok(guessDocket([hz, hzl, hg], lot).docket?.id === 'hz', 'the rule picks the plain Harrier Z')
 
 // ── features ──
+// real sheet words that were read wrongly before
+{
+  const one = (name, evidence) => normalizeFeatures([{ name, evidence }])
+  ok(!one('Sport exhaust', 'BLITZレーザーレーダー').some((x) => x.key === 'sport_exhaust'), 'a BLITZ radar detector is not an exhaust')
+  ok(!one('Sport exhaust', 'HKS高調').length && !one('Sport exhaust', 'HKSブローオフバルブ').length, 'HKS suspension or a blow-off valve is not an exhaust')
+  ok(!one('Rear wing spoiler', "J'sレーシング リアキャンバーアーム").length, 'a camber arm is not a spoiler')
+  const sp = one('Aftermarket gloss black rear spoiler', 'グロスブラックリヤスポイラー')
+  ok(sp.length === 1 && sp[0].label === 'Gloss black rear spoiler' && sp[0].source === 'unknown', 'a real spoiler stays, without any aftermarket label')
+  ok(one('HKS exhaust', 'HKSマフラー')[0]?.key === 'sport_exhaust' && one('Exhaust', '社外マフラー')[0]?.key === 'sport_exhaust' && !one('Muffler dent', 'マフラー凹み').some((x) => x.key === 'sport_exhaust'), 'an exhaust is one only when the words say so')
+  ok(one('Aftermarket wheels', '社外アルミ')[0]?.label === 'Alloy wheels' && one('Heated steering wheel', 'ステアリングヒーター').length === 1, 'wheels without the label; a steering wheel is not a road wheel')
+  ok(one('Genuine 20 inch alloy wheels', '純正20AW').length === 1 && one('19-inch alloy wheels', '専用19AW').length === 1 && one('Rear spoiler', 'リアスポ').length === 1 && one('Spare wheel', 'スペアタイヤ').length === 1 && one('Dash camera', 'ドラレコ前後').length === 1 && one('Four-wheel drive', '駆動 2WD').length === 1, 'the short ways a sheet writes a part still count')
+  ok(!one('Wide angle camera', 'WAC').length && !one('Spare wheel', 'SR').length && !one('Rear spoiler fan', 'リヤシーリングファン').length, 'unrelated sheet words do not')
+  ok(plainText('Aftermarket 19-inch wheels, one owner') === '19-inch wheels, one owner' && plainText('Fitted with non-genuine muffler') === 'Fitted with muffler' && plainText('One owner') === 'One owner', 'the words are taken out of notes')
+}
 const f = normalizeFeatures([
   { name: 'JBL 14 speaker audio', source: 'factory', evidence: 'JBL 14SP' },
   { name: 'TRD GR aero kit', source: 'aftermarket', evidence: 'TRD GRエアロ' },
   { name: 'tinted rear glass', source: 'unknown', evidence: 'smoke film' },
 ])
-ok(f.some((x) => x.key === 'jbl' && x.source === 'factory'), 'JBL audio is the catalog key jbl, factory')
-ok(f.some((x) => x.key === 'gr_kit' && x.source === 'aftermarket'), 'GR aero kit is gr_kit and marked aftermarket')
+ok(f.some((x) => x.key === 'jbl' && x.source === 'unknown'), 'JBL audio is the catalog key jbl')
+ok(f.some((x) => x.key === 'gr_kit' && x.source === 'unknown'), 'GR aero kit is gr_kit, and no origin is recorded')
 ok(f.some((x) => x.key.startsWith('x:')), 'a feature the catalog does not know is kept as a free tag')
 ok(textFeatures('サンルーフ 本革 JBL').sort().join() === 'jbl,leather,sunroof', 'free text fallback finds Japanese words')
 ok(!textFeatures('GR SPORT grade').includes('gr_kit') && textFeatures('GR SPORT grade').includes('gr_sport'), 'GR SPORT grade is not a GR body kit')
 const cars = [
-  { id: 1, features: normalizeFeatures([{ name: 'JBL audio', source: 'factory' }, { name: 'GR aero kit', source: 'aftermarket' }, { name: 'sunroof', source: 'factory' }]) },
-  { id: 2, features: normalizeFeatures([{ name: 'JBL audio', source: 'factory' }]) },
-  { id: 3, features: normalizeFeatures([{ name: 'GR aero kit', source: 'aftermarket' }]) },
+  { id: 1, features: normalizeFeatures([{ name: 'JBL audio', evidence: 'JBL' }, { name: 'GR aero kit', evidence: 'GRエアロ' }, { name: 'sunroof', evidence: 'サンルーフ' }]) },
+  { id: 2, features: normalizeFeatures([{ name: 'JBL audio', evidence: 'JBL' }]) },
+  { id: 3, features: normalizeFeatures([{ name: 'GR aero kit', evidence: 'GRエアロ' }]) },
 ]
 ok(searchByFeatures(cars, ['jbl', 'gr_kit']).map((c) => c.id).join() === '1', 'JBL + GR kit finds only the car that has both')
-ok(searchByFeatures(cars, ['gr_kit'], { sources: ['factory'] }).length === 0, 'GR kit as a factory option: none (it is aftermarket)')
+ok(searchByFeatures(cars, ['gr_kit']).length === 2, 'both cars with a GR kit are found')
 ok(searchByFeatures(cars, ['jbl']).map((c) => c.id).join() === '1,2', 'ranked by number of features')
 
 // ── market stats and margin ──

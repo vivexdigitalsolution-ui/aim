@@ -28,7 +28,7 @@
         <div class="ph"><img v-if="c.photos?.[0] && !broken.has(c.id)" :src="c.photos[0]" loading="lazy" alt="" @error="broken.add(c.id)" /><span v-else>no photo</span>
           <span v-if="c.venue" class="glass loc">{{ c.venue }}</span>
           <span v-if="viewed.has(c.id)" class="glass vw"><RailIcon name="eye" />Viewed</span>
-          <span class="glass tm" :class="glassCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span>
+          <span v-if="c.bid_deadline" class="glass tm" :class="glassCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span>
           <button v-if="!isStaff" class="star" :class="{ on: watch.has(c.id) }" :title="watch.has(c.id) ? 'Remove from favourites' : 'Add to favourites'" @click.prevent.stop="star(c.id, !!c.op)"><RailIcon name="heart" :filled="watch.has(c.id)" /></button></div>
         <div class="body">
           <div class="pricerow">
@@ -140,7 +140,7 @@ const chipCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; ret
 
 /** One price cars (a fixed price, no bidding): same card shape as a bidding car */
 async function fetchOnePrice(from: number) {
-  let query = db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission,model_code', { count: 'exact' }).gt('deadline', new Date().toISOString())
+  let query = openOffers(db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission,model_code', { count: 'exact' }))
   if (brand.value) query = query.eq('brand', brand.value)
   const t = q.value.trim().replace(/[,()%]/g, ' ')
   if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)

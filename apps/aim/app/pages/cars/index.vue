@@ -38,7 +38,7 @@
       <NuxtLink v-for="c in shown" :key="c.id" :to="c.op ? `/one-price/${c.id}` : `/cars/${c.id}`" class="card car" :class="{ seen: viewed.has(c.id) }" @click="viewed.mark(c.id)">
         <div class="ph"><img v-if="c.photos?.[0]" :src="c.photos[0]" loading="lazy" alt="" /><span v-else>no photo</span>
           <span class="gl loc">{{ c.venue }}</span>
-          <span class="gl tm" :class="glassCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span>
+          <span v-if="c.bid_deadline" class="gl tm" :class="glassCls(c.bid_deadline)" :title="closingTimeText(c.bid_deadline)">{{ closes(c.bid_deadline) }}</span>
           <button v-if="isStaff" class="rec" :class="{ on: recs.has(c.id) }" :title="recs.has(c.id) ? 'Remove from the recommend list' : 'Recommend this car'" @click.prevent.stop="recommend(c.id, !!c.op)">{{ recs.has(c.id) ? '✔ Recommended' : '＋ Recommend' }}</button>
           <button class="star" :class="{ on: watch.has(c.id), low: isStaff }" :title="watch.has(c.id) ? 'Remove from watchlist' : 'Watch this car'" @click.prevent.stop="star(c.id, !!c.op)"><StarIcon :filled="watch.has(c.id)" /></button>
           <span v-if="impOf(c)?.kind === 'amt'" class="gl estchip">Est. RM {{ Math.round(impOf(c)!.myr!).toLocaleString('en-US') }}</span>
@@ -198,7 +198,7 @@ const glassCls = (iso: string) => { const c = closesInfo(iso, now.value).cls; re
 
 /** One price cars (a fixed price, no bidding): same card shape as a bidding car */
 async function fetchOnePrice(from: number) {
-  let query = db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission', { count: 'exact' }).gt('deadline', new Date().toISOString())
+  let query = openOffers(db.from('one_price_lots').select('id,brand,model,auction_grade,mfg_year,mfg_month,mileage_km,venue,price_jpy,photos,deadline,needs_review,docket_id,engine_cc,transmission', { count: 'exact' }))
   if (brand.value) query = query.eq('brand', brand.value)
   const t = q.value.trim().replace(/[,()%]/g, ' ')
   if (t) query = query.or(`model.ilike.%${t}%,brand.ilike.%${t}%`)

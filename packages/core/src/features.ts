@@ -1,6 +1,7 @@
 // Car features: every feature of a car must be findable (JBL audio + GR body kit in a Vellfire, without opening sheets one by one).
 // Two layers:
-//   1. Claude reads the sheet and returns a list of features (FEATURE_SCHEMA), each with where it came from (factory / dealer option / aftermarket).
+//   1. Claude reads the sheet and returns a list of features (FEATURE_SCHEMA), each with the printed words that show it. Whether a part is
+//      original or not is NOT recorded: a sheet rarely says, and a wrong label is worse than none. Buyers only need to know the car has it.
 //   2. normalizeFeatures() maps each one onto the catalog below so "JBL 14SP", "ＪＢＬ", "ジェービーエル" are all the key `jbl`.
 //      textFeatures() is the free fallback: the same catalog matched on the sheet text with no AI.
 // A feature the catalog does not know is kept as a free tag (key `x:<slug>`), so nothing Claude read is lost.
@@ -44,9 +45,8 @@ export const CATALOG: Def[] = [
   D('4wd', '4WD / AWD', 'Drive', /\b4WD\b|\bAWD\b|四駆|4輪駆動/i),
   D('air_suspension', 'Air suspension', 'Chassis', /AIR\s*SUS|AIR\s*SUSPENSION|エアサス/i),
   D('coilovers', 'Coilovers / lowered', 'Chassis', /COILOVER|COIL\s*OVER|LOWERED|車高調|ローダウン/i),
-  D('aftermarket_wheels', 'Aftermarket wheels', 'Wheels', /AFTERMARKET\s*WHEEL|ALLOY\s*WHEELS?\s*\(?(NON|AFTER)|社外(アルミ|ホイール)|社外\s*\d+\s*(インチ|inch)/i),
-  D('aftermarket_exhaust', 'Aftermarket exhaust', 'Exhaust', /AFTERMARKET\s*EXHAUST|SPORTS?\s*EXHAUST|社外(マフラー|エキゾースト)|MUFFLER/i),
-  D('sport_exhaust', 'Sport exhaust', 'Exhaust', /\bAKRAPOVIC\b|\bHKS\b|\bFUJITSUBO\b|\bBLITZ\b|アクラポ/i),
+  D('aftermarket_wheels', 'Alloy wheels', 'Wheels', /AFTERMARKET\s*WHEEL|ALLOY\s*WHEELS?\s*\(?(NON|AFTER)|社外(アルミ|ホイール)|社外\s*\d+\s*(インチ|inch)/i),
+  D('sport_exhaust', 'Sports exhaust', 'Exhaust', /AKRAPOVI[CČ]|アクラポ|FUJITSUBO|フジツボ|(SPORTS?|AFTERMARKET)\s*(EXHAUST|MUFFLER)|(社外|スポーツ)\s*(マフラー(?!カッター)|エキゾースト)|(HKS|BLITZ|TRD|MUGEN|無限|NISMO|ニスモ|SPOON|スプーン|MODELLISTA|モデリスタ)[^、,・\/\n]{0,15}(マフラー(?!カッター)|エキゾースト|EXHAUST|MUFFLER)/i),
   D('large_display', 'Large display / navi', 'Infotainment', /(?<![\d.])(9|1[0-4])(\.\d)?\s*(INCH|")\s*(DISPLAY|NAVI|MONITOR)|(?<![\d.])(9|1[0-4])(\.\d)?インチ(?!\s*(AW|アルミ|ホイール))/i),
   D('android_carplay', 'CarPlay / Android Auto', 'Infotainment', /CARPLAY|ANDROID\s*AUTO/i),
 ]
@@ -58,10 +58,9 @@ export const FEATURE_SCHEMA = {
       type: 'array',
       description: 'Every notable feature, option, package, modification or equipment item shown on the sheet or in the text. One item per feature. Nothing that is not shown.',
       items: {
-        type: 'object', additionalProperties: false, required: ['name', 'source', 'evidence'],
+        type: 'object', additionalProperties: false, required: ['name', 'evidence'],
         properties: {
-          name: { type: 'string', description: 'the feature in English, short (e.g. "JBL 14 speaker audio", "GR aero kit", "sunroof")' },
-          source: { type: 'string', enum: ['factory', 'dealer_option', 'aftermarket', 'unknown'], description: 'factory = standard or maker option on this grade; dealer_option = dealer-fit option; aftermarket = non-maker part (社外); unknown = the sheet does not say' },
+          name: { type: 'string', description: 'the feature in English, short, naming what the printed words show (e.g. "JBL 14 speaker audio", "GR aero kit", "sunroof"). Never the words aftermarket, genuine or original' },
           evidence: { type: 'string', description: 'the exact words from the sheet or text (Japanese or English) that show it, max 12 words' },
         },
       },
@@ -72,21 +71,42 @@ export const FEATURE_SCHEMA = {
 export const FEATURE_SYSTEM = `You list the features of ONE used Japanese car from its auction sheet and listing text, so a buyer can search for them (for example an audio brand, a body kit, a sunroof).
 Rules:
 - Only features that are shown on the sheet or in the text. If it is not printed there, the car does not have it: never add a feature because the model "usually has it", and never guess an audio or kit brand that is not printed. A feature without its printed words (evidence) is discarded.
-- source: aftermarket for non-maker parts (社外, "aftermarket", a named tuner brand); factory for equipment standard on the grade or a maker option; dealer_option for dealer-fit items; unknown when the sheet does not say.
+- Do not say or judge whether a part is original, a maker option or aftermarket. Only say what the car has.
+- The name must be the same thing the evidence words name. A brand name does not tell what the part is: "HKS" before a suspension word is suspension, not an exhaust; a camber arm is not a spoiler. If you are not sure what the printed words name, leave the feature out.
+- Only this car: use only what is written on its auction sheet and its listing text. Never list a feature because of how the car looks in a photo.
 - Keep the evidence words exactly as printed. English names only. Do not mention any company, auction house or website name.`
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
+
+/** Takes out claims about whether a part is original: "Aftermarket 19-inch wheels" -> "19-inch wheels". */
+export function plainText(text: string): string {
+  const out = String(text || '').replace(/\(?\b(after[\s-]?market|non[\s-]?(genuine|original|factory|oem))\b\)?[ \t-]*/gi, '').replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+([,.;:)])/g, '$1').trim()
+  return out && out !== text ? out.charAt(0).toUpperCase() + out.slice(1) : out
+}
+
+// A feature outside the catalog keeps Claude's own name. For the parts that were seen named wrongly, the printed words must name that part too.
+const PARTS: [RegExp, RegExp][] = [
+  [/spoiler|\bwing\b/i, /SPOILER|WING|スポイラ|(リア|リヤ|フロント|ルーフ|トランク)スポ(?!ーツ)|ウイング|ウィング|エアロ/i],
+  [/exhaust|muffler/i, /EXHAUST|MUFFLER|マフラー|エキゾースト/i],
+  // "20AW" is how a sheet writes 20-inch alloy wheels; "wheel drive" and a steering wheel are not road wheels
+  [/(?<!steering )\bwheels?\b(?![ -]?drive)/i, /WHEEL|TIRE|TYRE|(?<![A-Z])AW(?![A-Z])|アルミ|ホイー?ル|タイヤ|スペア|インチ|INCH|RAYS|レイズ|ENKEI|エンケイ|BBS|WORK|WEDS|TE37|RPF/i],
+  [/camera/i, /CAMERA|カメラ|モニター|VIEW|ビュー|ドラレコ|レコーダー/i],
+]
+/** Do the printed words name the same kind of part as the feature's name? */
+export const namesSamePart = (name: string, evidence: string): boolean =>
+  PARTS.every(([part, proof]) => !part.test(name) || proof.test(String(evidence || '').normalize('NFKC')))
 
 /** Map Claude's list onto the catalog. A catalog match on the name or the evidence gives the catalog key; anything else is kept as a free tag. */
 export function normalizeFeatures(list: { name: string; source?: FeatureSource; evidence?: string }[]): Feature[] {
   const out = new Map<string, Feature>()
   for (const f of list || []) {
     // The sheet is the truth: a feature counts only when the words printed on the sheet (the evidence) show it. A name with no printed proof is dropped.
-    const ev = String(f.evidence || '').normalize('NFKC').trim(), source = f.source || 'unknown'
+    const ev = String(f.evidence || '').normalize('NFKC').trim(), source: FeatureSource = 'unknown'      // origin is not recorded
+    const name = plainText(f.name || '')
     const hits = CATALOG.filter((d) => d.re.test(ev))
     if (!hits.length && (!ev || CATALOG.some((d) => d.re.test(String(f.name || '').normalize('NFKC'))))) continue      // no proof, or it names a known feature the printed words do not show (a JBL guess)
     if (hits.length) hits.forEach((h) => { if (!out.has(h.key)) out.set(h.key, { key: h.key, label: h.label, group: h.group, source, evidence: f.evidence }) })
-    else if (f.name && slug(f.name)) { const k = 'x:' + slug(f.name); if (!out.has(k)) out.set(k, { key: k, label: f.name, group: 'Other', source, evidence: f.evidence }) }
+    else if (name && slug(name) && namesSamePart(name, ev)) { const k = 'x:' + slug(name); if (!out.has(k)) out.set(k, { key: k, label: name, group: 'Other', source, evidence: f.evidence }) }
   }
   return [...out.values()]
 }

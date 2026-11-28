@@ -192,13 +192,13 @@ async function loadCounts() {
     head(db.from('bids').select('id', { count: 'exact', head: true }).eq('status', 'pending')),
     head(db.from('lot_docket_decisions').select('lot_id', { count: 'exact', head: true }).eq('status', 'review')),
     head(open().eq('needs_review', true)),                                                  // null until migration 44 is run
-    head(db.from('one_price_lots').select('id', { count: 'exact', head: true }).gt('deadline', nowIso).is('enriched_at', null)),
+    head(openOffers(db.from('one_price_lots').select('id', { count: 'exact', head: true }).is('enriched_at', null))),
     head(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'ap_holder').eq('status', 'pending')),
     head(db.from('sourcing_requests').select('id', { count: 'exact', head: true }).eq('status', 'open')),
     head(open().is('enriched_at', null).like('enrich_note', 'AI:%')),
     head(db.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'ap_holder').eq('status', 'active')),
     head(open().not('enriched_at', 'is', null)),
-    head(db.from('one_price_lots').select('id', { count: 'exact', head: true }).gt('deadline', nowIso)),
+    head(openOffers(db.from('one_price_lots').select('id', { count: 'exact', head: true }))),
     ...['bid', 'one_price', 'history'].map((t) => head(db.from('scrape_targets').select('id', { count: 'exact', head: true }).eq('lot_type', t).eq('enabled', true))),
   ])
   Object.assign(c, { open: o || 0, closing24: c24 || 0, pendingBids: pb || 0, review: rv || 0, flagged: fl, oneUnread: ou, pendingAps: pa || 0, requests: rq || 0, enrichErr: ee || 0, activeAps: aa || 0, enrichDone: ed || 0, oneOpen: oo || 0 })

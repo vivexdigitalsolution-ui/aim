@@ -27,8 +27,8 @@ const READ_SCHEMA = {
     seats: nullable('integer'),
     drive: { anyOf: [{ type: 'string', enum: ['2WD', '4WD'] }, { type: 'null' }] },
     inspector_note_en: nullable('string', { description: 'the inspection note: scratches, dents, repairs, interior condition from the sheet, translated to English, short; null when none' }),
-    selling_points: nullable('string', { description: 'at most 3 short lines (separated by newline) a Malaysian buyer cares about: modified / custom parts, high spec equipment, low mileage for the year, one owner, no accident ...; only facts from the sheet or the listing' }),
-    highlight_score: { type: 'integer', description: '0-10: how much there is to sell. 0 = plain car; 5 = clean with some good equipment; 8-10 = modified or very high spec, low mileage for its age, no accident, clean body' },
+    selling_points: nullable('string', { description: 'at most 3 short lines (separated by newline) a Malaysian buyer cares about: fitted parts written on the sheet, high spec equipment, low mileage for the year, one owner, no accident ...; only facts from the sheet or the listing' }),
+    highlight_score: { type: 'integer', description: '0-10: how much there is to sell. 0 = plain car; 5 = clean with some good equipment; 8-10 = many fitted parts or very high spec, low mileage for its age, no accident, clean body' },
     highlight_reason: nullable('string', { description: 'one short line (max 12 words) why this score' }),
     accident: { anyOf: [{ type: 'boolean' }, { type: 'null' }], description: 'true when the sheet shows repair history / accident (修復歴, R, RA) or heavy body damage; false when clearly none; null when unreadable' },
     doubts: { type: 'array', items: { type: 'string' }, description: 'anything unreadable or that disagrees with the listing' },
@@ -38,7 +38,7 @@ const READ_SCHEMA = {
 }
 
 const FEATURE_RULE = `
-- features: list every notable feature, option, package or modification shown on the sheet or in the text (an audio brand only when its name is printed, sunroof, leather, a body kit such as GR or Modellista, 4WD, safety packages, aftermarket parts). Only what is printed, never what the model usually has: if the sheet and text do not show it, the car does not have it. evidence is required and must be the exact printed words. source: aftermarket for non-maker parts (社外), factory for standard or maker options, dealer_option for dealer-fit items, unknown when the sheet does not say. evidence = the exact words printed.`
+- features: list every notable feature, option, package or modification written on THIS car's auction sheet or listing text (an audio brand only when its name is printed, sunroof, leather, a body kit such as GR or Modellista, 4WD, safety packages, fitted parts). Only what is written, never what the model usually has, and never from how the car looks in a photo: if the sheet and text do not show it, the car does not have it. evidence is required and must be the exact printed words, and the name must be the same thing those words name (a brand name alone does not say what the part is). Do not say whether a part is original or aftermarket.`
 
 /** Safety net for the "sheet is the truth" rule: when Claude itself says a value was assumed, guessed or blank, the value is not used (null), whatever it filled in. */
 const GUESS = /assum|guess|infer|probabl|likely|blank|not printed|not shown|not visible|missing|no month|estimat/i
@@ -62,8 +62,8 @@ Rules:
 - First registration is the month and year of first registration on the sheet (the Japanese era year must be converted: Reiwa 4 = 2022, Reiwa 5 = 2023, Heisei 30 = 2018). If the month number is hard to read, give your BEST GUESS of it (a whole number from 1 to 12) in first_reg_month and add "first registration month: best guess" to uncertain; the sheet is flagged for a check but the guess is used. Only when there is no mark at all in the month space (nothing written or printed before 月) is first_reg_month null. The year must still be read from the sheet.
 - HOW THE FIRST-REGISTRATION BOX IS WRITTEN (初度登録年月, top left of the sheet, under the 車歴 / 排気量 row, left of the 車名 box): era letter and year, then a slash, then the month number, then the character 月. Example "R7 / 10月" = Reiwa 7 = 2025, month 10 = October. The era letter is R (Reiwa: R1 = 2019 ... R7 = 2025, R8 = 2026), H (Heisei: H30 = 2018) or S (Showa). The month is ALWAYS a whole number from 1 to 12 written just before 月: read both digits ("10", "11", "12" have two digits; a lone "1" before 月 is January). A number you read as 0 or above 12 means you misread it: look again. The slash and the month are often handwritten, sometimes in a small space or tilted: that is normal. If you can read a month number, fill first_reg_month with it and list "first registration month: handwritten" in uncertain. If the digits are unclear, pick the most likely whole number from 1 to 12 and list "first registration month: best guess"; a guess is better than null. Use null only when the space before 月 has no mark at all. The 車検 box (inspection expiry, "R 9 年 10 月" style) uses the same era-year-month writing but is a different date: do not take the month from it.
 - drive: 4WD when the sheet or model shows 4WD / AWD, otherwise 2WD; null when unknown.
-- Write English only. Keep the notes short and factual; do not add opinions. Do not mention any company, auction house or website name.
-- selling_points: facts only, max 3 lines. Lead with what makes the car easy to sell: modified or custom parts, high spec, low mileage for its age, no accident, only light scratches.
+- Write English only. Keep the notes short and factual; do not add opinions. In every field, never use the word aftermarket and never say whether a part is original, genuine or not: only what the car has. Do not mention any company, auction house or website name.
+- selling_points: facts only, max 3 lines. Lead with what makes the car easy to sell: fitted parts, high spec, low mileage for its age, no accident, only light scratches.
 - highlight_score is your honest 0-10 rating of that (a plain car is 0-3). accident is true only for repair history or heavy damage.
 - doubts: short notes for staff (unreadable sheet, value that disagrees with the listing). Empty array when clear.
 - handwriting: true when something that matters is handwritten (a handwritten first-registration date, chassis number, mileage, grade, repair mark or note). Handwriting is the main reason a value is wrong, so be strict.
@@ -162,11 +162,13 @@ async function enrichLot({ lot, ref, ask, imageBlock, today = new Date(), forceD
   if (!lot.drive && read.drive) patch.drive = read.drive
   if (!lot.fuel && read.fuel) patch.fuel = read.fuel
   if (ref.hasSteering && read.steering) patch.steering = read.steering      // the column comes with migration 17: before it exists nothing is written
-  if (read.selling_points) patch.sales_points = read.selling_points
+  // the words are also taken out here, in case the model writes them anyway
+  const plain = D.plainText || ((t) => t)
+  if (read.selling_points) patch.sales_points = plain(read.selling_points)
   if (Number.isInteger(read.highlight_score)) patch.pick_score = Math.max(0, Math.min(10, read.highlight_score))
-  if (read.highlight_reason) patch.pick_reason = String(read.highlight_reason).slice(0, 200)
+  if (read.highlight_reason) patch.pick_reason = plain(String(read.highlight_reason)).slice(0, 200)
   if (typeof read.accident === 'boolean') patch.accident = read.accident
-  if (read.inspector_note_en) patch.inspector_report_en = read.inspector_note_en
+  if (read.inspector_note_en) patch.inspector_report_en = plain(read.inspector_note_en)
 
   // a car whose sheet is handwritten, or whose key values Claude is not sure of, is flagged: the car page warns buyers and staff to check the sheet
   const keyField = /first reg|registration|chassis|model code|mileage|accident|repair|grade|year/i

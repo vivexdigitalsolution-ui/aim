@@ -1,0 +1,120 @@
+{
+  "makes": {
+    "MERCEDES MAYBACH": { "make": "MAYBACH" },
+    "ABARTH": { "make": "FIAT", "model": "ABARTH" }
+  },
+  "names": {
+    "ALFA ROMEO": { "JULIA": "GIULIA" },
+    "AUDI": { "E-TRON GT QUATTRO": "E-TRON GT" },
+    "CADILLAC": { "CADILLAC XT5 CROSSOVER": "XT5" },
+    "CITROEN": { "C3 AIRCROSS": "C3 AIRCROSS SUV", "C5 AIRCROSS": "C5 AIRCROSS SUV" },
+    "DODGE": { "DODGE CHARENGER": "CHALLENGER" },
+    "PORSCHE": { "CAYMAN": "718 CAYMAN", "BOXSTER": "718 BOXSTER" },
+    "SUBARU": { "IMPREZA SPORTS": "IMPREZA SPORT", "IMPREZA SPORTS HYBRID": "IMPREZA SPORT HYBRID", "XV": "IMPREZA XV", "XV HYBRID": "IMPREZA XV HYBRID", "LEGACY OUTBACK": "OUTBACK" },
+    "VOLVO": { "C40 RECHARGE": "C40" }
+  },
+  "models": {
+    "ALFA ROMEO": {
+      "GIULIA": ["JULIA"]
+    },
+    "ASTON MARTIN": {
+      "VANTAGE": ["V8 VANTAGE", "V12 VANTAGE"]
+    },
+    "AUDI": {
+      "A3 SEDAN": ["A3"],
+      "S3 SEDAN": ["S3"],
+      "A8 PHEV": ["A8 HYBRID"],
+      "E-TRON GT": ["E-TRON GT QUATTRO"]
+    },
+    "BMW": {
+      "3 SERIES TOURING": ["3 SERIES"],
+      "5 SERIES TOURING": ["5 SERIES"],
+      "M5 TOURING": ["M5"]
+    },
+    "CADILLAC": {
+      "XT5": ["CADILLAC XT5", "CADILLAC XT5 CROSSOVER"]
+    },
+    "CHRYSLER JEEP": {
+      "JEEP WRANGLER UNLIMITED": ["JEEP WRANGLER"]
+    },
+    "CITROEN": {
+      "C3 AIRCROSS SUV": ["C3 AIRCROSS"],
+      "C5 AIRCROSS SUV": ["C5 AIRCROSS"]
+    },
+    "DAIHATSU": {
+      "TANTO FUNCROSS": ["TANTO"]
+    },
+    "DODGE": {
+      "CHALLENGER": ["DODGE CHARENGER"]
+    },
+    "DS AUTOMOBILES": {
+      "DS7 CROSSBACK": ["DS7"]
+    },
+    "FIAT": {
+      "500C": ["500"],
+      "500E OPEN": ["500E"]
+    },
+    "HONDA": {
+      "CR-V HYBRID": ["CR-V"],
+      "FREED PLUS HYBRID": ["FREED PLUS", "FREED HYBRID"],
+      "STEPWAGON SPADA": ["STEPWAGON"]
+    },
+    "MAZDA": {
+      "FLAIR WAGON CUSTOM STYLE": ["FLAIR WAGON"],
+      "FLAIR WAGON TOUGH STYLE": ["FLAIR WAGON"],
+      "MAZDA3 FASTBACK": ["MAZDA3"],
+      "MAZDA3 SEDAN": ["MAZDA3"],
+      "ROADSTER RF": ["ROADSTER"]
+    },
+    "MERCEDES BENZ": {
+      "A-CLASS SEDAN": ["A-CLASS"],
+      "E-CLASS ALL-TERRAIN": ["E-CLASS", "E-CLASS STATIONWAGON"]
+    },
+    "MINI": {
+      "COUNTRYMAN": ["MINI CROSSOVER"],
+      "3HB": ["MINI"],
+      "5HB": ["MINI"]
+    },
+    "MITSUBISHI": {
+      "DELICA D:5 URBAN GEAR": ["DELICA D:5"]
+    },
+    "PORSCHE": {
+      "718 CAYMAN": ["CAYMAN"],
+      "718 BOXSTER": ["BOXSTER"]
+    },
+    "RENAULT": {
+      "ALPINE A110": ["ALPINE"],
+      "MEGANE SPORT TOURER": ["MEGANE ESTATE", "MEGANE"]
+    },
+    "SUBARU": {
+      "IMPREZA SPORT": ["IMPREZA SPORTS"],
+      "IMPREZA SPORT HYBRID": ["IMPREZA SPORTS HYBRID"],
+      "IMPREZA XV": ["XV"],
+      "IMPREZA XV HYBRID": ["XV HYBRID"],
+      "OUTBACK": ["LEGACY OUTBACK"],
+      "WRX STI": ["IMPREZA WRX"]
+    },
+    "SUZUKI": {
+      "JIMMY MOMADE": ["JIMNY NOMADE"],
+      "SWIFT SPORT": ["SWIFT"]
+    },
+    "TOYOTA": {
+      "COPEN(TOYOTA)": ["COPEN"],
+      "HIACE WAGON": ["HIACE"],
+      "LAND CRUISER 70": ["LAND CRUISER"],
+      "LAND CRUISER 250": ["LAND CRUISER PRADO", "LAND CRUISER"],
+      "PRIUS PHEV": ["PRIUS PHV"],
+      "YARIS HYBRID": ["YARIS"]
+    },
+    "VOLKSWAGEN": {
+      "GOLF GTI": ["GOLF"],
+      "GOLF R": ["GOLF"],
+      "GOLF R VARIANT": ["GOLF VARIANT"],
+      "PASSAT GTE VARIANT": ["PASSAT VARIANT"],
+      "POLO GTI": ["POLO"]
+    },
+    "VOLVO": {
+      "C40": ["C40 RECHARGE"]
+    }
+  }
+}

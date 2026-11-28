@@ -62,13 +62,13 @@
           <div class="scs"><label v-for="s in SCORES" :key="s" class="sc" :class="{ on: scores.includes(s) }"><input v-model="scores" type="checkbox" :value="s" hidden />{{ s }}</label></div>
         </div>
       </div>
-      <p class="note">No score ticked = the scraper's default from its .env. USS has no box for 3 and R on the bid and one-price lists, so those only count for ASNET and the sold history.{{ source === 'asnet' ? ' ASNET takes one lowest score: the lowest you tick is used.' : '' }}</p>
+      <p class="note">No score ticked = the scraper's default from its .env. USS has no box for 3 and R on the bid and one-price lists, so those only count for ASNET and the sold history.{{ source === 'asnet' ? ' For ASNET the ticked scores are kept from the results (with R unticked, the lowest ticked number is also set on its search).' : '' }}</p>
 
       <div class="step">
         <div class="lbl">What to scrape</div>
         <div class="types">
-          <label class="ty" :class="{ on: types.bid }"><input v-model="types.bid" type="checkbox" /><span><b>Bidding</b><small>cars up for auction</small></span></label>
-          <label v-if="source === 'uss'" class="ty" :class="{ on: types.one_price }"><input v-model="types.one_price" type="checkbox" /><span><b>One price</b><small>fixed-price cars</small></span></label>
+          <label v-if="source === 'uss'" class="ty" :class="{ on: types.bid }"><input v-model="types.bid" type="checkbox" /><span><b>Bidding</b><small>cars up for auction</small></span></label>
+          <label class="ty" :class="{ on: source === 'asnet' || types.one_price }"><input v-if="source === 'uss'" v-model="types.one_price" type="checkbox" /><input v-else type="checkbox" checked disabled /><span><b>One price</b><small>fixed-price cars</small></span></label>
           <label v-if="source === 'uss'" class="ty" :class="{ on: types.history }"><input v-model="types.history" type="checkbox" /><span><b>History price</b><small>sold prices · every variant</small></span></label>
         </div>
         <p v-if="source === 'uss' && types.one_price && selVariants.length" class="note warn">One price is read from the Japanese site, so variants cannot narrow it: it takes every variant of the model (model codes do work).</p>
@@ -146,6 +146,8 @@
 </template>
 
 <script setup lang="ts">
+// ASNET models named differently from USS: the same list the ASNET scraper uses
+import asnetAliases from '../../../../services/scraper/lib/asnet/aliases.json'
 type Opt = { code: string; name: string }
 type Item = { value: string; label: string; hint?: string; disabled?: boolean; why?: string }
 type Group = { key: string; label?: string; sub?: string; items: Item[] }
@@ -208,7 +210,7 @@ const modelGroups = computed<Group[]>(() => [...selBrands.value].sort((a, b) => 
   items: [...(modelCache[`${source.value}:${b}`] || [])].sort(byName).map((m) => ({ value: `${b}|${m.code}`, label: m.name })),
 })))
 
-watch(source, async (s) => { selBrands.value = []; selModels.value = []; selVariants.value = []; selCodes.value = []; if (s === 'asnet') { types.one_price = false; types.history = false; types.bid = true } await loadBrands(s) })
+watch(source, async (s) => { selBrands.value = []; selModels.value = []; selVariants.value = []; selCodes.value = []; await loadBrands(s) })
 watch(selBrands, async (bs) => {
   loadingModels.value = true
   try { await Promise.all(bs.map((b) => loadModels(source.value, b))) } catch (e: any) { err.value = e.message } finally { loadingModels.value = false }
@@ -218,16 +220,31 @@ watch(selBrands, async (bs) => {
 // ── variants and model codes of the chosen models ──
 const codeCache = reactive<Record<string, string[]>>({})            // "<uss maker>|<uss car>" -> codes
 const gradeCache = reactive<Record<string, { name: string; seen: number }[]>>({})
-const ussKeyCache = reactive<Record<string, string | null>>({})     // asnet model key -> the matching USS "<maker>|<car>"
+const ussKeyCache = reactive<Record<string, string[]>>({})          // asnet model key -> the matching USS "<maker>|<car>" ("MINI" covers both 3HB and 5HB)
 
-/** The USS make + model that has the same name as an ASNET model (the model code list only exists for USS). */
-async function ussKeyOf(mk: string): Promise<string | null> {
-  if (source.value === 'uss') return mk
+/** The USS models that are the same car as an ASNET model (the model code list only exists for USS). */
+async function ussKeysOf(mk: string, src: 'uss' | 'asnet' = source.value): Promise<string[]> {
+  if (src === 'uss') return [mk]
   if (mk in ussKeyCache) return ussKeyCache[mk]
   await loadBrands('uss')
-  const ub = brandsBy.uss.find((b) => norm(b.name) === norm(brandName(mk.split('|')[0], 'asnet')))
-  let found: string | null = null
-  if (ub) { await loadModels('uss', ub.code); const um = (modelCache[`uss:${ub.code}`] || []).find((m) => norm(m.name) === norm(modelName(mk, 'asnet'))); if (um) found = `${ub.code}|${um.code}` }
+  const asnetMake = brandName(mk.split('|')[0], 'asnet').toUpperCase()
+  // ASNET writes some names with the make in front ("MINI CLUBMAN" for "CLUBMAN"): try both
+  const name = modelName(mk, 'asnet').toUpperCase(), front = asnetMake + ' '
+  const names = [name, name.startsWith(front) ? name.slice(front.length) : name].map(norm)
+  const makes: Record<string, { make: string; model?: string }> = asnetAliases.makes
+  const modelAliases: Record<string, Record<string, string[]>> = asnetAliases.models
+  const found: string[] = []
+  for (const ub of brandsBy.uss) {
+    // the same make, or one of ours that ASNET files under this make (Abarth under Fiat, Mercedes Maybach as Maybach)
+    const ourMake = ub.name.toUpperCase(), moved = makes[ourMake]
+    if (norm(moved?.make || ourMake) !== norm(asnetMake)) continue
+    await loadModels('uss', ub.code)
+    for (const m of modelCache[`uss:${ub.code}`] || []) {
+      const ours = m.name.toUpperCase().replace(/\s*\(\d+\)\s*$/, '')      // some names carry a count: "CT5 (7)"
+      const asnet = moved?.model ? [moved.model] : [ours, ...(modelAliases[ourMake]?.[ours] || [])]
+      if (asnet.some((n) => names.includes(norm(n)))) found.push(`${ub.code}|${m.code}`)
+    }
+  }
   ussKeyCache[mk] = found
   return found
 }
@@ -249,7 +266,7 @@ watch(selModels, async (ms) => {
   selVariants.value = selVariants.value.filter(keep); selCodes.value = selCodes.value.filter(keep)
   if (!ms.length) return
   loadingDetail.value = true
-  try { const ks = (await Promise.all(ms.map(ussKeyOf))).filter(Boolean) as string[]; await fetchDetail(ks, source.value === 'uss') } catch (e: any) { err.value = e.message } finally { loadingDetail.value = false }
+  try { const ks = (await Promise.all(ms.map(ussKeysOf))).flat(); await fetchDetail(ks, source.value === 'uss') } catch (e: any) { err.value = e.message } finally { loadingDetail.value = false }
 }, { deep: false })
 
 const modelOf = (v: string) => v.split('|').slice(0, 2).join('|')
@@ -264,8 +281,8 @@ const variantGroups = computed<Group[]>(() => orderedModels.value.map((mk) => ({
   items: [...(gradeCache[mk] || [])].sort((a, b) => cmp(a.name, b.name)).map((g) => ({ value: `${mk}|${g.name}`, label: g.name, hint: g.seen > 1 ? `· ${g.seen}` : '', disabled: codeModels.value.has(mk), why: 'Model codes are chosen for this model: untick them first.' })),
 })))
 const codeGroups = computed<Group[]>(() => orderedModels.value.map((mk) => {
-  const uk = source.value === 'uss' ? mk : ussKeyCache[mk]
-  return { key: mk, label: gLabel(mk), items: [...(uk ? codeCache[uk] || [] : [])].sort(cmp).map((c) => ({ value: `${mk}|${c}`, label: c, disabled: varModels.value.has(mk), why: 'Variants are chosen for this model: untick them first.' })) }
+  const uks = source.value === 'uss' ? [mk] : ussKeyCache[mk] || []
+  return { key: mk, label: gLabel(mk), items: [...new Set(uks.flatMap((k) => codeCache[k] || []))].sort(cmp).map((c) => ({ value: `${mk}|${c}`, label: c, disabled: varModels.value.has(mk), why: 'Variants are chosen for this model: untick them first.' })) }
 }))
 
 const typeCount = computed(() => (source.value === 'asnet' ? 1 : [types.bid, types.one_price, types.history].filter(Boolean).length))
@@ -275,7 +292,7 @@ const canAdd = computed(() => addCount.value > 0 && (source.value === 'asnet' ||
 async function add() {
   busy.value = true; err.value = ''; msg.value = ''
   try {
-    const wanted = source.value === 'asnet' ? ['bid'] : TYPES.map((t) => t.k).filter((k) => types[k])
+    const wanted = source.value === 'asnet' ? ['one_price'] : TYPES.map((t) => t.k).filter((k) => types[k])
     const out: any[] = []
     for (const mk of selModels.value) {
       const [maker, car] = mk.split('|')
@@ -324,14 +341,14 @@ const groups = computed<G[]>(() => {
     let g = m.get(key)
     if (!g) { g = { key, source: r.source, maker_code: r.maker_code, car_code: r.car_code, brand_name: r.brand_name, model_name: r.model_name, year_from: r.year_from, year_to: r.year_to, scores: r.scores, score_min: r.score_min, model_codes: r.model_codes, grades: r.grades, types: {} }; m.set(key, g) }
     g.types[r.lot_type] = r
-    if (r.lot_type === 'bid') Object.assign(g, { year_from: r.year_from, year_to: r.year_to, scores: r.scores, score_min: r.score_min, model_codes: r.model_codes, grades: r.grades })
+    if (r.lot_type === (r.source === 'asnet' ? 'one_price' : 'bid')) Object.assign(g, { year_from: r.year_from, year_to: r.year_to, scores: r.scores, score_min: r.score_min, model_codes: r.model_codes, grades: r.grades })
   }
   return [...m.values()]
 })
 const newOf = (g: G) => TYPES.filter((t) => g.types[t.k]?.status === 'new').map((t) => t.label)
 const warnOf = (g: G) => TYPES.filter((t) => g.types[t.k]?.enabled && g.types[t.k]?.zero_count > 0).map((t) => ({ label: t.label, n: g.types[t.k].zero_count }))
 const autoOff = (g: G) => TYPES.filter((t) => g.types[t.k]?.disabled_reason && !g.types[t.k]?.enabled).map((t) => t.label + ': ' + g.types[t.k].disabled_reason)
-const typesOf = (g: G) => (g.source === 'asnet' ? TYPES.filter((t) => t.k === 'bid') : TYPES)
+const typesOf = (g: G) => (g.source === 'asnet' ? TYPES.filter((t) => t.k === 'one_price') : TYPES)
 const lastRun = (r: any) => (r.last_run_at ? new Date(r.last_run_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'never run')
 const runTitle = (g: G, t: { k: string; label: string }) => { const r = g.types[t.k]; return !r ? `Add ${t.label} for this model` : r.enabled ? `${t.label} is on (click to switch off). Last run: ${r.last_run_at ? new Date(r.last_run_at).toLocaleString('en-GB') : 'never'}` : `${t.label} is off (click to switch on)` }
 
@@ -356,6 +373,7 @@ async function togglePill(g: G, k: string) {
 }
 /** Bidding or One price switched on: History goes on with it (a car's usual selling price comes from History). */
 async function historyOn(g: G) {
+  if (g.source === 'asnet') return      // ASNET has no sold history to read
   const h = g.types.history
   if (h) {
     if (h.enabled) return
@@ -392,12 +410,12 @@ async function startEdit(g: G) {
   ed.value = { g, year_from: g.year_from, year_to: g.year_to, scores: [...(g.scores || [])], mode: g.grades?.length ? 'grades' : g.model_codes?.length ? 'codes' : 'none', picks: [...(g.grades?.length ? g.grades : g.model_codes || [])], codes: [], grades: [] }
   loadingDetail.value = true
   try {
-    let uk: string | null = `${g.maker_code}|${g.car_code}`
-    if (g.source === 'asnet') {
-      await loadBrands('uss'); const ub = brandsBy.uss.find((b) => norm(b.name) === norm(g.brand_name)); uk = null
-      if (ub) { await loadModels('uss', ub.code); const um = (modelCache[`uss:${ub.code}`] || []).find((m) => norm(m.name) === norm(g.model_name)); if (um) uk = `${ub.code}|${um.code}` }
-    }
-    if (uk) { await fetchDetail([uk], g.source === 'uss'); ed.value.codes = [...(codeCache[uk] || [])]; ed.value.grades = g.source === 'uss' ? [...(gradeCache[uk] || [])] : [] }
+    const own = `${g.maker_code}|${g.car_code}`
+    if (g.source === 'asnet') { await loadBrands('asnet'); await loadModels('asnet', g.maker_code) }
+    const uks = await ussKeysOf(own, g.source as 'uss' | 'asnet')
+    await fetchDetail(uks, g.source === 'uss')
+    ed.value.codes = [...new Set(uks.flatMap((k) => codeCache[k] || []))]
+    ed.value.grades = g.source === 'uss' ? [...(gradeCache[own] || [])] : []
   } catch (x: any) { err.value = x.message } finally { loadingDetail.value = false }
 }
 function setMode(m: string) { ed.value.mode = m; ed.value.picks = [] }
