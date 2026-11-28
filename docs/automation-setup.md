@@ -29,16 +29,20 @@ node daily.js --only link,snapshot       (a quick real run of two steps)
 Then open the app > **System status**: the run is listed.
 
 ## Step 4. Schedule it (once)
-Open **PowerShell** (normal, not as administrator) and paste one line. It runs every day at 07:00 Malaysia time; change `07:00` if the PC is not on Malaysian time.
+Open **PowerShell** (normal, not as administrator) and paste these lines. It runs every day at **8:00 pm Malaysia time** (the PC clock must be on Malaysian time). A run missed because the PC was off starts when it is back.
 
+```powershell
+$a = New-ScheduledTaskAction -Execute "C:UsersAlexProjectsaimservicesscraperun-daily.bat"
+$t = New-ScheduledTaskTrigger -Daily -At 8:00PM
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Hours 22)
+Register-ScheduledTask -TaskName "AIM daily refresh" -Action $a -Trigger $t -Settings $s -Force
 ```
-schtasks /Create /TN "AIM daily refresh" /TR "\"C:\Users\Alex\Projects\aim\services\scraper\run-daily.bat\"" /SC DAILY /ST 07:00 /F
-```
 
-Check it: `schtasks /Query /TN "AIM daily refresh"`. Run it now to test: `schtasks /Run /TN "AIM daily refresh"`.
-Remove it: `schtasks /Delete /TN "AIM daily refresh" /F`.
+Check it: `Get-ScheduledTask -TaskName "AIM daily refresh"`. Run it now to test: `Start-ScheduledTask -TaskName "AIM daily refresh"`. Remove it: `Unregister-ScheduledTask -TaskName "AIM daily refresh" -Confirm:$false`.
 
-(If you prefer clicking: Task Scheduler > Create Basic Task > Daily > Start a program > the `run-daily.bat` file > tick "Run only when user is logged on".)
+**How long a run takes:** the scrape starts no new model after 7 hours of Bidding, 2 of History and 3 of One price (`SCRAPE_MAX_HOURS_BID / _HISTORY / _ONE_PRICE` in .env, 0 = no limit). Models with a smaller priority number go first every day (the main models are 50, the rest 100); the rest take turns, the longest-waiting first.
+
+**10 hour rule:** a car is taken only when its auction or offer deadline is at least 10 hours away (`MIN_GAP_HOURS`).
 
 ## Using it
 - **Run it now from the PC:** double-click `services/scraper/run-daily.bat`.

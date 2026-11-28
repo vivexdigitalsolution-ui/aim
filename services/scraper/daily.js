@@ -23,7 +23,7 @@
  *   housekeeping  housekeeping()          delete old cars / history, suspend inactive dealers (the app's own daily rule)
  *
  * A failed step does not stop the others, except that enrich is skipped when scrape failed. The run is saved in job_runs
- * (migration 24) and in logs/daily-YYYY-MM-DD.log. Two runs never overlap: a run that is still "running" for under 10 hours blocks a new one.
+ * (migration 24) and in logs/daily-YYYY-MM-DD.log. Two runs never overlap: a run that is still "running" for under 22 hours blocks a new one.
  */
 
 require('dotenv').config()
@@ -64,9 +64,14 @@ const mytDate = () => myt({ year: 'numeric', month: '2-digit', day: '2-digit' })
 const logFile = path.join(logDir, `daily-${mytDate()}.log`)
 const log = (s) => { const line = `[${myt({ hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}] ${s}`; console.log(line); fs.appendFileSync(logFile, line + '\n') }
 
+// The scrape stops starting new models after these hours per part, so one run ends before the next day's run; what is left over goes first next time.
+// Change them in .env (0 = no limit). SKIP_DONE_SINCE: a model done in this run is not done again after midnight.
+const scrapeLimits = () => ({ SCRAPE_MAX_HOURS_BID: process.env.SCRAPE_MAX_HOURS_BID || '7', SCRAPE_MAX_HOURS_HISTORY: process.env.SCRAPE_MAX_HOURS_HISTORY || '2', SCRAPE_MAX_HOURS_ONE_PRICE: process.env.SCRAPE_MAX_HOURS_ONE_PRICE || '3', SKIP_DONE_SINCE: RUN_STARTED })
+const RUN_STARTED = new Date().toISOString()
+
 function runScript(step) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, step.script, { cwd: __dirname, env: process.env })
+    const child = spawn(process.execPath, step.script, { cwd: __dirname, env: step.name === 'scrape' ? { ...process.env, ...scrapeLimits() } : process.env })
     let tail = ''
     const take = (b) => { const t = b.toString(); fs.appendFileSync(logFile, t); process.stdout.write(t); tail = (tail + t).slice(-4000) }      // also shown live, so you can see where it is
     child.stdout.on('data', take); child.stderr.on('data', take)
@@ -91,7 +96,7 @@ async function main() {
   if (has('--dry')) { console.log('Plan:\n' + plan.map((s, i) => `  ${i + 1}. ${s.name}${s.script ? '  (node ' + s.script.join(' ') + ')' : '  (database function)'}`).join('\n')); return }
 
   // never two runs at once
-  const busy = await supabase.from('job_runs').select('id,started_at,host').eq('status', 'running').gt('started_at', new Date(Date.now() - 10 * H).toISOString()).limit(1)
+  const busy = await supabase.from('job_runs').select('id,started_at,host').eq('status', 'running').gt('started_at', new Date(Date.now() - 22 * H).toISOString()).limit(1)
   if (busy.error) { console.error('job_runs is not ready: run supabase/migrations/24_job_runs.sql first. (' + busy.error.message + ')'); process.exit(1) }
   if (busy.data.length) { log(`Another run is still going (started ${busy.data[0].started_at} on ${busy.data[0].host}). Stopping.`); process.exit(2) }
 

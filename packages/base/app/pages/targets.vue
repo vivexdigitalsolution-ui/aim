@@ -177,7 +177,7 @@ const brandsBy = reactive<Record<string, Opt[]>>({ uss: [], asnet: [] })
 const modelCache = reactive<Record<string, Opt[]>>({})            // "uss:<maker>" -> models
 const selBrands = ref<string[]>([]), selModels = ref<string[]>([]), selVariants = ref<string[]>([]), selCodes = ref<string[]>([])
 const yearFrom = ref<number | null>(thisYear - 4), yearTo = ref<number | null>(null)
-const scores = ref<string[]>(['S', '6', '5', '4.5', '4'])
+const scores = ref<string[]>([...SCORES])      // every score by default
 const types = reactive({ bid: true, one_price: false, history: true })
 const loadingBrands = ref(false), loadingModels = ref(false), loadingDetail = ref(false)
 
@@ -342,14 +342,32 @@ async function togglePill(g: G, k: string) {
     if (r) {
       const patch: any = { enabled: !r.enabled }
       if (patch.enabled) Object.assign(patch, { status: 'live', zero_count: 0, disabled_reason: null })      // switched on by hand: live, the weekly check starts counting again from 0
-      const { error } = await db.from('scrape_targets').update(patch).eq('id', r.id); if (error) throw error; Object.assign(r, patch); return
+      const { error } = await db.from('scrape_targets').update(patch).eq('id', r.id); if (error) throw error; Object.assign(r, patch)
+      if (patch.enabled && k !== 'history') await historyOn(g)
+      return
     }
     const base = g.types.bid || Object.values(g.types)[0]
     const row = { label: `${g.brand_name} / ${g.model_name} (${k})`, lot_type: k, maker_code: g.maker_code, car_code: g.car_code, brand_name: g.brand_name, model_name: g.model_name, year_from: base?.year_from ?? null, year_to: base?.year_to ?? null, scores: base?.scores ?? null, model_codes: base?.model_codes ?? null, grades: base?.grades ?? null, enabled: true, source: g.source }
     const { data, error } = await db.from('scrape_targets').insert(row).select(COLS).single()
     if (error) throw error
     rows.value = [...rows.value, data]
+    if (k !== 'history') await historyOn(g)
   } catch (e: any) { err.value = e.message } finally { busy.value = false }
+}
+/** Bidding or One price switched on: History goes on with it (a car's usual selling price comes from History). */
+async function historyOn(g: G) {
+  const h = g.types.history
+  if (h) {
+    if (h.enabled) return
+    const patch = { enabled: true, status: 'live', zero_count: 0, disabled_reason: null }
+    const { error } = await db.from('scrape_targets').update(patch).eq('id', h.id); if (error) throw error
+    Object.assign(h, patch); return
+  }
+  const base = g.types.bid || Object.values(g.types)[0]
+  const row = { label: `${g.brand_name} / ${g.model_name} (history)`, lot_type: 'history', maker_code: g.maker_code, car_code: g.car_code, brand_name: g.brand_name, model_name: g.model_name, year_from: base?.year_from ?? null, year_to: base?.year_to ?? null, scores: base?.scores ?? null, enabled: true, source: g.source }
+  const { data, error } = await db.from('scrape_targets').insert(row).select(COLS).single()
+  if (error) throw error
+  rows.value = [...rows.value, data]
 }
 async function removeGroup(g: G) {
   if (!confirm(`Delete ${g.brand_name} ${g.model_name} (${Object.keys(g.types).length} scrape type${Object.keys(g.types).length === 1 ? '' : 's'})?`)) return

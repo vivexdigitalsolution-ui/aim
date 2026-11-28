@@ -38,8 +38,8 @@ const MARKET_SEARCH_URL_EN  = 'https://ssl.cis6200.jp/cis/y5816001/en/market/mod
 // error. Values confirmed from live modelMore.aspx captures (both languages
 // share the same ScoreOption values — name="ScoreOption").
 const SCORE_CHECKBOX_VALUES = {
-  one_price: { S: '1', '6': '10', '5': '4', '4.5': '11', '4': '5' },
-  bid:       { S: '1', '6': '10', '5': '4', '4.5': '11', '4': '5', '3.5': '12' },
+  one_price: { S: '1', '6': '10', '5': '4', '4.5': '11', '4': '5', '3.5': '12', '3': '6', R: '2' },      // 3 = box 6, R = box 2 (read from the live pages, Nov 2026; box 3 is RA, a different score)
+  bid:       { S: '1', '6': '10', '5': '4', '4.5': '11', '4': '5', '3.5': '12', '3': '6', R: '2' },
 }
 
 // Market Price (history) score checkboxes, best first, with a numeric rank so a target's
@@ -52,6 +52,8 @@ const HISTORY_SCORES = [
   { label: '4.5', value: '11', rank: 4.5 },
   { label: '4',   value: '5',  rank: 4   },
   { label: '3.5', value: '12', rank: 3.5 },
+  { label: '3',   value: '6',  rank: 3   },
+  { label: 'R',   value: '2',  rank: 0   },      // repaired car: only when a target lists R in its scores (or no score limit at all)
 ]
 
 // Pagination "next" link text per language.

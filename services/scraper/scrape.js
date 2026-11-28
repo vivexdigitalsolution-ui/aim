@@ -44,7 +44,7 @@ const {
 } = require('./lib/nav')
 const { extractBiddingListingRows, extractHistoryRows, extractOnePriceListingRows } = require('./lib/extract')
 const { downloadAndUploadImages } = require('./lib/images')
-const { firstAuctionDate } = require('./lib/cutoff')
+const { startsTooSoon, MIN_GAP_HOURS } = require('./lib/cutoff')
 const { isOthersGrade, cleanVenue, findExistingLot, updateLiveLot, upsertLot, recordScrapedModel, findExistingHistoryKeys, upsertHistory, recordGrades, findExistingOnePrice, updateOnePrice, upsertOnePrice } = require('./lib/writer')
 const { whyLeftOut, gradeName, codeMatches } = require('./lib/filters')
 const photofix = require('./lib/photofix')
@@ -224,8 +224,8 @@ async function processBidTarget(page, target, counters) {
       // safety net for the day mode: a venue on the skip list is never saved, even if the page still listed it
       if (WEEKDAY && !PHOTO_PHASE && (DAY_SKIP ? DAY_SKIP.names.map(norm) : [...SKIP_VENUE_NAMES]).includes(norm(cleanVenue(row.venue)))) { console.log(`${logPrefix} venue ${cleanVenue(row.venue)} is skipped`); continue }
       if (!row.auction_date) { console.log(`${logPrefix} no auction date — skip`); counters.records_failed++; continue }
-      // a scrape takes hours: a car of today's auction may be over before the offer goes out (--include-today turns this off)
-      if (row.auction_date < firstAuctionDate()) { counters.records_skipped_today = (counters.records_skipped_today || 0) + 1; console.log(`${logPrefix} auction ${row.auction_date} is before ${firstAuctionDate()} (today / past) — skip`); continue }
+      // a car whose auction is less than 10 hours away may be over before anyone can act on it (--include-today turns this off)
+      if (startsTooSoon(row.auction_date, row.auction_time)) { counters.records_skipped_today = (counters.records_skipped_today || 0) + 1; console.log(`${logPrefix} auction ${row.auction_date} ${row.auction_time || ''} is less than ${MIN_GAP_HOURS} hours away — skip`); continue }
 
       try {
         // photos never change: a car already saved with photos only gets its price / deadline refreshed
@@ -302,6 +302,7 @@ async function processOnePriceTarget(page, target, counters) {
       // only cars that can still be bought at a price we can see: one that is already sold, or whose price is not open yet, is left for a later run
       if (row.price_sold) { console.log(`${logPrefix} already sold - skip`); counters.records_skipped_today = (counters.records_skipped_today || 0) + 1; continue }
       if (row.raw_extra.price_masked || !(row.wholesale_price > 0)) { console.log(`${logPrefix} price not open yet${row.raw_extra.price_reveal_date ? ' (opens ' + row.raw_extra.price_reveal_date + ' ' + (row.raw_extra.price_reveal_time || '') + ')' : ''} - skip`); continue }
+      if (startsTooSoon(row.auction_date, row.auction_time)) { console.log(`${logPrefix} offer ends ${row.auction_date} ${row.auction_time || ''}, less than ${MIN_GAP_HOURS} hours away - skip`); counters.records_skipped_today = (counters.records_skipped_today || 0) + 1; continue }
       // the one-price site is Japanese: its variant names are Japanese too, so only the model codes can narrow it
       if (!codeMatches(target, row.model_code)) { console.log(`${logPrefix} model code ${row.model_code || '?'} is not on the target list - skip`); continue }
       try {
@@ -391,9 +392,18 @@ async function runPhotos(page) {
 }
 
 /** Runs every enabled target of the current MODE. @returns {{ processed: number, fatal: boolean }} */
+const modeStarted = {}
+/** SCRAPE_MAX_HOURS_BID / _HISTORY / _ONE_PRICE (set by daily.js): no new model is started after this many hours of that mode. 0 or empty = no limit. */
+function outOfTime(mode) {
+  const max = Number(process.env['SCRAPE_MAX_HOURS_' + mode.toUpperCase()] || 0)
+  modeStarted[mode] = modeStarted[mode] || Date.now()
+  return max > 0 && Date.now() - modeStarted[mode] > max * 3600000
+}
+
 async function runMode(page, onlyModels = null) {
   let processed = 0
   while (!shutdownRequested) {
+    if (!onlyModels && outOfTime(MODE)) { console.log(`\n[MAIN] "${MODE}" reached its time limit: the models not done yet go first next time.`); break }
     const claimed = await claimTarget(MODE, MIN_DAYS, failedThisRun, onlyModels)
     const target = claimed && withCriteria(claimed)
     if (!target) { console.log(`\n[MAIN] No more "${MODE}" targets to run.`); break }
@@ -435,6 +445,8 @@ async function main() {
     console.log(`  ${DAY_NAMES[WEEKDAY]}: the site's venues of that day, minus ${DAY_SKIP ? (DAY_SKIP.names.join(', ') || 'nothing') + ' (from the database)' : config.skipVenues.join(', ') + ' (SKIP_VENUES in .env)'}`)
   }
   console.log('═'.repeat(60))
+
+  try { await require('./lib/targets').ensureHistory() } catch (e) { console.log('[TARGETS] could not switch History on for the live models: ' + e.message) }
 
   if (MODES.includes('history')) {
     const { data } = await require('./lib/db').from('app_settings').select('history_weeks').eq('id', true).maybeSingle()

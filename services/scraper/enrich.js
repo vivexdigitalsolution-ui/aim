@@ -48,7 +48,7 @@ let stop = false
 // ── bidding cars ──────────────────────────────────────────────────────────────
 
 async function bidLots(limit) {
-  let q = supabase.from('lots').select('*').eq('my_eligible', true).gt('bid_deadline', new Date().toISOString()).gte('auction_date', require('./lib/cutoff').firstAuctionDate()).order('bid_deadline').limit(limit)
+  let q = supabase.from('lots').select('*').eq('my_eligible', true).gt('bid_deadline', new Date().toISOString()).gte('auction_date', require('./lib/cutoff').jstToday()).order('bid_deadline').limit(limit)
   if (!FORCE) q = q.is('enriched_at', null)
   if (MODEL) q = q.ilike('model', '%' + MODEL + '%')
   if (FEATURES) {

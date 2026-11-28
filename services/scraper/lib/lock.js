@@ -63,7 +63,7 @@ async function claimTarget(lotType, minDays = null, skipIds = null, onlyModels =
     if (offerSet) { if (!offerSet.has(t.maker_code + '|' + t.car_code)) return false }
     else if (!modelSel && config.skipBrandCodes.has(String(t.maker_code).toUpperCase())) return false     // brands we never scrape (.env SKIP_BRAND_CODES)
     if (minDays == null) {
-      if (!offerSet && !modelSel && t.completed_at && t.completed_at >= todayStart) return false
+      if (!offerSet && !modelSel && t.completed_at && t.completed_at >= (process.env.SKIP_DONE_SINCE || todayStart)) return false      // daily.js: done since THIS run began (a run passes midnight)
     } else {
       const neverRan = !t.last_run_at && !t.run_count
       if (!(minDays === 0 ? neverRan : (neverRan || (t.last_run_at && t.last_run_at <= dueCutoff)))) return false
@@ -72,11 +72,13 @@ async function claimTarget(lotType, minDays = null, skipIds = null, onlyModels =
   })
   if (candidates.length === 0) return null
 
-  // never-run targets first, then by priority
+  // by priority (smaller first: the main models), then never-run targets, then the one that has waited the longest, so a run with a time limit rotates through them all
+  const last = (t) => t.last_run_at || ''
   candidates.sort((a, b) => {
-    const an = !a.completed_at && !a.run_count, bn = !b.completed_at && !b.run_count
+    if (a.priority !== b.priority) return a.priority - b.priority
+    const an = !a.run_count && !a.last_run_at, bn = !b.run_count && !b.last_run_at
     if (an !== bn) return an ? -1 : 1
-    return a.priority !== b.priority ? a.priority - b.priority : (a.id < b.id ? -1 : 1)
+    return last(a) !== last(b) ? (last(a) < last(b) ? -1 : 1) : (a.id < b.id ? -1 : 1)
   })
 
   for (const c of candidates) {
