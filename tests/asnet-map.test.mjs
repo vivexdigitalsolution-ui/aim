@@ -59,8 +59,9 @@ function fakeDb({ slot = null, rows = [], slotError = null, insertError = null, 
 }
 async function run({ gone = [], photoError = null, write = true, ...dbo } = {}) {
   const { db, log } = fakeDb(dbo)
-  log.fetched = []; log.removed = []
+  log.fetched = []; log.removed = []; log.cleaned = []
   const res = await saveCar({ db, car: full, write, isGone: async (u) => gone.includes(u), removePhotos: async (k) => { log.removed.push(...k) },
+    cleanup: async (k, keep) => { log.cleaned.push({ k, keep }); return null },
     fetchPhotos: async (keep) => { log.fetched.push(keep); return photoError ? { photos: [], sheet: null, keys: [], error: photoError } : { photos: ['new-f'], sheet: null, keys: ['k1'], error: null } } })
   return { res, log }
 }
@@ -101,7 +102,7 @@ ok(slotOwner(full, null) === 'free' && slotOwner(full, ours) === 'ours' && slotO
 // ── removing the cars no longer listed ──
 const saved = Array.from({ length: 20 }, (_, i) => ({ id: i, ex_key: 'k' + i, brand: 'TOYOTA', model: 'ALPHARD' }))
 const seenAll = (n) => new Set(saved.slice(0, n).map((c) => c.ex_key))
-const prune = async (seen, extra = {}) => { const f = fakeDb({ rows: extra.rows || saved }); const r = await removeGone({ db: f.db, target: { maker_code: '1010', car_code: '10102070' }, seen, write: true, ...extra }); return { r, log: f.log } }
+const prune = async (seen, extra = {}) => { const f = fakeDb({ rows: extra.rows || saved }); const cleaned = []; const r = await removeGone({ db: f.db, target: { maker_code: '1010', car_code: '10102070' }, seen, write: true, cleanup: async (k, keep = []) => { cleaned.push(k + ':' + keep.length); return null }, ...extra }); return { r, log: f.log, cleaned } }
 let p = await prune(seenAll(17))
 ok(p.r.removed === 3 && p.log.filters.includes('delete id in 3') && p.log.filters.includes('delete source=asnet'), 'cars no longer listed are removed, ASNET rows only')
 ok(p.log.filters.includes('select source=asnet') && p.log.filters.includes('select maker_code=1010') && p.log.filters.includes('select car_code=10102070'), 'only that model is looked at')
@@ -229,6 +230,49 @@ let asked = 0
 const decide = (model) => decideLot({ lot: { brand: 'TOYOTA', model, engine_cc: 2500, transmission: 'AT', exact_only: true }, code: '3BA-AGH40W', ref: { duty: core, dockets }, ask: async () => { asked++; return { data: {} } } })
 const hit = await decide('ALPHARD Z'), miss = await decide('ALPHARD Z MOONROOF')
 ok(hit.decision.status === 'trusted' && hit.decision.docket.id === 'z' && miss.decision.status === 'review' && !miss.decision.docket && !asked, 'an ASNET car: exact = used, anything else = review, and Claude is not asked to pick')
+
+// ── ASNET pictures never expire: they are deleted with their car, and only that car's ──
+const S = require('../services/scraper/lib/asnet/storage.js')
+const A = 'a'.repeat(32), B = 'b'.repeat(32)
+const bucket = (keys) => { const b = { keys: [...keys], listed: [], list: async (p) => { b.listed.push(p); return b.keys.filter((k) => k.startsWith(p)) }, remove: async (gone) => { b.keys = b.keys.filter((k) => !gone.includes(k)) } }; return b }
+const start = () => bucket([`a/${A}/f.jpg`, `a/${A}/sheet.jpg`, `a/${A}/s16.jpg`, `l/${A}/f.jpg`, `a/${B}/f.jpg`, `l/${B}/sheet.jpg`])
+let box = start()
+await S.removeCarFiles(box, A)
+ok(box.keys.join() === `a/${B}/f.jpg,l/${B}/sheet.jpg`, 'a removed car loses its pictures in both folders; another car keeps all of its own')
+box = start()
+await S.removeCarFiles(box, A, [`https://x.dev/a/${A}/f.jpg`, `https://x.dev/a/${A}/sheet.jpg`, null])
+ok(box.keys.includes(`a/${A}/f.jpg`) && box.keys.includes(`a/${A}/sheet.jpg`) && !box.keys.includes(`a/${A}/s16.jpg`) && !box.keys.includes(`l/${A}/f.jpg`), 'after a new fetch only the pictures no longer used are deleted')
+let refused = 0
+for (const k of ['', null, undefined, 'a', '4841313332373335313035', A.slice(0, 31), A + '/', '../' + A]) { box = start(); try { await S.removeCarFiles(box, k) } catch { if (!box.listed.length && box.keys.length === 6) refused++ } }
+ok(refused === 8, 'anything that is not an ASNET car key is refused before the storage is even looked at')
+ok(S.keyFor(A, 'sheet') === `a/${A}/sheet.jpg` && S.onOldFolder(`https://x.dev/l/${A}/f.jpg`) && !S.onOldFolder(`https://x.dev/a/${A}/f.jpg`), 'new pictures go to the folder without expiry')
+const os = require('node:os'), fsm = require('node:fs'), pathm = require('node:path')
+const leftFile = pathm.join(fsm.mkdtempSync(pathm.join(os.tmpdir(), 'asnet-')), 'left.json')
+const down = { list: async () => { throw new Error('network') }, remove: async () => {} }
+const problem = await S.cleaner({ ops: down, file: leftFile, log: () => {} })(A)
+ok(problem === 'network' && JSON.parse(fsm.readFileSync(leftFile, 'utf8')).join() === A, 'a deletion that fails is written down')
+const dbWith = (row, error = null) => ({ from: () => { const c = { select: () => c, eq: () => c, maybeSingle: async () => ({ data: row, error }) }; return c } })
+box = start()
+let again2 = await S.retryLeftovers({ db: dbWith(null, { message: 'down' }), ops: box, file: leftFile, log: () => {} })
+ok(again2.left === 1 && box.keys.length === 6, 'not knowing whether the car is saved: nothing is deleted, tried later')
+again2 = await S.retryLeftovers({ db: dbWith({ photos: [`https://x.dev/a/${A}/f.jpg`], sheet_url: null }), ops: box, file: leftFile, log: () => {} })
+ok(again2.left === 0 && box.keys.includes(`a/${A}/f.jpg`) && !box.keys.includes(`a/${A}/s16.jpg`), 'trying again keeps what a saved car still links to')
+let deleted = []
+const served = (status) => S.assertServed({ upload: async (k) => ({ url: 'https://x.dev/' + k }), remove: async (k) => deleted.push(...k), picture: Buffer.from('x'), get: async () => ({ ok: status === 200, status }) }).then(() => true, (e) => e.message)
+ok((await served(200)) === true && /Deploy the photo Worker/.test(await served(404)) && deleted.length === 2, 'nothing is saved until the photo address serves the new folder')
+const worker = fsm.readFileSync(new URL('../services/photo-worker/index.js', import.meta.url), 'utf8')
+const allow = new RegExp(worker.match(/if \(!\/(.+?)\/\.test\(key\)\)/)[1])
+ok(allow.test(S.keyFor(A, 's16')) && allow.test(`l/${A}/sheet.jpg`) && !allow.test('x/abc/f.jpg') && !allow.test(`a/${A}/../f.jpg`), 'the photo Worker serves both folders and nothing else')
+
+// removing and replacing cars deletes their pictures
+const kept = await run({ slot: ours })
+ok(!kept.log.cleaned.length, 'a plain price update deletes no picture')
+const moved = await run({ slot: { ...ours, photos: [`https://x.dev/l/${full.ex_key}/f.jpg`] } })
+ok(moved.res.repaired === true && moved.log.cleaned.length === 1 && moved.log.cleaned[0].keep.join() === 'new-f,old-sheet', 'a car still in the expiring folder is moved, then the unused files are deleted')
+const failedFix = await run({ slot: ours, gone: ['old-f'], photoError: 'HTTP 500' })
+ok(!failedFix.log.cleaned.length, 'a failed fetch deletes nothing')
+const other = await run({ slot: { ...ours, brand: 'NISSAN' } })
+ok(other.log.cleaned.length === 1 && other.log.cleaned[0].keep.includes('new-f'), 'a replaced car leaves only the new pictures')
 
 console.log(fails ? `\n${fails} FAILED` : '\nALL PASSED')
 process.exit(fails ? 1 : 0)

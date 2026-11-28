@@ -1,5 +1,5 @@
 name = "photos"                       # becomes https://photos.<your-subdomain>.workers.dev — keep it neutral
-main = "src/index.js"
+main = "index.js"
 compatibility_date = "2026-01-01"
 
 [[r2_buckets]]

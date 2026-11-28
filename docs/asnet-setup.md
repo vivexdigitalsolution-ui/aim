@@ -45,6 +45,7 @@ node asnet.js --from-db --write
 - **Safety stop:** if more than 5 cars and more than half of a model's saved cars are missing at once, they are kept and reported (`removal_blocked`). If they are really sold, run again with `--remove-many`.
 - **Cars of a target that is switched off or deleted are not checked any more, so they stay.**
 - **Missing photos** (removed from storage) are fetched again when the run meets the car.
+- **Photos have no expiry.** They are under `a/` in R2 (the 8-day rule is for `l/` only, see `setup-r2.md`). When a complete read no longer finds a car, its record is removed and then its photos and sheet. A deletion that fails is retried at the next `--write` run (`out/asnet-r2-leftovers.json`). Before saving anything, a `--write` run checks that the photo Worker serves `a/`; if not, deploy it: `cd services/photo-worker` then `npx wrangler deploy`.
 - A car that sells while the pages are being read can, rarely, make a neighbouring car be missed. If the site's count then looks unchanged, that car is removed and comes back as new in the next run (without its favourites and poster).
 
 ## Sheet reading and import price

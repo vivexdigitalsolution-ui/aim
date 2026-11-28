@@ -14,10 +14,12 @@ Leave public access **off**: the photos are served through the Worker in step 4.
 Bucket → **Settings → Object lifecycle rules → Add rule**: delete objects **8 days** after they were created (prefix `l/`). The auction house lists cars about once a week, so a car's photos must outlive the days between its scrape and its auction (3 days was too short).
 This is what keeps storage small — a car is only listed for a day or two.
 
+**The rule must have the prefix `l/`.** ASNET pictures are under `a/` and must NOT expire: an ASNET car stays listed for as long as ASNET lists it. The ASNET scraper deletes them itself when the car is removed. A rule without a prefix (or for `a/`) would delete them too. The Worker (step 4) serves both folders: deploy it again after pulling this change.
+
 ## 4. Photo address (Worker, no domain)
 On a PC with Node:
 ```
-cd worker
+cd services/photo-worker
 npx wrangler login
 npx wrangler deploy
 ```

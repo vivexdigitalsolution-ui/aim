@@ -32,6 +32,7 @@ const { inspect } = require('./lib/asnet/inspect')
 const { codeMatches } = require('./lib/filters')
 const { saveCar, removeGone } = require('./lib/asnet/save')
 const { findPhotos, withoutRepeats, inGroups } = require('./lib/asnet/photos')
+const storage = require('./lib/asnet/storage')
 
 const has = (n) => process.argv.includes(n)
 const arg = (n) => { const i = process.argv.indexOf(n); return i > -1 ? process.argv[i + 1] : null }
@@ -43,6 +44,8 @@ const REMOVES = has('--from-db') && !MAX_CARS
 // ASNET has its own limit (MAX_PHOTOS in .env is for the USS pictures): by default every picture of the car is kept
 const MAX_PHOTOS = Math.max(1, parseInt(process.env.ASNET_MAX_PHOTOS || '60', 10))
 const OUT = path.join(__dirname, 'out')
+const LEFTOVERS = path.join(OUT, 'asnet-r2-leftovers.json')
+let cleanup = null      // set in a --write run: deletes one car's pictures
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 // ── probe: ASNET brand / model codes ────────────────────────────────────────────
@@ -153,7 +156,7 @@ async function isGone(url) {
 
 /** All pictures of one ASNET car, found from its cover's link (lib/asnet/photos.js says how they are named). */
 async function photosFor(thumbUrl, lotKey, keepOnError) {
-  const { uploadImage, deleteObjects, buildR2Key } = require('./lib/r2')
+  const { uploadImage, deleteObjects } = require('./lib/r2')
   const m = String(thumbUrl || '').match(/^https:\/\/img[ms]\.asnet2\.com\/ASDATA\/(\w+)\/[MS]\/(\w+)\/(\w+)[a-zA-Z]\.jpg$/)
   if (!m) return { photos: [], sheet: null, keys: [], error: 'cannot read the photo link: ' + thumbUrl }
   const base = `https://imgl.asnet2.com/ASDATA/${m[1]}/L/${m[2]}/${m[3]}`
@@ -162,7 +165,7 @@ async function photosFor(thumbUrl, lotKey, keepOnError) {
   const shrink = (b, w, q) => sharp(b).rotate().resize({ width: w, withoutEnlargement: true }).jpeg({ quality: q, mozjpeg: true }).toBuffer()
   const small = (b) => sharp(b).rotate().resize(32, 32, { fit: 'fill' }).removeAlpha().toColourspace('srgb').raw().toBuffer()
   const put = async (ending, data, width, quality) => {
-    const key = buildR2Key(lotKey, ending === 'o' ? 'sheet' : ending)
+    const key = storage.keyFor(lotKey, ending === 'o' ? 'sheet' : ending)
     const up = await uploadImage(key, await shrink(data, width, quality))
     keys.push(key)
     return up.url
@@ -194,7 +197,7 @@ async function saveSample(page, rows) {
 const wantedScore = (target, grade) => !target.scores?.length || target.scores.includes(String(grade || '').trim().toUpperCase())
 
 async function removeSold(target, seen, counters) {
-  const r = await removeGone({ db: supabase, target, seen, write: WRITE, allowMany: has('--remove-many') })
+  const r = await removeGone({ db: supabase, target, seen, write: WRITE, allowMany: has('--remove-many'), cleanup })
   if (r.error) { counters.failed++; console.log('  sold cars not removed: ' + r.error); return }
   if (!r.gone.length) return
   if (r.blocked) { counters.removal_blocked++; console.log(`  NOT removed: ${r.gone.length} of ${r.saved} saved cars are missing, which looks wrong. Check the site; if they are really sold, run again with --remove-many`); return }
@@ -293,7 +296,7 @@ async function scrapeTarget(page, target, counters) {
     const done = await saveCar({
       db: supabase, car: { ...car, maker_code: target.maker_code, car_code: target.car_code }, write: WRITE, isGone,
       fetchPhotos: (keepOnError) => photosFor(row.thumbnail_url, car.ex_key, keepOnError),
-      removePhotos: (keys) => require('./lib/r2').deleteObjects(keys),
+      removePhotos: (keys) => require('./lib/r2').deleteObjects(keys), cleanup,
     })
     counters[done.status]++
     if (done.repaired) counters.repaired++
@@ -337,6 +340,10 @@ async function main() {
   if (WRITE) {
     const col = await supabase.from('one_price_lots').select('source').limit(1)
     if (col.error) throw new Error('Run supabase/migrations/63_one_price_source.sql in the Supabase SQL Editor first: ' + col.error.message)
+    const r2 = require('./lib/r2'), ops = storage.r2Ops()
+    await storage.assertServed({ upload: r2.uploadImage, remove: r2.deleteObjects, picture: await sharp({ create: { width: 1, height: 1, channels: 3, background: '#fff' } }).jpeg().toBuffer() })
+    cleanup = storage.cleaner({ ops, file: LEFTOVERS })
+    await storage.retryLeftovers({ db: supabase, ops, file: LEFTOVERS })
   }
   if (has('--inspect')) {
     if (WRITE || !arg('--maker')) throw new Error('--inspect goes with --maker <code> [--car <code>] and never with --write')
